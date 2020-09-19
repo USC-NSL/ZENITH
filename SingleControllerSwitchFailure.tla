@@ -1,11 +1,14 @@
 --------------------------- MODULE SwitchFailure ---------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
-CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs, 
+CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
           NotFailed, Failed, MAX_NUM_SW_FAILURE, IR_NONE, IR_SENT, IR_PENDING, IR_DONE, SW_SUSPEND, SW_RUN,
           RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY, SW_UP, SW_DOWN, KEEP_ALIVE, IR_RECONCILE,
           NIC_ASIC_IN, NIC_ASIC_OUT, OFA_IN, OFA_OUT, INSTALLER, SW_FAILURE_PROC, SW_RESOLVE_PROC,
           CONT_SEQ, CONT_MONITOR, CONT_EVENT, NIC_ASIC_DOWN, OFA_DOWN, INSTALLER_DOWN,
-          INSTALLER_UP, RECONCILIATION_REQUEST, RECONCILIATION_RESPONSE, INSTALL_FLOW, STATUS_NONE
+          INSTALLER_UP, RECONCILIATION_REQUEST, RECONCILIATION_RESPONSE, INSTALL_FLOW, STATUS_NONE,
+          SW_SIMPLE_ID, SW_SIMPLE_MODEL, SW_COMPLEX_MODEL, NO_LOCK, GHOST_UNLOCK_PROC, PRINT_PROC
+          
+ASSUME Cardinality(SW) >= MaxNumIRs
 
 (*--fair algorithm stateConsistency
     variables \*********** Switch -- Controller Shared Vars *************
@@ -28,51 +31,91 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
               switch2Controller = <<>>,
               \**************** Controller Global Vars ******************
               controllerState = [c0 |-> "primary", c1 |-> "backup"],
-              IR2SW \in [1..MaxNumIRs -> SW], 
+              switchOrdering = CHOOSE x \in [SW -> 1..Cardinality(SW)]: ~\E y, z \in SW: y # z /\ x[y] = x[z],
+              IR2SW =  CHOOSE x \in [1..Cardinality(SW) -> SW]: ~\E y, z \in DOMAIN x: /\ y > z 
+                                                                                        /\ switchOrdering[x[y]] =< switchOrdering[x[z]],
               controllerThreadPoolIRQueue = [y \in {c0, c1} |-> <<>>], 
               IRStatus = [x \in 1..MaxNumIRs |-> IR_NONE], 
               SwSuspensionStatus = [x \in SW |-> SW_RUN],
               lastScheduledThread = 0,
               SetScheduledIRs = [x \in {c0, c1} |-> [y \in SW |-> {}]],
               \**************** Dependency Graph Definition **************
-              dependencyGraph \in PlausibleDependencySet
+\*              dependencyGraph \in PlausibleDependencySet,
+              dependencyGraph \in generateConnectedDAG(1..MaxNumIRs),
+              \**************** Ghost Variables *************************
+              workerThreadRanking = CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]: ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z],
+              workerThreadStatus = [x \in CONTROLLER_THREAD_POOL |-> 0],
+              switchLock = <<NO_LOCK, NO_LOCK>>,
+              FirstInstall = [x \in 1..MaxNumIRs |-> 0]
     define
     
-        RECURSIVE Paths(_, _)
-        Paths(n, G) ==  IF n = 1
-                        THEN 
-                          G
-                        ELSE
-                            LET nextVs(p) == { e[2] : e \in {e \in G : e[1] = p[Len(p)]} }
-                                nextPaths(p) == { Append(p,v) : v \in nextVs(p) }
-                            IN
-                            UNION {nextPaths(p) : p \in Paths(n-1, G)} \cup Paths(n-1, G)
+         max(set) == CHOOSE x \in set: \A y \in set: x \geq y
+         min(set) == CHOOSE x \in set: \A y \in set: x \leq y 
+         rangeSeq(seq) == {seq[i]: i \in DOMAIN seq}
+         isFinished == \A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE
         
-        S == 0..MaxNumIRs
-        PlausibleDependencySet == {x \in SUBSET (S \X S): /\ ~\E y \in 0..MaxNumIRs: <<y, y>> \in x
-                                                          /\ ~\E y, z \in 0..MaxNumIRs: /\  <<y, z>> \in x 
-                                                                                        /\  <<z, y>> \in x
-                                                          /\ x # {}
-                                                          /\ ~\E y \in 1..MaxNumIRs: <<0, y>> \in x
-                                                          /\ \A p \in Paths(MaxNumIRs, x): \/ Len(p) = 1
-                                                                                           \/ p[1] # p[Len(p)]}
-    
-       \* SendInstruction(swID) == canUpdate[swID] = 1
-        max(set) == CHOOSE x \in set: \A y \in set: x \geq y
-        min(set) == CHOOSE x \in set: \A y \in set: x \leq y
-       \* RECURSIVE GetFirstNofSet(_, _)
-       \* GetFirstNofSet(set, N) == IF Cardinality(set) <= N 
-       \*                             THEN set
-       \*                             ELSE IF N = 1 THEN {min(set)}
-       \*                             ELSE {min(set)} \union GetFirstNofSet(set \ {min(set)}, N-1) 
-                                    
-       \* CheckSetSWUpdated(set) == \A x \in set: switchState[x] = Updated
-       \* maxUpdateRcv == CHOOSE x \in SW: /\ switchState[x] = Updated
-       \*                                  /\ (\A y \in 1..x: switchState[y] = Updated)
+         RECURSIVE sum(_, _)
+         sum(seqS, indexToSum) == IF indexToSum = 0
+                                  THEN 
+                                     0
+                                  ELSE
+                                     IF indexToSum = 1
+                                     THEN
+                                         seqS[1]
+                                  ELSE
+                                     seqS[1] + sum(Tail(seqS), indexToSum - 1)
+        
+         RECURSIVE Paths(_, _)
+         Paths(n, G) ==  IF n = 1
+                         THEN 
+                           G
+                         ELSE
+                             LET nextVs(p) == { e[2] : e \in {e \in G : e[1] = p[Len(p)]} }
+                                 nextPaths(p) == { Append(p,v) : v \in nextVs(p) }
+                             IN
+                             UNION {nextPaths(p) : p \in Paths(n-1, G)} \cup Paths(n-1, G)
+                            
+        RECURSIVE AllPossibleSizes(_, _)
+        AllPossibleSizes(maxSize, sumUpToNow) == IF sumUpToNow = 0
+                                                 THEN
+                                                     {<<0>>}
+                                                 ELSE
+                                                     LET Upperbound == min({sumUpToNow, maxSize})
+                                                     IN
+                                                     UNION {{<<x>> \o y: y \in AllPossibleSizes(x, sumUpToNow-x)}: x \in 1..Upperbound}  
+        
+         generateConnectedDAG(S) == {x \in SUBSET (S \X S): /\ ~\E y \in S: <<y, y>> \in x
+                                                            /\ ~\E y, z \in S: /\  <<y, z>> \in x 
+                                                                               /\  <<z, y>> \in x
+                                                            /\ \A y \in S: ~\E z \in S: /\ <<z, y>> \in x
+                                                                                        /\ z >= y
+                                                            /\ \/ Cardinality(S) = 1
+                                                               \/ \A y \in S: \E z \in S: \/ <<y, z>> \in x
+                                                                                          \/ <<z, y>> \in x
+                                                            /\ \/ x = {}
+                                                               \/ ~\E p1, p2 \in Paths(Cardinality(x), x): /\ p1 # p2
+                                                                                                           /\ p1[1] = p2[1]
+                                                                                                           /\ p2[Len(p2)] = p1[Len(p1)]
+                                                            /\ Cardinality(x) >= Cardinality(S) - 1                                                                                                                        
+                                                            /\  \/ x = {}
+                                                                \/ \A p \in Paths(Cardinality(x), x): \/ Len(p) = 1
+                                                                                                      \/ p[1] # p[Len(p)]}
+        SetSetUnion(Aset, Bset) == {x \cup y: x \in Aset, y \in Bset}
+       
+        RECURSIVE GeneralSetSetUnion(_)
+        GeneralSetSetUnion(A) == IF Cardinality(A) = 1
+                                 THEN
+                                     CHOOSE x \in A: TRUE
+                                 ELSE 
+                                     LET
+                                         rndA1 == CHOOSE x \in A:TRUE
+                                         rndA2 == CHOOSE x \in A\{rndA1}: TRUE
+                                     IN
+                                         GeneralSetSetUnion({SetSetUnion(rndA1, rndA2)} \cup (A\{rndA1, rndA2}))
+                                        
+        PlausibleDependencySet == UNION {GeneralSetSetUnion({generateConnectedDAG(((sum(allSizes, y-1) + 1)..(sum(allSizes, y)))): y \in 1..(Len(allSizes) - 1)}): allSizes \in AllPossibleSizes(MaxNumIRs, MaxNumIRs)} 
         controllerIsMaster(controllerID) == IF controllerID = c0 THEN controllerState.c0 = "primary"
                                                                  ELSE controllerState.c1 = "primary"
-       \* getFailed(set) == {x \in set: canUpdate[x] = 0}
-       \* NoMorePossibleUpdates() == Cardinality({x \in SW: \A y \in Ofa2InstallerBuff:}) = 0 \*should complete this
         isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
         returnSwitchFailedElements(sw) == {x\in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = Failed
                                                                          /\ \/ switchStatus[sw].cpu = NotFailed
@@ -97,18 +140,17 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
         \*                                                                                                      /\ IRStatus[controllerThreadPoolIRQueue[TID[1]][TID[2]][y]] = IR_NONE]
         existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                         /\ swSeqChangedStatus[x].num > monEvent.num
-        installerInStartingMode(swID) == pc[<<INSTALLER, swID>>] = "SwitchInstallerFailedOrNot" 
-        ofaStartingMode(swID) == /\ pc[<<OFA_IN, swID>>] = "SwitchOfaInFailedOrNot"
-                                 /\ pc[<<OFA_OUT, swID>>] = "SwitchOfaOutFailedOrNot"
-        nicAsicStartingMode(swID) == /\ pc[<<NIC_ASIC_IN, swID>>] = "SwitchNicAsicInFailedOrNot"
-                                     /\ pc[<<NIC_ASIC_OUT, swID>>] = "SwitchNicAsicOutFailedOrNot"
-        isFinished == \A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE
+        installerInStartingMode(swID) == pc[<<INSTALLER, swID>>] = "SwitchInstallerProc" 
+        ofaStartingMode(swID) == /\ pc[<<OFA_IN, swID>>] = "SwitchOfaProcIn"
+                                 /\ pc[<<OFA_OUT, swID>>] = "SwitchOfaProcOut"
+        nicAsicStartingMode(swID) == /\ pc[<<NIC_ASIC_IN, swID>>] = "SwitchRcvPacket"
+                                     /\ pc[<<NIC_ASIC_OUT, swID>>] = "SwitchFromOFAPacket"
         shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
                                      \/ monEvent.type = NIC_ASIC_DOWN
                                      \/ /\ monEvent.type = KEEP_ALIVE
                                         /\ monEvent.status.installerStatus = INSTALLER_DOWN
         canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
-                                           /\ monEvent.status.installerStatus = INSTALLER_UP
+                                        /\ monEvent.status.installerStatus = INSTALLER_UP
         \*getIRSetToReconcile(SID) == {x \in 1..MaxNumIRs: /\ IR2SW[x] = SID
         \*                                                 /\ IRStatus[x] \notin {IR_DONE, IR_NONE, IR_SUSPEND}}
         getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ IR2SW[x] = SID
@@ -117,61 +159,12 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
         getInstallerStatus(stat) == IF stat = NotFailed 
                                     THEN INSTALLER_UP
                                     ELSE INSTALLER_DOWN
-                                   
-    end define  
- 
-    
-    (*macro switchFailure()
-    begin
-        if failedTimes[self] < MAX_SW_FAILURE then 
-            either 
-                skip;
-            or
-                switchStatus[self].cpu := Failed;
-                failedTimes[self] := failedTimes[self] + 1;
-                NicAsic2OfaBuff[self] := <<>>;
-                Ofa2InstallerBuff[self] := <<>>;
-                if swMiddleOfSwitchProcess(self) \/ swMiddleOfSwitchSucceed(self) then 
-                    goto Switch;
-                end if;
-            or
-                switchStatus[self].nicAsic := Failed;
-                failedTimes[self] := failedTimes[self] + 1;
-                controller2SwitchIRs[self] := <<>>;
-                if swMiddleOfRecevingPacket(self) then goto SwitchF1; end if;
-            or
-                switchStatus[self].installer := Failed;
-                failedTimes[self] := failedTimes[self] + 1;
-                if swMiddleOfSwitchSucceed(self) then goto Switch; end if;
-            or  
-                switchStatus[self].ofa := Failed;
-                failedTimes[self] := failedTimes[self] + 1;
-                if swMiddleOfSwitchProcess(self) then goto SwitchF3; end if; 
-            end either;
-        end if;
-    end macro;
-    
-    macro resolveSwitchFailure()
-    begin
-        if partiallyFailed(self) then
-            either 
-                failedElems := returnSwitchFailedElements(self);
-                if Cardinality(failedElems) > 0 then
-                    with elem \in failedElems do
-                        switchStatus[self][elem] := NotFailed
-                        CASE elem = "cpu" -> resolveCpuFailure()
-                          [] elem = "nicAsic" -> resolveNicAsicFailure()
-                          [] elem = "ofa" -> resolveOfaFailure()
-                          [] elem = "installer" -> resolveInstallerFailure()
-                    end with;      
-                end if; 
-            or
-                skip;
-            end either;
-        end if;         
-    end macro   
-    *)
-    
+        canWorkerThreadContinue(CID, threadID) == /\ Len(controllerThreadPoolIRQueue[CID]) > 0
+                                                  /\ workerThreadRanking[threadID] = min({workerThreadRanking[z]: z \in {y \in CONTROLLER_THREAD_POOL: workerThreadStatus[y] = 0}})
+        whichSwitchModel(swID) == IF MAX_NUM_SW_FAILURE = 0
+                                    THEN SW_SIMPLE_MODEL
+                                    ELSE SW_COMPLEX_MODEL                            
+    end define 
     
     \* ------------------------------------------------------------------
     \* -                   Switches (Macros)                            -
@@ -180,6 +173,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ======= NIC/ASIC Failure ========
     macro nicAsicFailure()
     begin
+        assert switchStatus[self[2]].nicAsic = NotFailed;
         switchStatus[self[2]].nicAsic := Failed;
         failedTimes[self[2]] := failedTimes[self[2]] + 1;
         controller2Switch[self[2]] := <<>>;
@@ -195,6 +189,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     macro resolveNicAsicFailure()
     begin
         await nicAsicStartingMode(self[2]);
+        assert switchStatus[self[2]].nicAsic = Failed;
         switchStatus[self[2]].nicAsic := NotFailed;
         controller2Switch[self[2]] := <<>>;  
         if switchStatus[self[2]].ofa = Failed then
@@ -217,6 +212,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ======= CPU Failure =============
     macro cpuFailure()
     begin
+        assert switchStatus[self[2]].cpu = NotFailed;
         switchStatus[self[2]].cpu := Failed || switchStatus[self[2]].ofa := Failed || switchStatus[self[2]].installer := Failed;
         failedTimes[self[2]] := failedTimes[self[2]] + 1;
         NicAsic2OfaBuff[self[2]] := <<>>;
@@ -239,6 +235,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     macro resolveCpuFailure()
     begin
         await ofaStartingMode(self[2]) /\ installerInStartingMode(self[2]);
+        assert switchStatus[self[2]].cpu = Failed;
         switchStatus[self[2]].cpu := NotFailed || switchStatus[self[2]].ofa := NotFailed || switchStatus[self[2]].installer := NotFailed;
         NicAsic2OfaBuff[self[2]] := <<>>;
         Ofa2InstallerBuff[self[2]] := <<>>;
@@ -260,8 +257,8 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ======= OFA Failure =============
     macro ofaFailure()
     begin
+        assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed;
         switchStatus[self[2]].ofa := Failed;
-        assert switchStatus[self[2]].cpu = NotFailed;
         failedTimes[self[2]] := failedTimes[self[2]] + 1;       
         \*OfaCacheReceived[self[2]] := {};
         \*OfaCacheInstalled[self[2]] := {};
@@ -279,7 +276,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     macro resolveOfaFailure()
     begin
         await ofaStartingMode(self[2]);
-        assert switchStatus[self[2]].cpu = NotFailed;
+        assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed;
         switchStatus[self[2]].ofa := NotFailed;          
         \*OfaCacheReceived[self[2]] := {};
         \*OfaCacheInstalled[self[2]] := {}; 
@@ -298,8 +295,8 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ======= Installer Failure =======
     macro installerFailure()
     begin
+        assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed;
         switchStatus[self[2]].installer := Failed;
-        assert switchStatus[self[2]].cpu = NotFailed;
         failedTimes[self[2]] := failedTimes[self[2]] + 1;        
         if switchStatus[self[2]].nicAsic = NotFailed /\ switchStatus[self[2]].ofa = NotFailed then
             assert switchStatus[self[2]].installer = Failed;
@@ -317,7 +314,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     macro resolveInstallerFailure()
     begin
         await installerInStartingMode(self[2]);
-        assert switchStatus[self[2]].cpu = NotFailed;
+        assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed;
         switchStatus[self[2]].installer := NotFailed;         
         if switchStatus[self[2]].nicAsic = NotFailed /\ switchStatus[self[2]].ofa = NotFailed then
             assert switchStatus[self[2]].installer = NotFailed;
@@ -331,6 +328,44 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     end macro
     \* =================================
     
+    \* ===========Wait for Lock==========
+    macro switchWaitForLock()
+    begin
+        await switchLock \in {<<NO_LOCK, NO_LOCK>>, self};
+    end macro;
+    \* =================================
+    
+    \* ===========Acquire Lock==========
+    macro acquireLock()
+    begin
+        switchWaitForLock();
+        switchLock := self;
+    end macro;
+    \* =================================
+        
+    \* ====== Acquire & Change Lock =====
+    macro acquireAndChangeLock(nextLockHolder)
+    begin
+        switchWaitForLock();
+        switchLock := nextLockHolder;
+    end macro;
+    \* =================================
+    
+    \* ========= Release Lock ==========
+    macro releaseLock(prevLockHolder)
+    begin
+        assert \/ switchLock[2] = prevLockHolder[2]
+               \/ switchLock[2] = NO_LOCK;
+        switchLock := <<NO_LOCK, NO_LOCK>>;
+    end macro;
+    \* =================================
+    
+    \* ========= Is Lock free ==========
+    macro waitForLockFree()
+    begin
+        await switchLock = <<NO_LOCK, NO_LOCK>>;
+    end macro
+    \* =================================  
     
     \* ------------------------------------------------------------------
     \* -                   Controller (Macros)                          -
@@ -361,7 +396,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ------------------------------------------------------------------ 
     
     \* == Install Flow Entry ==
-    procedure ofaInstallFlowEntry(ofaInIR = 0)
+    (*procedure ofaInstallFlowEntry(ofaInIR = 0)
     begin
     (*SendRcvConfirmationToController:
     if swOFACanProcessIRs(self[2]) then
@@ -381,7 +416,7 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     end if;
     EndInstallFlowEntry:
     return
-    end procedure
+    end procedure*)
     
     \* == Respond To Reconciliation Request ==
     (* procedure ofaProcessReconcileRequest(ofaReconcileIR = 0)
@@ -427,15 +462,18 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     while setIRs # {} /\ controllerIsMaster(self[1]) do
         \*lastScheduledThread := 1 + (lastScheduledThread% MAX_CONT_THREAD_POOL_SIZE);
         nextIR := CHOOSE x \in setIRs: TRUE;
+        waitForLockFree();
         assert IRStatus[nextIR] \in {IR_NONE, IR_DONE};
                \*\/ /\ IRStatus[nextIR] = IR_SUSPEND
                \*   /\ SwSuspensionStatus[IR2SW[nextIR]] = SW_RUN;
         AddToScheduleIRSet: 
+            waitForLockFree();
             assert nextIR \notin SetScheduledIRs[self[1]][IR2SW[nextIR]];
             SetScheduledIRs[self[1]][IR2SW[nextIR]] := SetScheduledIRs[self[1]][IR2SW[nextIR]] \cup {nextIR};
         ScheduleTheIR:
+            waitForLockFree();
             controllerThreadPoolIRQueue[self[1]] := Append(controllerThreadPoolIRQueue[self[1]], nextIR);
-            setIRs := setIRs\{nextIR};        
+            setIRs := setIRs\{nextIR};  
     end while;
     return;
     end procedure
@@ -478,71 +516,53 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     
     end procedure
     
- (*   procedure suspendInSchedulingIRs(switchIDToSuspend = 0)
-    variables setIRsToSuspend = {}, suspendedIR = 0;
-    begin
-    getIRsToBeSuspended:
-        setIRsToSuspend := getIRSetToSuspend(self[1], switchIDToSuspend);
-    suspendIRs:
-    while setIRsToSuspend # {} do
-        suspendedIR := CHOOSE x \in setIRsToSuspend: TRUE;
-        setIRsToSuspend := setIRsToSuspend \ {suspendedIR}; 
-        ChangeStatusIRToSuspend: IRStatus[suspendedIR] := IR_SUSPEND;
-    end while;
-    return;
-    end procedure
-    *)
-(*    procedure freeSuspendedIRs(suspendedSwitchID = 0)
-    variable toBeFreedIR = 0;
-    begin
-    freeIR:
-    while suspendedIRs[suspendedSwitchID] # {} do
-        toBeFreedIR := CHOOSE x \in suspendedIRs[suspendedSwitchID]:TRUE;
-        SwSuspensionStatus[toBeFreedIR] := IR_RUN;
-        suspendedIRs[suspendedSwitchID] := suspendedIRs[suspendedSwitchID]\{toBeFreedIR};
-    end while
-    end procedure
-    
-    procedure suspendIRs(suspendedSwitchID = 0)
-    variable toBeSuspendedIR = 0, setToBeSuspendedIRs = {};
-    begin
-    getToBeSuspendedIRs:
-    setToBeSuspendedIRs := getSetIRsForSwitch(suspendedSwitchID);
-    suspendToBeSuspendedIRs:
-    while setToBeSuspendedIRs # {} do
-        toBeSuspendedIR := CHOOSE x \in setToBeSuspendedIRs: TRUE;
-        IRSuspensionStatus[toBeSuspendedIR] := IR_SUSPEND;
-        suspendedIRs[suspendedSwitchID] := suspendedIRs[suspendedSwitchID] \cup {toBeSuspendedIR};
-    end while;
-    end procedure  *)
-               
     \* ------------------------------------------------------------------
-    \* -                   Switches (Modules)                           -
+    \* -                   Switches SIMPLE Model                        -
+    \* ------------------------------------------------------------------
+    fair process swProcess \in ({SW_SIMPLE_ID} \X SW)
+    variables ingressPkt = [type |-> 0]
+    begin
+    SwitchSimpleProcess:
+    while TRUE do
+        await whichSwitchModel(self[2]) = SW_SIMPLE_MODEL;          
+        await Len(controller2Switch[self[2]]) > 0;
+        ingressPkt := Head(controller2Switch[self[2]]);
+        assert ingressPkt.type = INSTALL_FLOW;
+        controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
+        installedIRs := Append(installedIRs, ingressPkt.IR);
+        TCAM[self[2]] := Append(TCAM[self[2]], ingressPkt.IR);
+        switch2Controller := Append(switch2Controller, [type |-> INSTALLED_SUCCESSFULLY,
+                                                        from |-> self[2],
+                                                        IR |-> ingressPkt.IR]);
+        
+    end while;
+    end process;
+    \* ------------------------------------------------------------------
+    \* -                   Switches COMPLEX (Modules)                   -
     \* ------------------------------------------------------------------
     
     \* ======== NIC/ASIC Module ========
     fair process swNicAsicProcPacketIn \in ({NIC_ASIC_IN} \X SW)
     variables ingressIR = [type |-> 0]
-    begin    
-    SwitchNicAsicInFailedOrNot:
-        await swCanReceivePackets(self[2]);
+    begin
     SwitchRcvPacket:
-    while ~isFinished do
-        if swCanReceivePackets(self[2]) then
-            await Len(controller2Switch[self[2]]) > 0;
-            ingressIR := Head(controller2Switch[self[2]]);
-            assert \/ ingressIR.type = RECONCILIATION_REQUEST
-                   \/ ingressIR.type = INSTALL_FLOW;
-            controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
-        else 
-            goto SwitchNicAsicInFailedOrNot;
-        end if;
+    while TRUE do
+        await whichSwitchModel(self[2]) = SW_COMPLEX_MODEL;
+        await swCanReceivePackets(self[2]);
+        await Len(controller2Switch[self[2]]) > 0;
+        ingressIR := Head(controller2Switch[self[2]]);
+        assert \/ ingressIR.type = RECONCILIATION_REQUEST
+               \/ ingressIR.type = INSTALL_FLOW;
+        acquireLock();
+        controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
         \* Process packet
         SwitchNicAsicInsertToOfaBuff:
             if swCanReceivePackets(self[2]) then
+                acquireAndChangeLock(<<OFA_IN, self[2]>>);
                 NicAsic2OfaBuff[self[2]] := Append(NicAsic2OfaBuff[self[2]], ingressIR);
             else
-                goto SwitchNicAsicInFailedOrNot;
+                ingressIR := [type |-> 0];
+                goto SwitchRcvPacket;
             end if;
     end while;
     end process
@@ -550,26 +570,25 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     fair process swNicAsicProcPacketOut \in ({NIC_ASIC_OUT} \X SW)
     variables egressMsg = [type |-> 0]
     begin
-    SwitchNicAsicOutFailedOrNot:
-        await swCanReceivePackets(self[2]);
     SwitchFromOFAPacket:
-    while ~isFinished do
-        if swCanReceivePackets(self[2]) then
-            await  Len(Ofa2NicAsicBuff[self[2]]) > 0;
-            egressMsg := Head(Ofa2NicAsicBuff[self[2]]);
-            assert \/ egressMsg.type = INSTALLED_SUCCESSFULLY
-                   \/ egressMsg.type = RECEIVED_SUCCESSFULLY
-                   \/ egressMsg.type = RECONCILIATION_RESPONSE;
-            Ofa2NicAsicBuff[self[2]] := Tail(Ofa2NicAsicBuff[self[2]]);
-        else 
-            goto SwitchNicAsicOutFailedOrNot;
-        end if;
+    while TRUE do
+        await swCanReceivePackets(self[2]);
+        await  Len(Ofa2NicAsicBuff[self[2]]) > 0;
+        egressMsg := Head(Ofa2NicAsicBuff[self[2]]);
+        acquireLock();
+        assert \/ egressMsg.type = INSTALLED_SUCCESSFULLY
+               \/ egressMsg.type = RECEIVED_SUCCESSFULLY
+               \/ egressMsg.type = RECONCILIATION_RESPONSE;
+        Ofa2NicAsicBuff[self[2]] := Tail(Ofa2NicAsicBuff[self[2]]);
         \* Process Msg
         SwitchNicAsicSendOutMsg:
             if swCanReceivePackets(self[2]) then
+                switchWaitForLock();
+                releaseLock(self);
                 switch2Controller := Append(switch2Controller, egressMsg);
             else
-                goto SwitchNicAsicOutFailedOrNot;
+                egressMsg := [type |-> 0];
+                goto SwitchFromOFAPacket;
             end if;
     end while;
     end process
@@ -580,26 +599,30 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     variables ofaInMsg = [type |-> 0]
     begin
     \* OFA process the packets and sends packet to Installer
-    SwitchOfaInFailedOrNot:
-    await swOFACanProcessIRs(self[2]);
     SwitchOfaProcIn: 
-    while ~isFinished do
+    while TRUE do
+        await swOFACanProcessIRs(self[2]);
+        await Len(NicAsic2OfaBuff[self[2]]) > 0;
+        acquireLock();
+        ofaInMsg := Head(NicAsic2OfaBuff[self[2]]);           
+        assert ofaInMsg.to = self[2];
+        assert ofaInMsg.IR  \in 1..MaxNumIRs;
+        NicAsic2OfaBuff[self[2]] := Tail(NicAsic2OfaBuff[self[2]]);
+        
+        SwitchOfaProcessPacket:
            if swOFACanProcessIRs(self[2]) then
-                await Len(NicAsic2OfaBuff[self[2]]) > 0;
-                ofaInMsg := Head(NicAsic2OfaBuff[self[2]]);           
-                assert ofaInMsg.to = self[2];
-                NicAsic2OfaBuff[self[2]] := Tail(NicAsic2OfaBuff[self[2]]);
+                acquireAndChangeLock(<<INSTALLER, self[2]>>);
+                if ofaInMsg.type = INSTALL_FLOW then
+                \* call ofaInstallFlowEntry(ofaInMsg.IR)
+                    Ofa2InstallerBuff[self[2]] := Append(Ofa2InstallerBuff[self[2]], ofaInMsg.IR);
+                \*elsif ofaInMsg.type = RECONCILIATION_REQUEST then
+                \*     call ofaProcessReconcileRequest(ofaInMsg.IR); 
+                else
+                    assert FALSE;               
+                end if;
            else
-                goto SwitchOfaInFailedOrNot;
-           end if;
- 
-           SwitchOfaProcessPacket:
-           if ofaInMsg.type = INSTALL_FLOW then
-                call ofaInstallFlowEntry(ofaInMsg.IR);
-           \*elsif ofaInMsg.type = RECONCILIATION_REQUEST then
-           \*     call ofaProcessReconcileRequest(ofaInMsg.IR); 
-           else
-                assert FALSE;               
+                ofaInMsg := [type |-> 0];
+                goto SwitchOfaProcIn;
            end if;
     end while    
     end process
@@ -607,26 +630,25 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     fair process ofaModuleProcPacketOut \in ({OFA_OUT} \X SW)
     variables ofaOutConfirmation = 0
     begin
-    SwitchOfaOutFailedOrNot:
-        await swOFACanProcessIRs(self[2]);
     SwitchOfaProcOut:
-    while ~isFinished do
-        if swOFACanProcessIRs(self[2]) then
-            await Installer2OfaBuff[self[2]] # <<>>;
-            ofaOutConfirmation := Head(Installer2OfaBuff[self[2]]);
-            Installer2OfaBuff[self[2]] := Tail(Installer2OfaBuff[self[2]]);
-        else
-            goto SwitchOfaOutFailedOrNot;
-        end if;
+    while TRUE do
+        await swOFACanProcessIRs(self[2]);
+        await Installer2OfaBuff[self[2]] # <<>>;
+        acquireLock();
+        ofaOutConfirmation := Head(Installer2OfaBuff[self[2]]);
+        Installer2OfaBuff[self[2]] := Tail(Installer2OfaBuff[self[2]]);
+        assert ofaOutConfirmation \in 1..MaxNumIRs;
         
         SendInstallationConfirmation:
             if swOFACanProcessIRs(self[2]) then
+                acquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
                 Ofa2NicAsicBuff[self[2]] := Append(Ofa2NicAsicBuff[self[2]], [type |-> INSTALLED_SUCCESSFULLY,
                                                                               from |-> self[2],
                                                                               IR |-> ofaOutConfirmation]);
                 \* OfaCacheInstalled[self[2]] := OfaCacheInstalled[self[2]] \cup {ofaOutConfirmation};                
             else 
-                goto SwitchOfaOutFailedOrNot;
+                ofaOutConfirmation := 0;
+                goto SwitchOfaProcOut;
             end if;                                                              
     end while;                                                                      
     end process
@@ -637,31 +659,32 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     variables installerInIR = 0
     begin
     \* Installer installs the packet into TCAM
-    SwitchInstallerFailedOrNot:
-        await swCanInstallIRs(self[2]);
     SwitchInstallerProc: 
-    while ~isFinished do 
-       if swCanInstallIRs(self[2]) then 
-            await Len(Ofa2InstallerBuff[self[2]]) > 0;
-            installerInIR := Head(Ofa2InstallerBuff[self[2]]);
-            Ofa2InstallerBuff[self[2]] := Tail(Ofa2InstallerBuff[self[2]]);
-       else
-            goto SwitchInstallerFailedOrNot;
-       end if;
+    while TRUE do      
+       await swCanInstallIRs(self[2]);
+       await Len(Ofa2InstallerBuff[self[2]]) > 0;
+       acquireLock();
+       installerInIR := Head(Ofa2InstallerBuff[self[2]]);
+       assert installerInIR \in 1..MaxNumIRs;
+       Ofa2InstallerBuff[self[2]] := Tail(Ofa2InstallerBuff[self[2]]);
        \* Process packet
        SwitchInstallerInsert2TCAM:
-            if swCanInstallIRs(self[2]) then   
+            if swCanInstallIRs(self[2]) then 
+                acquireLock();     
                 installedIRs := Append(installedIRs, installerInIR);
                 TCAM[self[2]] := Append(TCAM[self[2]], installerInIR);
             else
-                goto SwitchInstallerFailedOrNot;
+                installerInIR := 0;
+                goto SwitchInstallerProc;
             end if;
             
        SwitchInstallerSendConfirmation:
             if swCanInstallIRs(self[2]) then
+                acquireAndChangeLock(<<OFA_OUT, self[2]>>);
                 Installer2OfaBuff[self[2]] := Append(Installer2OfaBuff[self[2]], installerInIR);
             else
-                goto SwitchInstallerFailedOrNot;
+                installerInIR := 0;
+                goto SwitchInstallerProc;
             end if;
     end while;
     end process
@@ -672,32 +695,33 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     variable statusMsg = <<>>, notFailedSet = {}, failedElem = "";
     begin
     SwitchFailure:
-    while failedTimes[self[2]] < MAX_NUM_SW_FAILURE /\ ~isFinished do 
-        statusMsg := <<>>;
+    while TRUE do 
         notFailedSet := returnSwitchElementsNotFailed(self[2]);
         await notFailedSet # {}; 
+        await failedTimes[self[2]] < MAX_NUM_SW_FAILURE;
+        await ~isFinished;
+        await \/ switchLock = <<NO_LOCK, NO_LOCK>>
+              \/ switchLock[2] = self[2];
         with elem \in notFailedSet do
             failedElem := elem;
         end with;
         
         if failedElem = "cpu" then 
-            SwitchCpuFailure: 
                 await pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure";
                 cpuFailure();
         elsif failedElem = "ofa" then 
-            SwitchOfaFailure: 
                 await pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure";
                 ofaFailure();
         elsif failedElem = "installer" then 
-            SwitchInstallerFailure: 
                 await pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure";
                 installerFailure();
         elsif failedElem = "nicAsic" then 
-            SwitchNicAsicFailure: 
                 await pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure";
                 nicAsicFailure();
         else assert FALSE;
         end if;
+        
+        releaseLock(self);
     end while
     end process
     \* =================================
@@ -707,21 +731,50 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     variable failedSet = {}, statusResolveMsg = <<>>, recoveredElem = "";
     begin
     SwitchResolveFailure:
-    while ~isFinished do
-        statusResolveMsg := <<>>;
+    while TRUE do
         failedSet := returnSwitchFailedElements(self[2]);
         await Cardinality(failedSet) > 0;
+        await switchLock = <<NO_LOCK, NO_LOCK>>;
+        await ~isFinished;
         with elem \in failedSet do
             recoveredElem := elem;
         end with;
         
-        if recoveredElem = "cpu" then SwitchCpuRecovery: resolveCpuFailure();
-        elsif recoveredElem = "nicAsic" then SwitchNicAsicRecovery: resolveNicAsicFailure();
-        elsif recoveredElem = "ofa" then SwitchOfaRecovery: resolveOfaFailure();
-        elsif recoveredElem = "installer" then SwitchInstallerRecovery: resolveInstallerFailure();
+        if recoveredElem = "cpu" then resolveCpuFailure();
+        elsif recoveredElem = "nicAsic" then resolveNicAsicFailure();
+        elsif recoveredElem = "ofa" then resolveOfaFailure();
+        elsif recoveredElem = "installer" then resolveInstallerFailure();
         else assert FALSE;
         end if;
         
+    end while
+    end process
+    \* =================================
+    
+    \* ======== Ghost UNLOCK ===========
+    fair process ghostUnlockProcess \in ({GHOST_UNLOCK_PROC} \X SW)
+    begin
+    ghostProc:
+    while TRUE do
+        await /\ switchLock # <<NO_LOCK, NO_LOCK>>
+              /\ switchLock[2] = self[2];
+        if switchStatus[switchLock[2]].cpu = Failed /\ switchLock[1] = NIC_ASIC_OUT then
+            await pc[switchLock] = "SwitchFromOFAPacket";
+        else
+            if switchLock[1] \in {NIC_ASIC_IN, NIC_ASIC_OUT} then 
+                await switchStatus[switchLock[2]].nicAsic = Failed;
+                await /\ pc[<<NIC_ASIC_IN, self[2]>>] = "SwitchRcvPacket"
+                      /\ pc[<<NIC_ASIC_OUT, self[2]>>] = "SwitchFromOFAPacket"; 
+            elsif switchLock[1] \in {OFA_IN, OFA_OUT} then 
+                await switchStatus[switchLock[2]].ofa = Failed;
+                await /\ pc[<<OFA_IN, self[2]>>] = "SwitchOfaProcIn"
+                      /\ pc[<<OFA_OUT, self[2]>>] = "SwitchOfaProcOut";
+            elsif switchLock[1] \in {INSTALLER} then
+                await switchStatus[switchLock[2]].installer = Failed;
+                await pc[<<INSTALLER, self[2]>>] = "SwitchInstallerProc"; 
+            end if;
+        end if;
+        releaseLock(self);
     end while
     end process
     \* =================================
@@ -731,13 +784,13 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ------------------------------------------------------------------
    
     \* ======= Sequencer ========
-    fair process controllerSequencer \in ({c0, c1} \X {CONT_SEQ})
+    fair process controllerSequencer \in ({c0} \X {CONT_SEQ})
     variables toBeScheduledIRs = {}
     begin
     ControllerSeqProc:
-    await controllerIsMaster(self[1]);
-    ControllerObj:
-    while ~isFinished /\ controllerIsMaster(self[1]) do
+    while TRUE do
+        await controllerIsMaster(self[1]);
+        waitForLockFree();
         toBeScheduledIRs := getSetIRsCanBeScheduledNext(self[1]);
         await toBeScheduledIRs # {};
         call scheduleIRs(toBeScheduledIRs);                                                
@@ -746,74 +799,84 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
     \* ==========================
     
     \* ====== Thread Pool ======= 
-    fair process controllerWorkerThreads \in ({c0, c1} \X CONTROLLER_THREAD_POOL)
+    fair process controllerWorkerThreads \in ({c0} \X CONTROLLER_THREAD_POOL)
     variables nextIRToSent = 0; 
     begin
     ControllerThread:
-    await controllerIsMaster(self[1]);
-    ControllerThreadSendIRs:
-    while ~isFinished /\ controllerIsMaster(self[1]) do
+    while TRUE do
+        await controllerIsMaster(self[1]);
         await controllerThreadPoolIRQueue[self[1]] # <<>>;
+        await canWorkerThreadContinue(self[1], self[2]);
+        waitForLockFree();
+        workerThreadStatus[self[2]] := 1;
         nextIRToSent := Head(controllerThreadPoolIRQueue[self[1]]);
         controllerThreadPoolIRQueue[self[1]] := Tail(controllerThreadPoolIRQueue[self[1]]);        
         ControllerThreadSendIR:
+            waitForLockFree();
             if ~isSwitchSuspended(IR2SW[nextIRToSent]) /\ IRStatus[nextIRToSent] = IR_NONE then 
                 IRStatus[nextIRToSent] := IR_SENT;
-                ControllerThreadForwardIR: controllerSendIR(nextIRToSent);
+                ControllerThreadForwardIR: 
+                    waitForLockFree();
+                    controllerSendIR(nextIRToSent);
             end if;
         WaitForIRToHaveCorrectStatus:
+            waitForLockFree();
             await ~isSwitchSuspended(IR2SW[nextIRToSent]);
-        \*IRSuspendedScheduleAgain: \* Should be done in one atomic operation 
-        \*    if IRStatus[nextIRToSent] = IR_SUSPEND then
-        \*        IRStatus[nextIRToSent] := IR_NONE;
-        \*    end if;
         ReScheduleifIRNone:
+            waitForLockFree();
             if IRStatus[nextIRToSent] = IR_NONE then 
                 goto ControllerThreadSendIR;
             end if;
         RemoveFromScheduledIRSet:
+            waitForLockFree();
             assert nextIRToSent \in SetScheduledIRs[self[1]][IR2SW[nextIRToSent]];
             SetScheduledIRs[self[1]][IR2SW[nextIRToSent]] := SetScheduledIRs[self[1]][IR2SW[nextIRToSent]]\{nextIRToSent};
+            workerThreadStatus[self[2]] := 0;
     end while;
     end process
     \* ==========================
     
     \* ===== Event Handler ======
-    fair process controllerEventHandler \in ({c0, c1} \X {CONT_EVENT})
+    fair process controllerEventHandler \in ({c0} \X {CONT_EVENT})
     variables monitoringEvent = [type |-> 0]
     begin 
     ControllerEventHandlerProc:
-    await controllerIsMaster(self[1]);
-    ControllerTrack:
-    while ~isFinished /\ controllerIsMaster(self[1]) do    
+    while TRUE do 
+         await controllerIsMaster(self[1]);   
          await swSeqChangedStatus # <<>>;
+         waitForLockFree();
          monitoringEvent := Head(swSeqChangedStatus);
          swSeqChangedStatus := Tail(swSeqChangedStatus);
          if shouldSuspendSw(monitoringEvent) /\ SwSuspensionStatus[monitoringEvent.swID] = SW_RUN then
-            ControllerSuspendSW: SwSuspensionStatus[monitoringEvent.swID] := SW_SUSPEND;        
+            ControllerSuspendSW: 
+                waitForLockFree();
+                SwSuspensionStatus[monitoringEvent.swID] := SW_SUSPEND;        
          elsif canfreeSuspendedSw(monitoringEvent) /\ SwSuspensionStatus[monitoringEvent.swID] = SW_SUSPEND then
             \*call suspendInSchedulingIRs(monitoringEvent.swID);
-            ControllerFreeSuspendedSW: SwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
+            ControllerFreeSuspendedSW: 
+                waitForLockFree();
+                SwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
             ControllerCheckIfThisIsLastEvent:
-            if ~existsMonitoringEventHigherNum(monitoringEvent) then
-                \* call reconcileStateWithRecoveredSW(monitoringEvent.swID);
-                call resetStateWithRecoveredSW(monitoringEvent.swID); 
-            end if;
+                waitForLockFree();
+                if ~existsMonitoringEventHigherNum(monitoringEvent) then
+                    \* call reconcileStateWithRecoveredSW(monitoringEvent.swID);
+                    call resetStateWithRecoveredSW(monitoringEvent.swID); 
+                end if;
          end if;
     end while;
     end process
     \* ==========================
     
     \* == Monitoring Server ===== 
-    fair process controllerMonitoringServer \in ({c0, c1} \X {CONT_MONITOR})
+    fair process controllerMonitoringServer \in ({c0} \X {CONT_MONITOR})
     variable msg = [type |-> 0]
     begin
     ControllerMonitorCheckIfMastr:
-    await controllerIsMaster(self[1]);
-    ControllerMonitorProc:
-    while ~isFinished /\ controllerIsMaster(self[1]) do
+    while TRUE do
+        await controllerIsMaster(self[1]);
         await switch2Controller # <<>>;
         msg := Head(switch2Controller);
+        waitForLockFree();
         switch2Controller := Tail(switch2Controller);
         assert msg.from = IR2SW[msg.IR];
         assert msg.type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY};
@@ -835,120 +898,96 @@ CONSTANTS SW, c0, c1, CONTROLLER_THREAD_POOL, MaxNumIRs,
                         IRStatus[msg.IR] := IR_PENDING; \* Should be done in one atomic operation 
                     end if; *)
             if msg.type = INSTALLED_SUCCESSFULLY then
-                ControllerUpdateIR2: IRStatus[msg.IR] := IR_DONE; \* Should be done in one atomic operation
+                ControllerUpdateIR2:
+                    waitForLockFree(); 
+                    FirstInstall[msg.IR] := 1;
+                    IRStatus[msg.IR] := IR_DONE; \* Should be done in one atomic operation
             else assert FALSE;
             end if;
         \*end if; 
     end while
     end process
-    \* ==========================
-    
-    (*fair process c \in {c0, c1}
-    variables setNotConsideredIRs={}, latestIRConsidered={}, batchIRs = {}, setIRs = {}, copyBatch={}, s = 0, 
-              considered={}, updated={}, numBatch=0, setSwitches={}, copySet={};
-    begin
-    Controller: skip;
-    await controllerIsMaster(self);
-    if self = c1 then 
-            \* Waiting for all the instructions sent by the previous master controller either fail or install successfully!
-            await NoMorePossibleUpdates(setSwitches);
-    end if;
-    ControllerObj:
-    while TRUE do
-        \*setSwitches := GetFirstNofSet(SW\1..latestSWConsidered, batchSize);
-        setNotConsideredIRs := {x \in controller2SwitchIRs\(1..latestUpdateReceived): x \notin installedIRs};
-        batchIRs := GetFirstNofSet(setNotConsideredIRs, batchSize);
-        copyBatch := batchIRs;
-        if Cardinality(batchIRs) = 0 then goto EndCont; end if;
-        check1stbatchForC1:
-        if (self = c1 /\ numBatch = 0) then
-            await NoMorePossibleUpdates(batchIRs);
-        end if;
-        Rest:
-        latestIRConsidered := max(batchIRs); 
-        considered := {};
-        SendAllUpdates:
-          while TRUE do
-             CheckIfFinished:
-             if (Cardinality(batchIRs) - Cardinality(considered) = 0) then
-                 goto check;
-             end if;
-             f1: failover();
-             sendUpdate: 
-                s := min(batchIRs\(considered));
-                considered := considered \union {s};
-                if numBatch = 0 then
-                    if switchState[s] = Updated then
-                        goto CheckIfFinished;
-                    end if;
-                end if;
-                sendIRs:
-                    controllerSendIR(s);
-          end while;
-        check:
-            failover();
-            nofail: 
-            await NoMorePossibleUpdates(setSwitches);
-            setSwitches := getFailed(copySet);
-            if Cardinality(setSwitches) = 0 then
-                latestUpdateRcv := max(copySet);
-                numBatch := numBatch + 1;
-                goto ControllerObj   
-            else
-                resendUpdates: considered := {};
-                               goto SendAllUpdates;
-            end if;                
-    end while;       
-    EndCont:
-        continue := FALSE;
-    end process *)
-    
+    \* ==========================    
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-69ba6ab1a3897af906e94f56688937bd
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-da4478f5aaed7ac3f9e6818834311035
 VARIABLES swSeqChangedStatus, switchStatus, installedIRs, failedTimes, 
           NicAsic2OfaBuff, Ofa2NicAsicBuff, Ofa2InstallerBuff, 
           Installer2OfaBuff, TCAM, controlMsgCounter, controller2Switch, 
-          switch2Controller, controllerState, IR2SW, 
+          switch2Controller, controllerState, switchOrdering, IR2SW, 
           controllerThreadPoolIRQueue, IRStatus, SwSuspensionStatus, 
-          lastScheduledThread, SetScheduledIRs, dependencyGraph, pc, stack
+          lastScheduledThread, SetScheduledIRs, dependencyGraph, 
+          workerThreadRanking, workerThreadStatus, switchLock, FirstInstall, 
+          pc, stack
 
 (* define statement *)
-RECURSIVE Paths(_, _)
-Paths(n, G) ==  IF n = 1
-                THEN
-                  G
-                ELSE
-                    LET nextVs(p) == { e[2] : e \in {e \in G : e[1] = p[Len(p)]} }
-                        nextPaths(p) == { Append(p,v) : v \in nextVs(p) }
-                    IN
-                    UNION {nextPaths(p) : p \in Paths(n-1, G)} \cup Paths(n-1, G)
+ max(set) == CHOOSE x \in set: \A y \in set: x \geq y
+ min(set) == CHOOSE x \in set: \A y \in set: x \leq y
+ rangeSeq(seq) == {seq[i]: i \in DOMAIN seq}
+ isFinished == \A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE
 
-S == 0..MaxNumIRs
-PlausibleDependencySet == {x \in SUBSET (S \X S): /\ ~\E y \in 0..MaxNumIRs: <<y, y>> \in x
-                                                  /\ ~\E y, z \in 0..MaxNumIRs: /\  <<y, z>> \in x
-                                                                                /\  <<z, y>> \in x
-                                                  /\ x # {}
-                                                  /\ ~\E y \in 1..MaxNumIRs: <<0, y>> \in x
-                                                  /\ \A p \in Paths(MaxNumIRs, x): \/ Len(p) = 1
-                                                                                   \/ p[1] # p[Len(p)]}
+ RECURSIVE sum(_, _)
+ sum(seqS, indexToSum) == IF indexToSum = 0
+                          THEN
+                             0
+                          ELSE
+                             IF indexToSum = 1
+                             THEN
+                                 seqS[1]
+                          ELSE
+                             seqS[1] + sum(Tail(seqS), indexToSum - 1)
 
+ RECURSIVE Paths(_, _)
+ Paths(n, G) ==  IF n = 1
+                 THEN
+                   G
+                 ELSE
+                     LET nextVs(p) == { e[2] : e \in {e \in G : e[1] = p[Len(p)]} }
+                         nextPaths(p) == { Append(p,v) : v \in nextVs(p) }
+                     IN
+                     UNION {nextPaths(p) : p \in Paths(n-1, G)} \cup Paths(n-1, G)
 
-max(set) == CHOOSE x \in set: \A y \in set: x \geq y
-min(set) == CHOOSE x \in set: \A y \in set: x \leq y
+RECURSIVE AllPossibleSizes(_, _)
+AllPossibleSizes(maxSize, sumUpToNow) == IF sumUpToNow = 0
+                                         THEN
+                                             {<<0>>}
+                                         ELSE
+                                             LET Upperbound == min({sumUpToNow, maxSize})
+                                             IN
+                                             UNION {{<<x>> \o y: y \in AllPossibleSizes(x, sumUpToNow-x)}: x \in 1..Upperbound}
 
+ generateConnectedDAG(S) == {x \in SUBSET (S \X S): /\ ~\E y \in S: <<y, y>> \in x
+                                                    /\ ~\E y, z \in S: /\  <<y, z>> \in x
+                                                                       /\  <<z, y>> \in x
+                                                    /\ \A y \in S: ~\E z \in S: /\ <<z, y>> \in x
+                                                                                /\ z >= y
+                                                    /\ \/ Cardinality(S) = 1
+                                                       \/ \A y \in S: \E z \in S: \/ <<y, z>> \in x
+                                                                                  \/ <<z, y>> \in x
+                                                    /\ \/ x = {}
+                                                       \/ ~\E p1, p2 \in Paths(Cardinality(x), x): /\ p1 # p2
+                                                                                                   /\ p1[1] = p2[1]
+                                                                                                   /\ p2[Len(p2)] = p1[Len(p1)]
+                                                    /\ Cardinality(x) >= Cardinality(S) - 1
+                                                    /\  \/ x = {}
+                                                        \/ \A p \in Paths(Cardinality(x), x): \/ Len(p) = 1
+                                                                                              \/ p[1] # p[Len(p)]}
+SetSetUnion(Aset, Bset) == {x \cup y: x \in Aset, y \in Bset}
 
+RECURSIVE GeneralSetSetUnion(_)
+GeneralSetSetUnion(A) == IF Cardinality(A) = 1
+                         THEN
+                             CHOOSE x \in A: TRUE
+                         ELSE
+                             LET
+                                 rndA1 == CHOOSE x \in A:TRUE
+                                 rndA2 == CHOOSE x \in A\{rndA1}: TRUE
+                             IN
+                                 GeneralSetSetUnion({SetSetUnion(rndA1, rndA2)} \cup (A\{rndA1, rndA2}))
 
-
-
-
-
-
-
+PlausibleDependencySet == UNION {GeneralSetSetUnion({generateConnectedDAG(((sum(allSizes, y-1) + 1)..(sum(allSizes, y)))): y \in 1..(Len(allSizes) - 1)}): allSizes \in AllPossibleSizes(MaxNumIRs, MaxNumIRs)}
 controllerIsMaster(controllerID) == IF controllerID = c0 THEN controllerState.c0 = "primary"
                                                          ELSE controllerState.c1 = "primary"
-
-
 isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
 returnSwitchFailedElements(sw) == {x\in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = Failed
                                                                  /\ \/ switchStatus[sw].cpu = NotFailed
@@ -973,18 +1012,17 @@ getSetIRsForSwitch(SID) == {x \in 1..MaxNumIRs: IR2SW[x] = SID}
 
 existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                 /\ swSeqChangedStatus[x].num > monEvent.num
-installerInStartingMode(swID) == pc[<<INSTALLER, swID>>] = "SwitchInstallerFailedOrNot"
-ofaStartingMode(swID) == /\ pc[<<OFA_IN, swID>>] = "SwitchOfaInFailedOrNot"
-                         /\ pc[<<OFA_OUT, swID>>] = "SwitchOfaOutFailedOrNot"
-nicAsicStartingMode(swID) == /\ pc[<<NIC_ASIC_IN, swID>>] = "SwitchNicAsicInFailedOrNot"
-                             /\ pc[<<NIC_ASIC_OUT, swID>>] = "SwitchNicAsicOutFailedOrNot"
-isFinished == \A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE
+installerInStartingMode(swID) == pc[<<INSTALLER, swID>>] = "SwitchInstallerProc"
+ofaStartingMode(swID) == /\ pc[<<OFA_IN, swID>>] = "SwitchOfaProcIn"
+                         /\ pc[<<OFA_OUT, swID>>] = "SwitchOfaProcOut"
+nicAsicStartingMode(swID) == /\ pc[<<NIC_ASIC_IN, swID>>] = "SwitchRcvPacket"
+                             /\ pc[<<NIC_ASIC_OUT, swID>>] = "SwitchFromOFAPacket"
 shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
                              \/ monEvent.type = NIC_ASIC_DOWN
                              \/ /\ monEvent.type = KEEP_ALIVE
                                 /\ monEvent.status.installerStatus = INSTALLER_DOWN
 canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
-                                   /\ monEvent.status.installerStatus = INSTALLER_UP
+                                /\ monEvent.status.installerStatus = INSTALLER_UP
 
 
 getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ IR2SW[x] = SID
@@ -993,9 +1031,14 @@ getIRSetToSuspend(CID, SID) == {x \in SetScheduledIRs[CID][SID]: IRStatus[x] = I
 getInstallerStatus(stat) == IF stat = NotFailed
                             THEN INSTALLER_UP
                             ELSE INSTALLER_DOWN
+canWorkerThreadContinue(CID, threadID) == /\ Len(controllerThreadPoolIRQueue[CID]) > 0
+                                          /\ workerThreadRanking[threadID] = min({workerThreadRanking[z]: z \in {y \in CONTROLLER_THREAD_POOL: workerThreadStatus[y] = 0}})
+whichSwitchModel(swID) == IF MAX_NUM_SW_FAILURE = 0
+                            THEN SW_SIMPLE_MODEL
+                            ELSE SW_COMPLEX_MODEL
 
-VARIABLES ofaInIR, setIRs, nextThread, nextIR, switchIDToReset, setIRsToReset, 
-          resetIR, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, 
+VARIABLES setIRs, nextThread, nextIR, switchIDToReset, setIRsToReset, resetIR, 
+          ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, 
           installerInIR, statusMsg, notFailedSet, failedElem, failedSet, 
           statusResolveMsg, recoveredElem, toBeScheduledIRs, nextIRToSent, 
           monitoringEvent, msg
@@ -1003,16 +1046,17 @@ VARIABLES ofaInIR, setIRs, nextThread, nextIR, switchIDToReset, setIRsToReset,
 vars == << swSeqChangedStatus, switchStatus, installedIRs, failedTimes, 
            NicAsic2OfaBuff, Ofa2NicAsicBuff, Ofa2InstallerBuff, 
            Installer2OfaBuff, TCAM, controlMsgCounter, controller2Switch, 
-           switch2Controller, controllerState, IR2SW, 
+           switch2Controller, controllerState, switchOrdering, IR2SW, 
            controllerThreadPoolIRQueue, IRStatus, SwSuspensionStatus, 
-           lastScheduledThread, SetScheduledIRs, dependencyGraph, pc, stack, 
-           ofaInIR, setIRs, nextThread, nextIR, switchIDToReset, 
-           setIRsToReset, resetIR, ingressIR, egressMsg, ofaInMsg, 
+           lastScheduledThread, SetScheduledIRs, dependencyGraph, 
+           workerThreadRanking, workerThreadStatus, switchLock, FirstInstall, 
+           pc, stack, setIRs, nextThread, nextIR, switchIDToReset, 
+           setIRsToReset, resetIR, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
            ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
            failedElem, failedSet, statusResolveMsg, recoveredElem, 
            toBeScheduledIRs, nextIRToSent, monitoringEvent, msg >>
 
-ProcSet == (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({c0, c1} \X {CONT_SEQ})) \cup (({c0, c1} \X CONTROLLER_THREAD_POOL)) \cup (({c0, c1} \X {CONT_EVENT})) \cup (({c0, c1} \X {CONT_MONITOR}))
+ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({c0} \X {CONT_SEQ})) \cup (({c0} \X CONTROLLER_THREAD_POOL)) \cup (({c0} \X {CONT_EVENT})) \cup (({c0} \X {CONT_MONITOR}))
 
 Init == (* Global variables *)
         /\ swSeqChangedStatus = <<>>
@@ -1028,15 +1072,19 @@ Init == (* Global variables *)
         /\ controller2Switch = [x\in SW |-> <<>>]
         /\ switch2Controller = <<>>
         /\ controllerState = [c0 |-> "primary", c1 |-> "backup"]
-        /\ IR2SW \in [1..MaxNumIRs -> SW]
+        /\ switchOrdering = (CHOOSE x \in [SW -> 1..Cardinality(SW)]: ~\E y, z \in SW: y # z /\ x[y] = x[z])
+        /\ IR2SW = (CHOOSE x \in [1..Cardinality(SW) -> SW]: ~\E y, z \in DOMAIN x: /\ y > z
+                                                                                     /\ switchOrdering[x[y]] =< switchOrdering[x[z]])
         /\ controllerThreadPoolIRQueue = [y \in {c0, c1} |-> <<>>]
         /\ IRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
         /\ lastScheduledThread = 0
         /\ SetScheduledIRs = [x \in {c0, c1} |-> [y \in SW |-> {}]]
-        /\ dependencyGraph \in PlausibleDependencySet
-        (* Procedure ofaInstallFlowEntry *)
-        /\ ofaInIR = [ self \in ProcSet |-> 0]
+        /\ dependencyGraph \in generateConnectedDAG(1..MaxNumIRs)
+        /\ workerThreadRanking = (CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]: ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
+        /\ workerThreadStatus = [x \in CONTROLLER_THREAD_POOL |-> 0]
+        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+        /\ FirstInstall = [x \in 1..MaxNumIRs |-> 0]
         (* Procedure scheduleIRs *)
         /\ setIRs = [ self \in ProcSet |-> {}]
         /\ nextThread = [ self \in ProcSet |-> lastScheduledThread]
@@ -1045,6 +1093,8 @@ Init == (* Global variables *)
         /\ switchIDToReset = [ self \in ProcSet |-> 0]
         /\ setIRsToReset = [ self \in ProcSet |-> {}]
         /\ resetIR = [ self \in ProcSet |-> 0]
+        (* Process swProcess *)
+        /\ ingressPkt = [self \in ({SW_SIMPLE_ID} \X SW) |-> [type |-> 0]]
         (* Process swNicAsicProcPacketIn *)
         /\ ingressIR = [self \in ({NIC_ASIC_IN} \X SW) |-> [type |-> 0]]
         (* Process swNicAsicProcPacketOut *)
@@ -1064,101 +1114,34 @@ Init == (* Global variables *)
         /\ statusResolveMsg = [self \in ({SW_RESOLVE_PROC} \X SW) |-> <<>>]
         /\ recoveredElem = [self \in ({SW_RESOLVE_PROC} \X SW) |-> ""]
         (* Process controllerSequencer *)
-        /\ toBeScheduledIRs = [self \in ({c0, c1} \X {CONT_SEQ}) |-> {}]
+        /\ toBeScheduledIRs = [self \in ({c0} \X {CONT_SEQ}) |-> {}]
         (* Process controllerWorkerThreads *)
-        /\ nextIRToSent = [self \in ({c0, c1} \X CONTROLLER_THREAD_POOL) |-> 0]
+        /\ nextIRToSent = [self \in ({c0} \X CONTROLLER_THREAD_POOL) |-> 0]
         (* Process controllerEventHandler *)
-        /\ monitoringEvent = [self \in ({c0, c1} \X {CONT_EVENT}) |-> [type |-> 0]]
+        /\ monitoringEvent = [self \in ({c0} \X {CONT_EVENT}) |-> [type |-> 0]]
         (* Process controllerMonitoringServer *)
-        /\ msg = [self \in ({c0, c1} \X {CONT_MONITOR}) |-> [type |-> 0]]
+        /\ msg = [self \in ({c0} \X {CONT_MONITOR}) |-> [type |-> 0]]
         /\ stack = [self \in ProcSet |-> << >>]
-        /\ pc = [self \in ProcSet |-> CASE self \in ({NIC_ASIC_IN} \X SW) -> "SwitchNicAsicInFailedOrNot"
-                                        [] self \in ({NIC_ASIC_OUT} \X SW) -> "SwitchNicAsicOutFailedOrNot"
-                                        [] self \in ({OFA_IN} \X SW) -> "SwitchOfaInFailedOrNot"
-                                        [] self \in ({OFA_OUT} \X SW) -> "SwitchOfaOutFailedOrNot"
-                                        [] self \in ({INSTALLER} \X SW) -> "SwitchInstallerFailedOrNot"
+        /\ pc = [self \in ProcSet |-> CASE self \in ({SW_SIMPLE_ID} \X SW) -> "SwitchSimpleProcess"
+                                        [] self \in ({NIC_ASIC_IN} \X SW) -> "SwitchRcvPacket"
+                                        [] self \in ({NIC_ASIC_OUT} \X SW) -> "SwitchFromOFAPacket"
+                                        [] self \in ({OFA_IN} \X SW) -> "SwitchOfaProcIn"
+                                        [] self \in ({OFA_OUT} \X SW) -> "SwitchOfaProcOut"
+                                        [] self \in ({INSTALLER} \X SW) -> "SwitchInstallerProc"
                                         [] self \in ({SW_FAILURE_PROC} \X SW) -> "SwitchFailure"
                                         [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
-                                        [] self \in ({c0, c1} \X {CONT_SEQ}) -> "ControllerSeqProc"
-                                        [] self \in ({c0, c1} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
-                                        [] self \in ({c0, c1} \X {CONT_EVENT}) -> "ControllerEventHandlerProc"
-                                        [] self \in ({c0, c1} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"]
-
-SwitchOFAInsert2InstallerBuff(self) == /\ pc[self] = "SwitchOFAInsert2InstallerBuff"
-                                       /\ IF swOFACanProcessIRs(self[2])
-                                             THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInIR[self])]
-                                                  /\ pc' = [pc EXCEPT ![self] = "EndInstallFlowEntry"]
-                                             ELSE /\ pc' = [pc EXCEPT ![self] = "EndInstallFlowEntry"]
-                                                  /\ UNCHANGED Ofa2InstallerBuff
-                                       /\ UNCHANGED << swSeqChangedStatus, 
-                                                       switchStatus, 
-                                                       installedIRs, 
-                                                       failedTimes, 
-                                                       NicAsic2OfaBuff, 
-                                                       Ofa2NicAsicBuff, 
-                                                       Installer2OfaBuff, TCAM, 
-                                                       controlMsgCounter, 
-                                                       controller2Switch, 
-                                                       switch2Controller, 
-                                                       controllerState, IR2SW, 
-                                                       controllerThreadPoolIRQueue, 
-                                                       IRStatus, 
-                                                       SwSuspensionStatus, 
-                                                       lastScheduledThread, 
-                                                       SetScheduledIRs, 
-                                                       dependencyGraph, stack, 
-                                                       ofaInIR, setIRs, 
-                                                       nextThread, nextIR, 
-                                                       switchIDToReset, 
-                                                       setIRsToReset, resetIR, 
-                                                       ingressIR, egressMsg, 
-                                                       ofaInMsg, 
-                                                       ofaOutConfirmation, 
-                                                       installerInIR, 
-                                                       statusMsg, notFailedSet, 
-                                                       failedElem, failedSet, 
-                                                       statusResolveMsg, 
-                                                       recoveredElem, 
-                                                       toBeScheduledIRs, 
-                                                       nextIRToSent, 
-                                                       monitoringEvent, msg >>
-
-EndInstallFlowEntry(self) == /\ pc[self] = "EndInstallFlowEntry"
-                             /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
-                             /\ ofaInIR' = [ofaInIR EXCEPT ![self] = Head(stack[self]).ofaInIR]
-                             /\ stack' = [stack EXCEPT ![self] = Tail(stack[self])]
-                             /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
-                                             installedIRs, failedTimes, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                             Ofa2InstallerBuff, 
-                                             Installer2OfaBuff, TCAM, 
-                                             controlMsgCounter, 
-                                             controller2Switch, 
-                                             switch2Controller, 
-                                             controllerState, IR2SW, 
-                                             controllerThreadPoolIRQueue, 
-                                             IRStatus, SwSuspensionStatus, 
-                                             lastScheduledThread, 
-                                             SetScheduledIRs, dependencyGraph, 
-                                             setIRs, nextThread, nextIR, 
-                                             switchIDToReset, setIRsToReset, 
-                                             resetIR, ingressIR, egressMsg, 
-                                             ofaInMsg, ofaOutConfirmation, 
-                                             installerInIR, statusMsg, 
-                                             notFailedSet, failedElem, 
-                                             failedSet, statusResolveMsg, 
-                                             recoveredElem, toBeScheduledIRs, 
-                                             nextIRToSent, monitoringEvent, 
-                                             msg >>
-
-ofaInstallFlowEntry(self) == SwitchOFAInsert2InstallerBuff(self)
-                                \/ EndInstallFlowEntry(self)
+                                        [] self \in ({GHOST_UNLOCK_PROC} \X SW) -> "ghostProc"
+                                        [] self \in ({c0} \X {CONT_SEQ}) -> "ControllerSeqProc"
+                                        [] self \in ({c0} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
+                                        [] self \in ({c0} \X {CONT_EVENT}) -> "ControllerEventHandlerProc"
+                                        [] self \in ({c0} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"]
 
 SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                             /\ IF setIRs[self] # {} /\ controllerIsMaster(self[1])
                                   THEN /\ nextIR' = [nextIR EXCEPT ![self] = CHOOSE x \in setIRs[self]: TRUE]
+                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                        /\ Assert(IRStatus[nextIR'[self]] \in {IR_NONE, IR_DONE}, 
-                                                 "Failure of assertion at line 430, column 9.")
+                                                 "Failure of assertion at line 466, column 9.")
                                        /\ pc' = [pc EXCEPT ![self] = "AddToScheduleIRSet"]
                                        /\ UNCHANGED << stack, setIRs, 
                                                        nextThread >>
@@ -1175,13 +1158,16 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             controlMsgCounter, 
                                             controller2Switch, 
                                             switch2Controller, controllerState, 
-                                            IR2SW, controllerThreadPoolIRQueue, 
+                                            switchOrdering, IR2SW, 
+                                            controllerThreadPoolIRQueue, 
                                             IRStatus, SwSuspensionStatus, 
                                             lastScheduledThread, 
                                             SetScheduledIRs, dependencyGraph, 
-                                            ofaInIR, switchIDToReset, 
-                                            setIRsToReset, resetIR, ingressIR, 
-                                            egressMsg, ofaInMsg, 
+                                            workerThreadRanking, 
+                                            workerThreadStatus, switchLock, 
+                                            FirstInstall, switchIDToReset, 
+                                            setIRsToReset, resetIR, ingressPkt, 
+                                            ingressIR, egressMsg, ofaInMsg, 
                                             ofaOutConfirmation, installerInIR, 
                                             statusMsg, notFailedSet, 
                                             failedElem, failedSet, 
@@ -1190,8 +1176,9 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             monitoringEvent, msg >>
 
 AddToScheduleIRSet(self) == /\ pc[self] = "AddToScheduleIRSet"
+                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ Assert(nextIR[self] \notin SetScheduledIRs[self[1]][IR2SW[nextIR[self]]], 
-                                      "Failure of assertion at line 434, column 13.")
+                                      "Failure of assertion at line 471, column 13.")
                             /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![self[1]][IR2SW[nextIR[self]]] = SetScheduledIRs[self[1]][IR2SW[nextIR[self]]] \cup {nextIR[self]}]
                             /\ pc' = [pc EXCEPT ![self] = "ScheduleTheIR"]
                             /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
@@ -1202,21 +1189,27 @@ AddToScheduleIRSet(self) == /\ pc[self] = "AddToScheduleIRSet"
                                             controlMsgCounter, 
                                             controller2Switch, 
                                             switch2Controller, controllerState, 
-                                            IR2SW, controllerThreadPoolIRQueue, 
+                                            switchOrdering, IR2SW, 
+                                            controllerThreadPoolIRQueue, 
                                             IRStatus, SwSuspensionStatus, 
                                             lastScheduledThread, 
-                                            dependencyGraph, stack, ofaInIR, 
-                                            setIRs, nextThread, nextIR, 
+                                            dependencyGraph, 
+                                            workerThreadRanking, 
+                                            workerThreadStatus, switchLock, 
+                                            FirstInstall, stack, setIRs, 
+                                            nextThread, nextIR, 
                                             switchIDToReset, setIRsToReset, 
-                                            resetIR, ingressIR, egressMsg, 
-                                            ofaInMsg, ofaOutConfirmation, 
-                                            installerInIR, statusMsg, 
-                                            notFailedSet, failedElem, 
-                                            failedSet, statusResolveMsg, 
-                                            recoveredElem, toBeScheduledIRs, 
-                                            nextIRToSent, monitoringEvent, msg >>
+                                            resetIR, ingressPkt, ingressIR, 
+                                            egressMsg, ofaInMsg, 
+                                            ofaOutConfirmation, installerInIR, 
+                                            statusMsg, notFailedSet, 
+                                            failedElem, failedSet, 
+                                            statusResolveMsg, recoveredElem, 
+                                            toBeScheduledIRs, nextIRToSent, 
+                                            monitoringEvent, msg >>
 
 ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
+                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                        /\ controllerThreadPoolIRQueue' = [controllerThreadPoolIRQueue EXCEPT ![self[1]] = Append(controllerThreadPoolIRQueue[self[1]], nextIR[self])]
                        /\ setIRs' = [setIRs EXCEPT ![self] = setIRs[self]\{nextIR[self]}]
                        /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
@@ -1226,15 +1219,17 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                        Ofa2InstallerBuff, Installer2OfaBuff, 
                                        TCAM, controlMsgCounter, 
                                        controller2Switch, switch2Controller, 
-                                       controllerState, IR2SW, IRStatus, 
-                                       SwSuspensionStatus, lastScheduledThread, 
-                                       SetScheduledIRs, dependencyGraph, stack, 
-                                       ofaInIR, nextThread, nextIR, 
+                                       controllerState, switchOrdering, IR2SW, 
+                                       IRStatus, SwSuspensionStatus, 
+                                       lastScheduledThread, SetScheduledIRs, 
+                                       dependencyGraph, workerThreadRanking, 
+                                       workerThreadStatus, switchLock, 
+                                       FirstInstall, stack, nextThread, nextIR, 
                                        switchIDToReset, setIRsToReset, resetIR, 
-                                       ingressIR, egressMsg, ofaInMsg, 
-                                       ofaOutConfirmation, installerInIR, 
-                                       statusMsg, notFailedSet, failedElem, 
-                                       failedSet, statusResolveMsg, 
+                                       ingressPkt, ingressIR, egressMsg, 
+                                       ofaInMsg, ofaOutConfirmation, 
+                                       installerInIR, statusMsg, notFailedSet, 
+                                       failedElem, failedSet, statusResolveMsg, 
                                        recoveredElem, toBeScheduledIRs, 
                                        nextIRToSent, monitoringEvent, msg >>
 
@@ -1252,13 +1247,17 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            controlMsgCounter, 
                                            controller2Switch, 
                                            switch2Controller, controllerState, 
-                                           IR2SW, controllerThreadPoolIRQueue, 
+                                           switchOrdering, IR2SW, 
+                                           controllerThreadPoolIRQueue, 
                                            IRStatus, SwSuspensionStatus, 
                                            lastScheduledThread, 
                                            SetScheduledIRs, dependencyGraph, 
-                                           stack, ofaInIR, setIRs, nextThread, 
-                                           nextIR, switchIDToReset, resetIR, 
-                                           ingressIR, egressMsg, ofaInMsg, 
+                                           workerThreadRanking, 
+                                           workerThreadStatus, switchLock, 
+                                           FirstInstall, stack, setIRs, 
+                                           nextThread, nextIR, switchIDToReset, 
+                                           resetIR, ingressPkt, ingressIR, 
+                                           egressMsg, ofaInMsg, 
                                            ofaOutConfirmation, installerInIR, 
                                            statusMsg, notFailedSet, failedElem, 
                                            failedSet, statusResolveMsg, 
@@ -1270,7 +1269,7 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                            THEN /\ resetIR' = [resetIR EXCEPT ![self] = CHOOSE x \in setIRsToReset[self]: TRUE]
                                 /\ setIRsToReset' = [setIRsToReset EXCEPT ![self] = setIRsToReset[self] \ {resetIR'[self]}]
                                 /\ Assert(IRStatus[resetIR'[self]] \notin {IR_NONE}, 
-                                          "Failure of assertion at line 471, column 9.")
+                                          "Failure of assertion at line 509, column 9.")
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerResetIRStatAfterRecovery"]
                                 /\ UNCHANGED << stack, switchIDToReset >>
                            ELSE /\ pc' = [pc EXCEPT ![self] = Head(stack[self]).pc]
@@ -1284,11 +1283,13 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      Ofa2InstallerBuff, Installer2OfaBuff, 
                                      TCAM, controlMsgCounter, 
                                      controller2Switch, switch2Controller, 
-                                     controllerState, IR2SW, 
+                                     controllerState, switchOrdering, IR2SW, 
                                      controllerThreadPoolIRQueue, IRStatus, 
                                      SwSuspensionStatus, lastScheduledThread, 
-                                     SetScheduledIRs, dependencyGraph, ofaInIR, 
-                                     setIRs, nextThread, nextIR, ingressIR, 
+                                     SetScheduledIRs, dependencyGraph, 
+                                     workerThreadRanking, workerThreadStatus, 
+                                     switchLock, FirstInstall, setIRs, 
+                                     nextThread, nextIR, ingressPkt, ingressIR, 
                                      egressMsg, ofaInMsg, ofaOutConfirmation, 
                                      installerInIR, statusMsg, notFailedSet, 
                                      failedElem, failedSet, statusResolveMsg, 
@@ -1314,18 +1315,24 @@ ControllerResetIRStatAfterRecovery(self) == /\ pc[self] = "ControllerResetIRStat
                                                             controller2Switch, 
                                                             switch2Controller, 
                                                             controllerState, 
+                                                            switchOrdering, 
                                                             IR2SW, 
                                                             controllerThreadPoolIRQueue, 
                                                             SwSuspensionStatus, 
                                                             lastScheduledThread, 
                                                             SetScheduledIRs, 
                                                             dependencyGraph, 
-                                                            stack, ofaInIR, 
-                                                            setIRs, nextThread, 
-                                                            nextIR, 
+                                                            workerThreadRanking, 
+                                                            workerThreadStatus, 
+                                                            switchLock, 
+                                                            FirstInstall, 
+                                                            stack, setIRs, 
+                                                            nextThread, nextIR, 
                                                             switchIDToReset, 
                                                             setIRsToReset, 
-                                                            resetIR, ingressIR, 
+                                                            resetIR, 
+                                                            ingressPkt, 
+                                                            ingressIR, 
                                                             egressMsg, 
                                                             ofaInMsg, 
                                                             ofaOutConfirmation, 
@@ -1345,83 +1352,92 @@ resetStateWithRecoveredSW(self) == getIRsToBeChecked(self)
                                       \/ ResetAllIRs(self)
                                       \/ ControllerResetIRStatAfterRecovery(self)
 
-SwitchNicAsicInFailedOrNot(self) == /\ pc[self] = "SwitchNicAsicInFailedOrNot"
-                                    /\ swCanReceivePackets(self[2])
-                                    /\ pc' = [pc EXCEPT ![self] = "SwitchRcvPacket"]
-                                    /\ UNCHANGED << swSeqChangedStatus, 
-                                                    switchStatus, installedIRs, 
-                                                    failedTimes, 
-                                                    NicAsic2OfaBuff, 
-                                                    Ofa2NicAsicBuff, 
-                                                    Ofa2InstallerBuff, 
-                                                    Installer2OfaBuff, TCAM, 
-                                                    controlMsgCounter, 
-                                                    controller2Switch, 
-                                                    switch2Controller, 
-                                                    controllerState, IR2SW, 
-                                                    controllerThreadPoolIRQueue, 
-                                                    IRStatus, 
-                                                    SwSuspensionStatus, 
-                                                    lastScheduledThread, 
-                                                    SetScheduledIRs, 
-                                                    dependencyGraph, stack, 
-                                                    ofaInIR, setIRs, 
-                                                    nextThread, nextIR, 
-                                                    switchIDToReset, 
-                                                    setIRsToReset, resetIR, 
-                                                    ingressIR, egressMsg, 
-                                                    ofaInMsg, 
-                                                    ofaOutConfirmation, 
-                                                    installerInIR, statusMsg, 
-                                                    notFailedSet, failedElem, 
-                                                    failedSet, 
-                                                    statusResolveMsg, 
-                                                    recoveredElem, 
-                                                    toBeScheduledIRs, 
-                                                    nextIRToSent, 
-                                                    monitoringEvent, msg >>
+SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
+                             /\ whichSwitchModel(self[2]) = SW_SIMPLE_MODEL
+                             /\ Len(controller2Switch[self[2]]) > 0
+                             /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
+                             /\ Assert(ingressPkt'[self].type = INSTALL_FLOW, 
+                                       "Failure of assertion at line 530, column 9.")
+                             /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
+                             /\ installedIRs' = Append(installedIRs, ingressPkt'[self].IR)
+                             /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], ingressPkt'[self].IR)]
+                             /\ switch2Controller' = Append(switch2Controller, [type |-> INSTALLED_SUCCESSFULLY,
+                                                                                from |-> self[2],
+                                                                                IR |-> ingressPkt'[self].IR])
+                             /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
+                             /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
+                                             failedTimes, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
+                                             Ofa2InstallerBuff, 
+                                             Installer2OfaBuff, 
+                                             controlMsgCounter, 
+                                             controllerState, switchOrdering, 
+                                             IR2SW, 
+                                             controllerThreadPoolIRQueue, 
+                                             IRStatus, SwSuspensionStatus, 
+                                             lastScheduledThread, 
+                                             SetScheduledIRs, dependencyGraph, 
+                                             workerThreadRanking, 
+                                             workerThreadStatus, switchLock, 
+                                             FirstInstall, stack, setIRs, 
+                                             nextThread, nextIR, 
+                                             switchIDToReset, setIRsToReset, 
+                                             resetIR, ingressIR, egressMsg, 
+                                             ofaInMsg, ofaOutConfirmation, 
+                                             installerInIR, statusMsg, 
+                                             notFailedSet, failedElem, 
+                                             failedSet, statusResolveMsg, 
+                                             recoveredElem, toBeScheduledIRs, 
+                                             nextIRToSent, monitoringEvent, 
+                                             msg >>
+
+swProcess(self) == SwitchSimpleProcess(self)
 
 SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
-                         /\ IF ~isFinished
-                               THEN /\ IF swCanReceivePackets(self[2])
-                                          THEN /\ Len(controller2Switch[self[2]]) > 0
-                                               /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
-                                               /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
-                                                         \/ ingressIR'[self].type = INSTALL_FLOW, 
-                                                         "Failure of assertion at line 534, column 13.")
-                                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
-                                               /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicInsertToOfaBuff"]
-                                          ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicInFailedOrNot"]
-                                               /\ UNCHANGED << controller2Switch, 
-                                                               ingressIR >>
-                               ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                    /\ UNCHANGED << controller2Switch, 
-                                                    ingressIR >>
+                         /\ whichSwitchModel(self[2]) = SW_COMPLEX_MODEL
+                         /\ swCanReceivePackets(self[2])
+                         /\ Len(controller2Switch[self[2]]) > 0
+                         /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
+                         /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
+                                   \/ ingressIR'[self].type = INSTALL_FLOW, 
+                                   "Failure of assertion at line 554, column 9.")
+                         /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                         /\ switchLock' = self
+                         /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
+                         /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicInsertToOfaBuff"]
                          /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                          installedIRs, failedTimes, 
                                          NicAsic2OfaBuff, Ofa2NicAsicBuff, 
                                          Ofa2InstallerBuff, Installer2OfaBuff, 
                                          TCAM, controlMsgCounter, 
                                          switch2Controller, controllerState, 
-                                         IR2SW, controllerThreadPoolIRQueue, 
-                                         IRStatus, SwSuspensionStatus, 
+                                         switchOrdering, IR2SW, 
+                                         controllerThreadPoolIRQueue, IRStatus, 
+                                         SwSuspensionStatus, 
                                          lastScheduledThread, SetScheduledIRs, 
-                                         dependencyGraph, stack, ofaInIR, 
-                                         setIRs, nextThread, nextIR, 
+                                         dependencyGraph, workerThreadRanking, 
+                                         workerThreadStatus, FirstInstall, 
+                                         stack, setIRs, nextThread, nextIR, 
                                          switchIDToReset, setIRsToReset, 
-                                         resetIR, egressMsg, ofaInMsg, 
-                                         ofaOutConfirmation, installerInIR, 
-                                         statusMsg, notFailedSet, failedElem, 
-                                         failedSet, statusResolveMsg, 
-                                         recoveredElem, toBeScheduledIRs, 
-                                         nextIRToSent, monitoringEvent, msg >>
+                                         resetIR, ingressPkt, egressMsg, 
+                                         ofaInMsg, ofaOutConfirmation, 
+                                         installerInIR, statusMsg, 
+                                         notFailedSet, failedElem, failedSet, 
+                                         statusResolveMsg, recoveredElem, 
+                                         toBeScheduledIRs, nextIRToSent, 
+                                         monitoringEvent, msg >>
 
 SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuff"
                                       /\ IF swCanReceivePackets(self[2])
-                                            THEN /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Append(NicAsic2OfaBuff[self[2]], ingressIR[self])]
+                                            THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                                 /\ switchLock' = <<OFA_IN, self[2]>>
+                                                 /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Append(NicAsic2OfaBuff[self[2]], ingressIR[self])]
                                                  /\ pc' = [pc EXCEPT ![self] = "SwitchRcvPacket"]
-                                            ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicInFailedOrNot"]
-                                                 /\ UNCHANGED NicAsic2OfaBuff
+                                                 /\ UNCHANGED ingressIR
+                                            ELSE /\ ingressIR' = [ingressIR EXCEPT ![self] = [type |-> 0]]
+                                                 /\ pc' = [pc EXCEPT ![self] = "SwitchRcvPacket"]
+                                                 /\ UNCHANGED << NicAsic2OfaBuff, 
+                                                                 switchLock >>
                                       /\ UNCHANGED << swSeqChangedStatus, 
                                                       switchStatus, 
                                                       installedIRs, 
@@ -1432,18 +1448,21 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       controlMsgCounter, 
                                                       controller2Switch, 
                                                       switch2Controller, 
-                                                      controllerState, IR2SW, 
+                                                      controllerState, 
+                                                      switchOrdering, IR2SW, 
                                                       controllerThreadPoolIRQueue, 
                                                       IRStatus, 
                                                       SwSuspensionStatus, 
                                                       lastScheduledThread, 
                                                       SetScheduledIRs, 
-                                                      dependencyGraph, stack, 
-                                                      ofaInIR, setIRs, 
-                                                      nextThread, nextIR, 
-                                                      switchIDToReset, 
+                                                      dependencyGraph, 
+                                                      workerThreadRanking, 
+                                                      workerThreadStatus, 
+                                                      FirstInstall, stack, 
+                                                      setIRs, nextThread, 
+                                                      nextIR, switchIDToReset, 
                                                       setIRsToReset, resetIR, 
-                                                      ingressIR, egressMsg, 
+                                                      ingressPkt, egressMsg, 
                                                       ofaInMsg, 
                                                       ofaOutConfirmation, 
                                                       installerInIR, statusMsg, 
@@ -1455,63 +1474,21 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       nextIRToSent, 
                                                       monitoringEvent, msg >>
 
-swNicAsicProcPacketIn(self) == SwitchNicAsicInFailedOrNot(self)
-                                  \/ SwitchRcvPacket(self)
+swNicAsicProcPacketIn(self) == SwitchRcvPacket(self)
                                   \/ SwitchNicAsicInsertToOfaBuff(self)
 
-SwitchNicAsicOutFailedOrNot(self) == /\ pc[self] = "SwitchNicAsicOutFailedOrNot"
-                                     /\ swCanReceivePackets(self[2])
-                                     /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
-                                     /\ UNCHANGED << swSeqChangedStatus, 
-                                                     switchStatus, 
-                                                     installedIRs, failedTimes, 
-                                                     NicAsic2OfaBuff, 
-                                                     Ofa2NicAsicBuff, 
-                                                     Ofa2InstallerBuff, 
-                                                     Installer2OfaBuff, TCAM, 
-                                                     controlMsgCounter, 
-                                                     controller2Switch, 
-                                                     switch2Controller, 
-                                                     controllerState, IR2SW, 
-                                                     controllerThreadPoolIRQueue, 
-                                                     IRStatus, 
-                                                     SwSuspensionStatus, 
-                                                     lastScheduledThread, 
-                                                     SetScheduledIRs, 
-                                                     dependencyGraph, stack, 
-                                                     ofaInIR, setIRs, 
-                                                     nextThread, nextIR, 
-                                                     switchIDToReset, 
-                                                     setIRsToReset, resetIR, 
-                                                     ingressIR, egressMsg, 
-                                                     ofaInMsg, 
-                                                     ofaOutConfirmation, 
-                                                     installerInIR, statusMsg, 
-                                                     notFailedSet, failedElem, 
-                                                     failedSet, 
-                                                     statusResolveMsg, 
-                                                     recoveredElem, 
-                                                     toBeScheduledIRs, 
-                                                     nextIRToSent, 
-                                                     monitoringEvent, msg >>
-
 SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
-                             /\ IF ~isFinished
-                                   THEN /\ IF swCanReceivePackets(self[2])
-                                              THEN /\ Len(Ofa2NicAsicBuff[self[2]]) > 0
-                                                   /\ egressMsg' = [egressMsg EXCEPT ![self] = Head(Ofa2NicAsicBuff[self[2]])]
-                                                   /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
-                                                             \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
-                                                             \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
-                                                             "Failure of assertion at line 560, column 13.")
-                                                   /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
-                                                   /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
-                                              ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicOutFailedOrNot"]
-                                                   /\ UNCHANGED << Ofa2NicAsicBuff, 
-                                                                   egressMsg >>
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                        /\ UNCHANGED << Ofa2NicAsicBuff, 
-                                                        egressMsg >>
+                             /\ swCanReceivePackets(self[2])
+                             /\ Len(Ofa2NicAsicBuff[self[2]]) > 0
+                             /\ egressMsg' = [egressMsg EXCEPT ![self] = Head(Ofa2NicAsicBuff[self[2]])]
+                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                             /\ switchLock' = self
+                             /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
+                                       \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
+                                       \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
+                                       "Failure of assertion at line 579, column 9.")
+                             /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
+                             /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                              installedIRs, failedTimes, 
                                              NicAsic2OfaBuff, 
@@ -1520,28 +1497,39 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              controlMsgCounter, 
                                              controller2Switch, 
                                              switch2Controller, 
-                                             controllerState, IR2SW, 
+                                             controllerState, switchOrdering, 
+                                             IR2SW, 
                                              controllerThreadPoolIRQueue, 
                                              IRStatus, SwSuspensionStatus, 
                                              lastScheduledThread, 
                                              SetScheduledIRs, dependencyGraph, 
-                                             stack, ofaInIR, setIRs, 
-                                             nextThread, nextIR, 
+                                             workerThreadRanking, 
+                                             workerThreadStatus, FirstInstall, 
+                                             stack, setIRs, nextThread, nextIR, 
                                              switchIDToReset, setIRsToReset, 
-                                             resetIR, ingressIR, ofaInMsg, 
-                                             ofaOutConfirmation, installerInIR, 
-                                             statusMsg, notFailedSet, 
-                                             failedElem, failedSet, 
-                                             statusResolveMsg, recoveredElem, 
-                                             toBeScheduledIRs, nextIRToSent, 
-                                             monitoringEvent, msg >>
+                                             resetIR, ingressPkt, ingressIR, 
+                                             ofaInMsg, ofaOutConfirmation, 
+                                             installerInIR, statusMsg, 
+                                             notFailedSet, failedElem, 
+                                             failedSet, statusResolveMsg, 
+                                             recoveredElem, toBeScheduledIRs, 
+                                             nextIRToSent, monitoringEvent, 
+                                             msg >>
 
 SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                  /\ IF swCanReceivePackets(self[2])
-                                       THEN /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
+                                       THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                            /\ Assert(\/ switchLock[2] = self[2]
+                                                      \/ switchLock[2] = NO_LOCK, 
+                                                      "Failure of assertion at line 357, column 9 of macro called at line 587, column 17.")
+                                            /\ switchLock' = <<NO_LOCK, NO_LOCK>>
+                                            /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
-                                       ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicOutFailedOrNot"]
-                                            /\ UNCHANGED switch2Controller
+                                            /\ UNCHANGED egressMsg
+                                       ELSE /\ egressMsg' = [egressMsg EXCEPT ![self] = [type |-> 0]]
+                                            /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
+                                            /\ UNCHANGED << switch2Controller, 
+                                                            switchLock >>
                                  /\ UNCHANGED << swSeqChangedStatus, 
                                                  switchStatus, installedIRs, 
                                                  failedTimes, NicAsic2OfaBuff, 
@@ -1550,16 +1538,20 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  Installer2OfaBuff, TCAM, 
                                                  controlMsgCounter, 
                                                  controller2Switch, 
-                                                 controllerState, IR2SW, 
+                                                 controllerState, 
+                                                 switchOrdering, IR2SW, 
                                                  controllerThreadPoolIRQueue, 
                                                  IRStatus, SwSuspensionStatus, 
                                                  lastScheduledThread, 
                                                  SetScheduledIRs, 
-                                                 dependencyGraph, stack, 
-                                                 ofaInIR, setIRs, nextThread, 
-                                                 nextIR, switchIDToReset, 
+                                                 dependencyGraph, 
+                                                 workerThreadRanking, 
+                                                 workerThreadStatus, 
+                                                 FirstInstall, stack, setIRs, 
+                                                 nextThread, nextIR, 
+                                                 switchIDToReset, 
                                                  setIRsToReset, resetIR, 
-                                                 ingressIR, egressMsg, 
+                                                 ingressPkt, ingressIR, 
                                                  ofaInMsg, ofaOutConfirmation, 
                                                  installerInIR, statusMsg, 
                                                  notFailedSet, failedElem, 
@@ -1569,104 +1561,80 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  nextIRToSent, monitoringEvent, 
                                                  msg >>
 
-swNicAsicProcPacketOut(self) == SwitchNicAsicOutFailedOrNot(self)
-                                   \/ SwitchFromOFAPacket(self)
+swNicAsicProcPacketOut(self) == SwitchFromOFAPacket(self)
                                    \/ SwitchNicAsicSendOutMsg(self)
 
-SwitchOfaInFailedOrNot(self) == /\ pc[self] = "SwitchOfaInFailedOrNot"
-                                /\ swOFACanProcessIRs(self[2])
-                                /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
-                                /\ UNCHANGED << swSeqChangedStatus, 
-                                                switchStatus, installedIRs, 
-                                                failedTimes, NicAsic2OfaBuff, 
-                                                Ofa2NicAsicBuff, 
-                                                Ofa2InstallerBuff, 
-                                                Installer2OfaBuff, TCAM, 
-                                                controlMsgCounter, 
-                                                controller2Switch, 
-                                                switch2Controller, 
-                                                controllerState, IR2SW, 
-                                                controllerThreadPoolIRQueue, 
-                                                IRStatus, SwSuspensionStatus, 
-                                                lastScheduledThread, 
-                                                SetScheduledIRs, 
-                                                dependencyGraph, stack, 
-                                                ofaInIR, setIRs, nextThread, 
-                                                nextIR, switchIDToReset, 
-                                                setIRsToReset, resetIR, 
-                                                ingressIR, egressMsg, ofaInMsg, 
-                                                ofaOutConfirmation, 
-                                                installerInIR, statusMsg, 
-                                                notFailedSet, failedElem, 
-                                                failedSet, statusResolveMsg, 
-                                                recoveredElem, 
-                                                toBeScheduledIRs, nextIRToSent, 
-                                                monitoringEvent, msg >>
-
 SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
-                         /\ IF ~isFinished
-                               THEN /\ IF swOFACanProcessIRs(self[2])
-                                          THEN /\ Len(NicAsic2OfaBuff[self[2]]) > 0
-                                               /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
-                                               /\ Assert(ofaInMsg'[self].to = self[2], 
-                                                         "Failure of assertion at line 590, column 17.")
-                                               /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
-                                               /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
-                                          ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchOfaInFailedOrNot"]
-                                               /\ UNCHANGED << NicAsic2OfaBuff, 
-                                                               ofaInMsg >>
-                               ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                    /\ UNCHANGED << NicAsic2OfaBuff, ofaInMsg >>
+                         /\ swOFACanProcessIRs(self[2])
+                         /\ Len(NicAsic2OfaBuff[self[2]]) > 0
+                         /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                         /\ switchLock' = self
+                         /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
+                         /\ Assert(ofaInMsg'[self].to = self[2], 
+                                   "Failure of assertion at line 608, column 9.")
+                         /\ Assert(ofaInMsg'[self].IR  \in 1..MaxNumIRs, 
+                                   "Failure of assertion at line 609, column 9.")
+                         /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
+                         /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                          installedIRs, failedTimes, 
                                          Ofa2NicAsicBuff, Ofa2InstallerBuff, 
                                          Installer2OfaBuff, TCAM, 
                                          controlMsgCounter, controller2Switch, 
                                          switch2Controller, controllerState, 
-                                         IR2SW, controllerThreadPoolIRQueue, 
-                                         IRStatus, SwSuspensionStatus, 
+                                         switchOrdering, IR2SW, 
+                                         controllerThreadPoolIRQueue, IRStatus, 
+                                         SwSuspensionStatus, 
                                          lastScheduledThread, SetScheduledIRs, 
-                                         dependencyGraph, stack, ofaInIR, 
-                                         setIRs, nextThread, nextIR, 
+                                         dependencyGraph, workerThreadRanking, 
+                                         workerThreadStatus, FirstInstall, 
+                                         stack, setIRs, nextThread, nextIR, 
                                          switchIDToReset, setIRsToReset, 
-                                         resetIR, ingressIR, egressMsg, 
-                                         ofaOutConfirmation, installerInIR, 
-                                         statusMsg, notFailedSet, failedElem, 
-                                         failedSet, statusResolveMsg, 
-                                         recoveredElem, toBeScheduledIRs, 
-                                         nextIRToSent, monitoringEvent, msg >>
+                                         resetIR, ingressPkt, ingressIR, 
+                                         egressMsg, ofaOutConfirmation, 
+                                         installerInIR, statusMsg, 
+                                         notFailedSet, failedElem, failedSet, 
+                                         statusResolveMsg, recoveredElem, 
+                                         toBeScheduledIRs, nextIRToSent, 
+                                         monitoringEvent, msg >>
 
 SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
-                                /\ IF ofaInMsg[self].type = INSTALL_FLOW
-                                      THEN /\ /\ ofaInIR' = [ofaInIR EXCEPT ![self] = ofaInMsg[self].IR]
-                                              /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "ofaInstallFlowEntry",
-                                                                                       pc        |->  "SwitchOfaProcIn",
-                                                                                       ofaInIR   |->  ofaInIR[self] ] >>
-                                                                                   \o stack[self]]
-                                           /\ pc' = [pc EXCEPT ![self] = "SwitchOFAInsert2InstallerBuff"]
-                                      ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 602, column 17.")
+                                /\ IF swOFACanProcessIRs(self[2])
+                                      THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                           /\ switchLock' = <<INSTALLER, self[2]>>
+                                           /\ IF ofaInMsg[self].type = INSTALL_FLOW
+                                                 THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInMsg[self].IR)]
+                                                 ELSE /\ Assert(FALSE, 
+                                                                "Failure of assertion at line 621, column 21.")
+                                                      /\ UNCHANGED Ofa2InstallerBuff
                                            /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
-                                           /\ UNCHANGED << stack, ofaInIR >>
+                                           /\ UNCHANGED ofaInMsg
+                                      ELSE /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = [type |-> 0]]
+                                           /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
+                                           /\ UNCHANGED << Ofa2InstallerBuff, 
+                                                           switchLock >>
                                 /\ UNCHANGED << swSeqChangedStatus, 
                                                 switchStatus, installedIRs, 
                                                 failedTimes, NicAsic2OfaBuff, 
                                                 Ofa2NicAsicBuff, 
-                                                Ofa2InstallerBuff, 
                                                 Installer2OfaBuff, TCAM, 
                                                 controlMsgCounter, 
                                                 controller2Switch, 
                                                 switch2Controller, 
-                                                controllerState, IR2SW, 
+                                                controllerState, 
+                                                switchOrdering, IR2SW, 
                                                 controllerThreadPoolIRQueue, 
                                                 IRStatus, SwSuspensionStatus, 
                                                 lastScheduledThread, 
                                                 SetScheduledIRs, 
-                                                dependencyGraph, setIRs, 
+                                                dependencyGraph, 
+                                                workerThreadRanking, 
+                                                workerThreadStatus, 
+                                                FirstInstall, stack, setIRs, 
                                                 nextThread, nextIR, 
                                                 switchIDToReset, setIRsToReset, 
-                                                resetIR, ingressIR, egressMsg, 
-                                                ofaInMsg, ofaOutConfirmation, 
+                                                resetIR, ingressPkt, ingressIR, 
+                                                egressMsg, ofaOutConfirmation, 
                                                 installerInIR, statusMsg, 
                                                 notFailedSet, failedElem, 
                                                 failedSet, statusResolveMsg, 
@@ -1674,81 +1642,53 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 toBeScheduledIRs, nextIRToSent, 
                                                 monitoringEvent, msg >>
 
-ofaModuleProcPacketIn(self) == SwitchOfaInFailedOrNot(self)
-                                  \/ SwitchOfaProcIn(self)
+ofaModuleProcPacketIn(self) == SwitchOfaProcIn(self)
                                   \/ SwitchOfaProcessPacket(self)
 
-SwitchOfaOutFailedOrNot(self) == /\ pc[self] = "SwitchOfaOutFailedOrNot"
-                                 /\ swOFACanProcessIRs(self[2])
-                                 /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcOut"]
-                                 /\ UNCHANGED << swSeqChangedStatus, 
-                                                 switchStatus, installedIRs, 
-                                                 failedTimes, NicAsic2OfaBuff, 
-                                                 Ofa2NicAsicBuff, 
-                                                 Ofa2InstallerBuff, 
-                                                 Installer2OfaBuff, TCAM, 
-                                                 controlMsgCounter, 
-                                                 controller2Switch, 
-                                                 switch2Controller, 
-                                                 controllerState, IR2SW, 
-                                                 controllerThreadPoolIRQueue, 
-                                                 IRStatus, SwSuspensionStatus, 
-                                                 lastScheduledThread, 
-                                                 SetScheduledIRs, 
-                                                 dependencyGraph, stack, 
-                                                 ofaInIR, setIRs, nextThread, 
-                                                 nextIR, switchIDToReset, 
-                                                 setIRsToReset, resetIR, 
-                                                 ingressIR, egressMsg, 
-                                                 ofaInMsg, ofaOutConfirmation, 
-                                                 installerInIR, statusMsg, 
-                                                 notFailedSet, failedElem, 
-                                                 failedSet, statusResolveMsg, 
-                                                 recoveredElem, 
-                                                 toBeScheduledIRs, 
-                                                 nextIRToSent, monitoringEvent, 
-                                                 msg >>
-
 SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
-                          /\ IF ~isFinished
-                                THEN /\ IF swOFACanProcessIRs(self[2])
-                                           THEN /\ Installer2OfaBuff[self[2]] # <<>>
-                                                /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
-                                                /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
-                                                /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
-                                           ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchOfaOutFailedOrNot"]
-                                                /\ UNCHANGED << Installer2OfaBuff, 
-                                                                ofaOutConfirmation >>
-                                ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                     /\ UNCHANGED << Installer2OfaBuff, 
-                                                     ofaOutConfirmation >>
+                          /\ swOFACanProcessIRs(self[2])
+                          /\ Installer2OfaBuff[self[2]] # <<>>
+                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                          /\ switchLock' = self
+                          /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
+                          /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
+                          /\ Assert(ofaOutConfirmation'[self] \in 1..MaxNumIRs, 
+                                    "Failure of assertion at line 640, column 9.")
+                          /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                           installedIRs, failedTimes, 
                                           NicAsic2OfaBuff, Ofa2NicAsicBuff, 
                                           Ofa2InstallerBuff, TCAM, 
                                           controlMsgCounter, controller2Switch, 
                                           switch2Controller, controllerState, 
-                                          IR2SW, controllerThreadPoolIRQueue, 
+                                          switchOrdering, IR2SW, 
+                                          controllerThreadPoolIRQueue, 
                                           IRStatus, SwSuspensionStatus, 
                                           lastScheduledThread, SetScheduledIRs, 
-                                          dependencyGraph, stack, ofaInIR, 
-                                          setIRs, nextThread, nextIR, 
+                                          dependencyGraph, workerThreadRanking, 
+                                          workerThreadStatus, FirstInstall, 
+                                          stack, setIRs, nextThread, nextIR, 
                                           switchIDToReset, setIRsToReset, 
-                                          resetIR, ingressIR, egressMsg, 
-                                          ofaInMsg, installerInIR, statusMsg, 
-                                          notFailedSet, failedElem, failedSet, 
-                                          statusResolveMsg, recoveredElem, 
-                                          toBeScheduledIRs, nextIRToSent, 
-                                          monitoringEvent, msg >>
+                                          resetIR, ingressPkt, ingressIR, 
+                                          egressMsg, ofaInMsg, installerInIR, 
+                                          statusMsg, notFailedSet, failedElem, 
+                                          failedSet, statusResolveMsg, 
+                                          recoveredElem, toBeScheduledIRs, 
+                                          nextIRToSent, monitoringEvent, msg >>
 
 SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmation"
                                       /\ IF swOFACanProcessIRs(self[2])
-                                            THEN /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Append(Ofa2NicAsicBuff[self[2]], [type |-> INSTALLED_SUCCESSFULLY,
+                                            THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                                 /\ switchLock' = <<NIC_ASIC_OUT, self[2]>>
+                                                 /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Append(Ofa2NicAsicBuff[self[2]], [type |-> INSTALLED_SUCCESSFULLY,
                                                                                                                                               from |-> self[2],
                                                                                                                                               IR |-> ofaOutConfirmation[self]])]
                                                  /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcOut"]
-                                            ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchOfaOutFailedOrNot"]
-                                                 /\ UNCHANGED Ofa2NicAsicBuff
+                                                 /\ UNCHANGED ofaOutConfirmation
+                                            ELSE /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = 0]
+                                                 /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcOut"]
+                                                 /\ UNCHANGED << Ofa2NicAsicBuff, 
+                                                                 switchLock >>
                                       /\ UNCHANGED << swSeqChangedStatus, 
                                                       switchStatus, 
                                                       installedIRs, 
@@ -1759,20 +1699,22 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       controlMsgCounter, 
                                                       controller2Switch, 
                                                       switch2Controller, 
-                                                      controllerState, IR2SW, 
+                                                      controllerState, 
+                                                      switchOrdering, IR2SW, 
                                                       controllerThreadPoolIRQueue, 
                                                       IRStatus, 
                                                       SwSuspensionStatus, 
                                                       lastScheduledThread, 
                                                       SetScheduledIRs, 
-                                                      dependencyGraph, stack, 
-                                                      ofaInIR, setIRs, 
-                                                      nextThread, nextIR, 
-                                                      switchIDToReset, 
+                                                      dependencyGraph, 
+                                                      workerThreadRanking, 
+                                                      workerThreadStatus, 
+                                                      FirstInstall, stack, 
+                                                      setIRs, nextThread, 
+                                                      nextIR, switchIDToReset, 
                                                       setIRsToReset, resetIR, 
-                                                      ingressIR, egressMsg, 
-                                                      ofaInMsg, 
-                                                      ofaOutConfirmation, 
+                                                      ingressPkt, ingressIR, 
+                                                      egressMsg, ofaInMsg, 
                                                       installerInIR, statusMsg, 
                                                       notFailedSet, failedElem, 
                                                       failedSet, 
@@ -1782,59 +1724,19 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       nextIRToSent, 
                                                       monitoringEvent, msg >>
 
-ofaModuleProcPacketOut(self) == SwitchOfaOutFailedOrNot(self)
-                                   \/ SwitchOfaProcOut(self)
+ofaModuleProcPacketOut(self) == SwitchOfaProcOut(self)
                                    \/ SendInstallationConfirmation(self)
 
-SwitchInstallerFailedOrNot(self) == /\ pc[self] = "SwitchInstallerFailedOrNot"
-                                    /\ swCanInstallIRs(self[2])
-                                    /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerProc"]
-                                    /\ UNCHANGED << swSeqChangedStatus, 
-                                                    switchStatus, installedIRs, 
-                                                    failedTimes, 
-                                                    NicAsic2OfaBuff, 
-                                                    Ofa2NicAsicBuff, 
-                                                    Ofa2InstallerBuff, 
-                                                    Installer2OfaBuff, TCAM, 
-                                                    controlMsgCounter, 
-                                                    controller2Switch, 
-                                                    switch2Controller, 
-                                                    controllerState, IR2SW, 
-                                                    controllerThreadPoolIRQueue, 
-                                                    IRStatus, 
-                                                    SwSuspensionStatus, 
-                                                    lastScheduledThread, 
-                                                    SetScheduledIRs, 
-                                                    dependencyGraph, stack, 
-                                                    ofaInIR, setIRs, 
-                                                    nextThread, nextIR, 
-                                                    switchIDToReset, 
-                                                    setIRsToReset, resetIR, 
-                                                    ingressIR, egressMsg, 
-                                                    ofaInMsg, 
-                                                    ofaOutConfirmation, 
-                                                    installerInIR, statusMsg, 
-                                                    notFailedSet, failedElem, 
-                                                    failedSet, 
-                                                    statusResolveMsg, 
-                                                    recoveredElem, 
-                                                    toBeScheduledIRs, 
-                                                    nextIRToSent, 
-                                                    monitoringEvent, msg >>
-
 SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
-                             /\ IF ~isFinished
-                                   THEN /\ IF swCanInstallIRs(self[2])
-                                              THEN /\ Len(Ofa2InstallerBuff[self[2]]) > 0
-                                                   /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
-                                                   /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
-                                                   /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
-                                              ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerFailedOrNot"]
-                                                   /\ UNCHANGED << Ofa2InstallerBuff, 
-                                                                   installerInIR >>
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                        /\ UNCHANGED << Ofa2InstallerBuff, 
-                                                        installerInIR >>
+                             /\ swCanInstallIRs(self[2])
+                             /\ Len(Ofa2InstallerBuff[self[2]]) > 0
+                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                             /\ switchLock' = self
+                             /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
+                             /\ Assert(installerInIR'[self] \in 1..MaxNumIRs, 
+                                       "Failure of assertion at line 668, column 8.")
+                             /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
+                             /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                              installedIRs, failedTimes, 
                                              NicAsic2OfaBuff, Ofa2NicAsicBuff, 
@@ -1842,30 +1744,38 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              controlMsgCounter, 
                                              controller2Switch, 
                                              switch2Controller, 
-                                             controllerState, IR2SW, 
+                                             controllerState, switchOrdering, 
+                                             IR2SW, 
                                              controllerThreadPoolIRQueue, 
                                              IRStatus, SwSuspensionStatus, 
                                              lastScheduledThread, 
                                              SetScheduledIRs, dependencyGraph, 
-                                             stack, ofaInIR, setIRs, 
-                                             nextThread, nextIR, 
+                                             workerThreadRanking, 
+                                             workerThreadStatus, FirstInstall, 
+                                             stack, setIRs, nextThread, nextIR, 
                                              switchIDToReset, setIRsToReset, 
-                                             resetIR, ingressIR, egressMsg, 
-                                             ofaInMsg, ofaOutConfirmation, 
-                                             statusMsg, notFailedSet, 
-                                             failedElem, failedSet, 
-                                             statusResolveMsg, recoveredElem, 
-                                             toBeScheduledIRs, nextIRToSent, 
-                                             monitoringEvent, msg >>
+                                             resetIR, ingressPkt, ingressIR, 
+                                             egressMsg, ofaInMsg, 
+                                             ofaOutConfirmation, statusMsg, 
+                                             notFailedSet, failedElem, 
+                                             failedSet, statusResolveMsg, 
+                                             recoveredElem, toBeScheduledIRs, 
+                                             nextIRToSent, monitoringEvent, 
+                                             msg >>
 
 SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                     /\ IF swCanInstallIRs(self[2])
-                                          THEN /\ installedIRs' = Append(installedIRs, installerInIR[self])
+                                          THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                               /\ switchLock' = self
+                                               /\ installedIRs' = Append(installedIRs, installerInIR[self])
                                                /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], installerInIR[self])]
                                                /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerSendConfirmation"]
-                                          ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerFailedOrNot"]
+                                               /\ UNCHANGED installerInIR
+                                          ELSE /\ installerInIR' = [installerInIR EXCEPT ![self] = 0]
+                                               /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerProc"]
                                                /\ UNCHANGED << installedIRs, 
-                                                               TCAM >>
+                                                               TCAM, 
+                                                               switchLock >>
                                     /\ UNCHANGED << swSeqChangedStatus, 
                                                     switchStatus, failedTimes, 
                                                     NicAsic2OfaBuff, 
@@ -1875,23 +1785,25 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     controlMsgCounter, 
                                                     controller2Switch, 
                                                     switch2Controller, 
-                                                    controllerState, IR2SW, 
+                                                    controllerState, 
+                                                    switchOrdering, IR2SW, 
                                                     controllerThreadPoolIRQueue, 
                                                     IRStatus, 
                                                     SwSuspensionStatus, 
                                                     lastScheduledThread, 
                                                     SetScheduledIRs, 
-                                                    dependencyGraph, stack, 
-                                                    ofaInIR, setIRs, 
-                                                    nextThread, nextIR, 
+                                                    dependencyGraph, 
+                                                    workerThreadRanking, 
+                                                    workerThreadStatus, 
+                                                    FirstInstall, stack, 
+                                                    setIRs, nextThread, nextIR, 
                                                     switchIDToReset, 
                                                     setIRsToReset, resetIR, 
-                                                    ingressIR, egressMsg, 
-                                                    ofaInMsg, 
+                                                    ingressPkt, ingressIR, 
+                                                    egressMsg, ofaInMsg, 
                                                     ofaOutConfirmation, 
-                                                    installerInIR, statusMsg, 
-                                                    notFailedSet, failedElem, 
-                                                    failedSet, 
+                                                    statusMsg, notFailedSet, 
+                                                    failedElem, failedSet, 
                                                     statusResolveMsg, 
                                                     recoveredElem, 
                                                     toBeScheduledIRs, 
@@ -1900,10 +1812,15 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
 
 SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfirmation"
                                          /\ IF swCanInstallIRs(self[2])
-                                               THEN /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Append(Installer2OfaBuff[self[2]], installerInIR[self])]
+                                               THEN /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
+                                                    /\ switchLock' = <<OFA_OUT, self[2]>>
+                                                    /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Append(Installer2OfaBuff[self[2]], installerInIR[self])]
                                                     /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerProc"]
-                                               ELSE /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerFailedOrNot"]
-                                                    /\ UNCHANGED Installer2OfaBuff
+                                                    /\ UNCHANGED installerInIR
+                                               ELSE /\ installerInIR' = [installerInIR EXCEPT ![self] = 0]
+                                                    /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerProc"]
+                                                    /\ UNCHANGED << Installer2OfaBuff, 
+                                                                    switchLock >>
                                          /\ UNCHANGED << swSeqChangedStatus, 
                                                          switchStatus, 
                                                          installedIRs, 
@@ -1916,22 +1833,24 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          controller2Switch, 
                                                          switch2Controller, 
                                                          controllerState, 
-                                                         IR2SW, 
+                                                         switchOrdering, IR2SW, 
                                                          controllerThreadPoolIRQueue, 
                                                          IRStatus, 
                                                          SwSuspensionStatus, 
                                                          lastScheduledThread, 
                                                          SetScheduledIRs, 
                                                          dependencyGraph, 
-                                                         stack, ofaInIR, 
+                                                         workerThreadRanking, 
+                                                         workerThreadStatus, 
+                                                         FirstInstall, stack, 
                                                          setIRs, nextThread, 
                                                          nextIR, 
                                                          switchIDToReset, 
                                                          setIRsToReset, 
-                                                         resetIR, ingressIR, 
-                                                         egressMsg, ofaInMsg, 
+                                                         resetIR, ingressPkt, 
+                                                         ingressIR, egressMsg, 
+                                                         ofaInMsg, 
                                                          ofaOutConfirmation, 
-                                                         installerInIR, 
                                                          statusMsg, 
                                                          notFailedSet, 
                                                          failedElem, failedSet, 
@@ -1941,416 +1860,299 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          nextIRToSent, 
                                                          monitoringEvent, msg >>
 
-installerModuleProc(self) == SwitchInstallerFailedOrNot(self)
-                                \/ SwitchInstallerProc(self)
+installerModuleProc(self) == SwitchInstallerProc(self)
                                 \/ SwitchInstallerInsert2TCAM(self)
                                 \/ SwitchInstallerSendConfirmation(self)
 
 SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
-                       /\ IF failedTimes[self[2]] < MAX_NUM_SW_FAILURE /\ ~isFinished
-                             THEN /\ statusMsg' = [statusMsg EXCEPT ![self] = <<>>]
-                                  /\ notFailedSet' = [notFailedSet EXCEPT ![self] = returnSwitchElementsNotFailed(self[2])]
-                                  /\ notFailedSet'[self] # {}
-                                  /\ \E elem \in notFailedSet'[self]:
-                                       failedElem' = [failedElem EXCEPT ![self] = elem]
-                                  /\ IF failedElem'[self] = "cpu"
-                                        THEN /\ pc' = [pc EXCEPT ![self] = "SwitchCpuFailure"]
-                                        ELSE /\ IF failedElem'[self] = "ofa"
-                                                   THEN /\ pc' = [pc EXCEPT ![self] = "SwitchOfaFailure"]
-                                                   ELSE /\ IF failedElem'[self] = "installer"
-                                                              THEN /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerFailure"]
-                                                              ELSE /\ IF failedElem'[self] = "nicAsic"
-                                                                         THEN /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicFailure"]
-                                                                         ELSE /\ Assert(FALSE, 
-                                                                                        "Failure of assertion at line 699, column 14.")
-                                                                              /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
-                             ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                  /\ UNCHANGED << statusMsg, notFailedSet, 
-                                                  failedElem >>
-                       /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
-                                       installedIRs, failedTimes, 
-                                       NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                       Ofa2InstallerBuff, Installer2OfaBuff, 
-                                       TCAM, controlMsgCounter, 
-                                       controller2Switch, switch2Controller, 
-                                       controllerState, IR2SW, 
+                       /\ notFailedSet' = [notFailedSet EXCEPT ![self] = returnSwitchElementsNotFailed(self[2])]
+                       /\ notFailedSet'[self] # {}
+                       /\ failedTimes[self[2]] < MAX_NUM_SW_FAILURE
+                       /\ ~isFinished
+                       /\ \/ switchLock = <<NO_LOCK, NO_LOCK>>
+                          \/ switchLock[2] = self[2]
+                       /\ \E elem \in notFailedSet'[self]:
+                            failedElem' = [failedElem EXCEPT ![self] = elem]
+                       /\ IF failedElem'[self] = "cpu"
+                             THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
+                                  /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
+                                            "Failure of assertion at line 215, column 9 of macro called at line 711, column 17.")
+                                  /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
+                                                                          ![self[2]].ofa = Failed,
+                                                                          ![self[2]].installer = Failed]
+                                  /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
+                                  /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = <<>>]
+                                  /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = <<>>]
+                                  /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = <<>>]
+                                  /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = <<>>]
+                                  /\ IF switchStatus'[self[2]].nicAsic = NotFailed
+                                        THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                             /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
+                                                                                          swID |-> self[2],
+                                                                                          num |-> controlMsgCounter'[self[2]]]]
+                                             /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
+                                        ELSE /\ TRUE
+                                             /\ UNCHANGED << swSeqChangedStatus, 
+                                                             controlMsgCounter, 
+                                                             statusMsg >>
+                                  /\ UNCHANGED controller2Switch
+                             ELSE /\ IF failedElem'[self] = "ofa"
+                                        THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
+                                             /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
+                                                       "Failure of assertion at line 260, column 9 of macro called at line 714, column 17.")
+                                             /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
+                                             /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
+                                             /\ IF switchStatus'[self[2]].nicAsic = NotFailed
+                                                   THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                        /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
+                                                                                                     swID |-> self[2],
+                                                                                                     num |-> controlMsgCounter'[self[2]]]]
+                                                        /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
+                                                   ELSE /\ TRUE
+                                                        /\ UNCHANGED << swSeqChangedStatus, 
+                                                                        controlMsgCounter, 
+                                                                        statusMsg >>
+                                             /\ UNCHANGED controller2Switch
+                                        ELSE /\ IF failedElem'[self] = "installer"
+                                                   THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
+                                                        /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
+                                                                  "Failure of assertion at line 298, column 9 of macro called at line 717, column 17.")
+                                                        /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
+                                                        /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
+                                                        /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
+                                                              THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
+                                                                             "Failure of assertion at line 302, column 13 of macro called at line 717, column 17.")
+                                                                   /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                                   /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
+                                                                                                                swID |-> self[2],
+                                                                                                                num |-> controlMsgCounter'[self[2]],
+                                                                                                                status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
+                                                                   /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
+                                                              ELSE /\ TRUE
+                                                                   /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                   controlMsgCounter, 
+                                                                                   statusMsg >>
+                                                        /\ UNCHANGED controller2Switch
+                                                   ELSE /\ IF failedElem'[self] = "nicAsic"
+                                                              THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
+                                                                   /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
+                                                                             "Failure of assertion at line 176, column 9 of macro called at line 720, column 17.")
+                                                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
+                                                                   /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
+                                                                   /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
+                                                                   /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                                   /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
+                                                                                                                swID |-> self[2],
+                                                                                                                num |-> controlMsgCounter'[self[2]]]]
+                                                                   /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
+                                                              ELSE /\ Assert(FALSE, 
+                                                                             "Failure of assertion at line 721, column 14.")
+                                                                   /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                   switchStatus, 
+                                                                                   failedTimes, 
+                                                                                   controlMsgCounter, 
+                                                                                   controller2Switch, 
+                                                                                   statusMsg >>
+                                  /\ UNCHANGED << NicAsic2OfaBuff, 
+                                                  Ofa2NicAsicBuff, 
+                                                  Ofa2InstallerBuff, 
+                                                  Installer2OfaBuff >>
+                       /\ Assert(\/ switchLock[2] = self[2]
+                                 \/ switchLock[2] = NO_LOCK, 
+                                 "Failure of assertion at line 357, column 9 of macro called at line 724, column 9.")
+                       /\ switchLock' = <<NO_LOCK, NO_LOCK>>
+                       /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
+                       /\ UNCHANGED << installedIRs, TCAM, switch2Controller, 
+                                       controllerState, switchOrdering, IR2SW, 
                                        controllerThreadPoolIRQueue, IRStatus, 
                                        SwSuspensionStatus, lastScheduledThread, 
-                                       SetScheduledIRs, dependencyGraph, stack, 
-                                       ofaInIR, setIRs, nextThread, nextIR, 
-                                       switchIDToReset, setIRsToReset, resetIR, 
-                                       ingressIR, egressMsg, ofaInMsg, 
-                                       ofaOutConfirmation, installerInIR, 
-                                       failedSet, statusResolveMsg, 
-                                       recoveredElem, toBeScheduledIRs, 
-                                       nextIRToSent, monitoringEvent, msg >>
+                                       SetScheduledIRs, dependencyGraph, 
+                                       workerThreadRanking, workerThreadStatus, 
+                                       FirstInstall, stack, setIRs, nextThread, 
+                                       nextIR, switchIDToReset, setIRsToReset, 
+                                       resetIR, ingressPkt, ingressIR, 
+                                       egressMsg, ofaInMsg, ofaOutConfirmation, 
+                                       installerInIR, failedSet, 
+                                       statusResolveMsg, recoveredElem, 
+                                       toBeScheduledIRs, nextIRToSent, 
+                                       monitoringEvent, msg >>
 
-SwitchCpuFailure(self) == /\ pc[self] = "SwitchCpuFailure"
-                          /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
-                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
-                                                                  ![self[2]].ofa = Failed,
-                                                                  ![self[2]].installer = Failed]
-                          /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
-                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = <<>>]
-                          /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = <<>>]
-                          /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = <<>>]
-                          /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = <<>>]
-                          /\ IF switchStatus'[self[2]].nicAsic = NotFailed
-                                THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                     /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
-                                                                                  swID |-> self[2],
-                                                                                  num |-> controlMsgCounter'[self[2]]]]
-                                     /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
-                                ELSE /\ TRUE
-                                     /\ UNCHANGED << swSeqChangedStatus, 
-                                                     controlMsgCounter, 
-                                                     statusMsg >>
-                          /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
-                          /\ UNCHANGED << installedIRs, TCAM, 
-                                          controller2Switch, switch2Controller, 
-                                          controllerState, IR2SW, 
-                                          controllerThreadPoolIRQueue, 
-                                          IRStatus, SwSuspensionStatus, 
-                                          lastScheduledThread, SetScheduledIRs, 
-                                          dependencyGraph, stack, ofaInIR, 
-                                          setIRs, nextThread, nextIR, 
-                                          switchIDToReset, setIRsToReset, 
-                                          resetIR, ingressIR, egressMsg, 
-                                          ofaInMsg, ofaOutConfirmation, 
-                                          installerInIR, notFailedSet, 
-                                          failedElem, failedSet, 
-                                          statusResolveMsg, recoveredElem, 
-                                          toBeScheduledIRs, nextIRToSent, 
-                                          monitoringEvent, msg >>
-
-SwitchOfaFailure(self) == /\ pc[self] = "SwitchOfaFailure"
-                          /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
-                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
-                          /\ Assert(switchStatus'[self[2]].cpu = NotFailed, 
-                                    "Failure of assertion at line 264, column 9 of macro called at line 690, column 17.")
-                          /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
-                          /\ IF switchStatus'[self[2]].nicAsic = NotFailed
-                                THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                     /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
-                                                                                  swID |-> self[2],
-                                                                                  num |-> controlMsgCounter'[self[2]]]]
-                                     /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
-                                ELSE /\ TRUE
-                                     /\ UNCHANGED << swSeqChangedStatus, 
-                                                     controlMsgCounter, 
-                                                     statusMsg >>
-                          /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
-                          /\ UNCHANGED << installedIRs, NicAsic2OfaBuff, 
-                                          Ofa2NicAsicBuff, Ofa2InstallerBuff, 
-                                          Installer2OfaBuff, TCAM, 
-                                          controller2Switch, switch2Controller, 
-                                          controllerState, IR2SW, 
-                                          controllerThreadPoolIRQueue, 
-                                          IRStatus, SwSuspensionStatus, 
-                                          lastScheduledThread, SetScheduledIRs, 
-                                          dependencyGraph, stack, ofaInIR, 
-                                          setIRs, nextThread, nextIR, 
-                                          switchIDToReset, setIRsToReset, 
-                                          resetIR, ingressIR, egressMsg, 
-                                          ofaInMsg, ofaOutConfirmation, 
-                                          installerInIR, notFailedSet, 
-                                          failedElem, failedSet, 
-                                          statusResolveMsg, recoveredElem, 
-                                          toBeScheduledIRs, nextIRToSent, 
-                                          monitoringEvent, msg >>
-
-SwitchInstallerFailure(self) == /\ pc[self] = "SwitchInstallerFailure"
-                                /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
-                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
-                                /\ Assert(switchStatus'[self[2]].cpu = NotFailed, 
-                                          "Failure of assertion at line 302, column 9 of macro called at line 694, column 17.")
-                                /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
-                                /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
-                                      THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                     "Failure of assertion at line 305, column 13 of macro called at line 694, column 17.")
-                                           /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                           /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
-                                                                                        swID |-> self[2],
-                                                                                        num |-> controlMsgCounter'[self[2]],
-                                                                                        status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                           /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
-                                      ELSE /\ TRUE
-                                           /\ UNCHANGED << swSeqChangedStatus, 
-                                                           controlMsgCounter, 
-                                                           statusMsg >>
-                                /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
-                                /\ UNCHANGED << installedIRs, NicAsic2OfaBuff, 
-                                                Ofa2NicAsicBuff, 
-                                                Ofa2InstallerBuff, 
-                                                Installer2OfaBuff, TCAM, 
-                                                controller2Switch, 
-                                                switch2Controller, 
-                                                controllerState, IR2SW, 
-                                                controllerThreadPoolIRQueue, 
-                                                IRStatus, SwSuspensionStatus, 
-                                                lastScheduledThread, 
-                                                SetScheduledIRs, 
-                                                dependencyGraph, stack, 
-                                                ofaInIR, setIRs, nextThread, 
-                                                nextIR, switchIDToReset, 
-                                                setIRsToReset, resetIR, 
-                                                ingressIR, egressMsg, ofaInMsg, 
-                                                ofaOutConfirmation, 
-                                                installerInIR, notFailedSet, 
-                                                failedElem, failedSet, 
-                                                statusResolveMsg, 
-                                                recoveredElem, 
-                                                toBeScheduledIRs, nextIRToSent, 
-                                                monitoringEvent, msg >>
-
-SwitchNicAsicFailure(self) == /\ pc[self] = "SwitchNicAsicFailure"
-                              /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
-                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
-                              /\ failedTimes' = [failedTimes EXCEPT ![self[2]] = failedTimes[self[2]] + 1]
-                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
-                              /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                              /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
-                                                                           swID |-> self[2],
-                                                                           num |-> controlMsgCounter'[self[2]]]]
-                              /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
-                              /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
-                              /\ UNCHANGED << installedIRs, NicAsic2OfaBuff, 
-                                              Ofa2NicAsicBuff, 
-                                              Ofa2InstallerBuff, 
-                                              Installer2OfaBuff, TCAM, 
-                                              switch2Controller, 
-                                              controllerState, IR2SW, 
-                                              controllerThreadPoolIRQueue, 
-                                              IRStatus, SwSuspensionStatus, 
-                                              lastScheduledThread, 
-                                              SetScheduledIRs, dependencyGraph, 
-                                              stack, ofaInIR, setIRs, 
-                                              nextThread, nextIR, 
-                                              switchIDToReset, setIRsToReset, 
-                                              resetIR, ingressIR, egressMsg, 
-                                              ofaInMsg, ofaOutConfirmation, 
-                                              installerInIR, notFailedSet, 
-                                              failedElem, failedSet, 
-                                              statusResolveMsg, recoveredElem, 
-                                              toBeScheduledIRs, nextIRToSent, 
-                                              monitoringEvent, msg >>
-
-swFailureProc(self) == SwitchFailure(self) \/ SwitchCpuFailure(self)
-                          \/ SwitchOfaFailure(self)
-                          \/ SwitchInstallerFailure(self)
-                          \/ SwitchNicAsicFailure(self)
+swFailureProc(self) == SwitchFailure(self)
 
 SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
-                              /\ IF ~isFinished
-                                    THEN /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = <<>>]
-                                         /\ failedSet' = [failedSet EXCEPT ![self] = returnSwitchFailedElements(self[2])]
-                                         /\ Cardinality(failedSet'[self]) > 0
-                                         /\ \E elem \in failedSet'[self]:
-                                              recoveredElem' = [recoveredElem EXCEPT ![self] = elem]
-                                         /\ IF recoveredElem'[self] = "cpu"
-                                               THEN /\ pc' = [pc EXCEPT ![self] = "SwitchCpuRecovery"]
-                                               ELSE /\ IF recoveredElem'[self] = "nicAsic"
-                                                          THEN /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicRecovery"]
-                                                          ELSE /\ IF recoveredElem'[self] = "ofa"
-                                                                     THEN /\ pc' = [pc EXCEPT ![self] = "SwitchOfaRecovery"]
-                                                                     ELSE /\ IF recoveredElem'[self] = "installer"
-                                                                                THEN /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerRecovery"]
-                                                                                ELSE /\ Assert(FALSE, 
-                                                                                               "Failure of assertion at line 722, column 14.")
-                                                                                     /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
-                                    ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                         /\ UNCHANGED << failedSet, 
-                                                         statusResolveMsg, 
-                                                         recoveredElem >>
-                              /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
-                                              installedIRs, failedTimes, 
-                                              NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                              Ofa2InstallerBuff, 
-                                              Installer2OfaBuff, TCAM, 
-                                              controlMsgCounter, 
-                                              controller2Switch, 
+                              /\ failedSet' = [failedSet EXCEPT ![self] = returnSwitchFailedElements(self[2])]
+                              /\ Cardinality(failedSet'[self]) > 0
+                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                              /\ ~isFinished
+                              /\ \E elem \in failedSet'[self]:
+                                   recoveredElem' = [recoveredElem EXCEPT ![self] = elem]
+                              /\ IF recoveredElem'[self] = "cpu"
+                                    THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
+                                         /\ Assert(switchStatus[self[2]].cpu = Failed, 
+                                                   "Failure of assertion at line 238, column 9 of macro called at line 743, column 39.")
+                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
+                                                                                 ![self[2]].ofa = NotFailed,
+                                                                                 ![self[2]].installer = NotFailed]
+                                         /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = <<>>]
+                                         /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = <<>>]
+                                         /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = <<>>]
+                                         /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = <<>>]
+                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed
+                                               THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                    /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
+                                                                                                               swID |-> self[2],
+                                                                                                               num |-> controlMsgCounter'[self[2]],
+                                                                                                               status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
+                                                    /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
+                                               ELSE /\ TRUE
+                                                    /\ UNCHANGED << swSeqChangedStatus, 
+                                                                    controlMsgCounter, 
+                                                                    statusResolveMsg >>
+                                         /\ UNCHANGED controller2Switch
+                                    ELSE /\ IF recoveredElem'[self] = "nicAsic"
+                                               THEN /\ nicAsicStartingMode(self[2])
+                                                    /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
+                                                              "Failure of assertion at line 192, column 9 of macro called at line 744, column 46.")
+                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
+                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
+                                                    /\ IF switchStatus'[self[2]].ofa = Failed
+                                                          THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                               /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> OFA_DOWN,
+                                                                                                                          swID |-> self[2],
+                                                                                                                          num |-> controlMsgCounter'[self[2]]]]
+                                                          ELSE /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                               /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
+                                                                                                                          swID |-> self[2],
+                                                                                                                          num |-> controlMsgCounter'[self[2]],
+                                                                                                                          status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
+                                                    /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
+                                               ELSE /\ IF recoveredElem'[self] = "ofa"
+                                                          THEN /\ ofaStartingMode(self[2])
+                                                               /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
+                                                                         "Failure of assertion at line 279, column 9 of macro called at line 745, column 42.")
+                                                               /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
+                                                               /\ IF switchStatus'[self[2]].nicAsic = NotFailed
+                                                                     THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                                          /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
+                                                                                                                                     swID |-> self[2],
+                                                                                                                                     num |-> controlMsgCounter'[self[2]],
+                                                                                                                                     status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
+                                                                          /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
+                                                                     ELSE /\ TRUE
+                                                                          /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                          controlMsgCounter, 
+                                                                                          statusResolveMsg >>
+                                                          ELSE /\ IF recoveredElem'[self] = "installer"
+                                                                     THEN /\ installerInStartingMode(self[2])
+                                                                          /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
+                                                                                    "Failure of assertion at line 317, column 9 of macro called at line 746, column 48.")
+                                                                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
+                                                                          /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
+                                                                                THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
+                                                                                               "Failure of assertion at line 320, column 13 of macro called at line 746, column 48.")
+                                                                                     /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
+                                                                                     /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
+                                                                                                                                                swID |-> self[2],
+                                                                                                                                                num |-> controlMsgCounter'[self[2]],
+                                                                                                                                                status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
+                                                                                     /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
+                                                                                ELSE /\ TRUE
+                                                                                     /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                                     controlMsgCounter, 
+                                                                                                     statusResolveMsg >>
+                                                                     ELSE /\ Assert(FALSE, 
+                                                                                    "Failure of assertion at line 747, column 14.")
+                                                                          /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                          switchStatus, 
+                                                                                          controlMsgCounter, 
+                                                                                          statusResolveMsg >>
+                                                    /\ UNCHANGED controller2Switch
+                                         /\ UNCHANGED << NicAsic2OfaBuff, 
+                                                         Ofa2NicAsicBuff, 
+                                                         Ofa2InstallerBuff, 
+                                                         Installer2OfaBuff >>
+                              /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
+                              /\ UNCHANGED << installedIRs, failedTimes, TCAM, 
                                               switch2Controller, 
-                                              controllerState, IR2SW, 
+                                              controllerState, switchOrdering, 
+                                              IR2SW, 
                                               controllerThreadPoolIRQueue, 
                                               IRStatus, SwSuspensionStatus, 
                                               lastScheduledThread, 
                                               SetScheduledIRs, dependencyGraph, 
-                                              stack, ofaInIR, setIRs, 
+                                              workerThreadRanking, 
+                                              workerThreadStatus, switchLock, 
+                                              FirstInstall, stack, setIRs, 
                                               nextThread, nextIR, 
                                               switchIDToReset, setIRsToReset, 
-                                              resetIR, ingressIR, egressMsg, 
-                                              ofaInMsg, ofaOutConfirmation, 
+                                              resetIR, ingressPkt, ingressIR, 
+                                              egressMsg, ofaInMsg, 
+                                              ofaOutConfirmation, 
                                               installerInIR, statusMsg, 
                                               notFailedSet, failedElem, 
                                               toBeScheduledIRs, nextIRToSent, 
                                               monitoringEvent, msg >>
 
-SwitchCpuRecovery(self) == /\ pc[self] = "SwitchCpuRecovery"
-                           /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
-                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
-                                                                   ![self[2]].ofa = NotFailed,
-                                                                   ![self[2]].installer = NotFailed]
-                           /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = <<>>]
-                           /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = <<>>]
-                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = <<>>]
-                           /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = <<>>]
-                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed
-                                 THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
-                                                                                                 swID |-> self[2],
-                                                                                                 num |-> controlMsgCounter'[self[2]],
-                                                                                                 status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                      /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
-                                 ELSE /\ TRUE
-                                      /\ UNCHANGED << swSeqChangedStatus, 
-                                                      controlMsgCounter, 
-                                                      statusResolveMsg >>
-                           /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
-                           /\ UNCHANGED << installedIRs, failedTimes, TCAM, 
-                                           controller2Switch, 
-                                           switch2Controller, controllerState, 
-                                           IR2SW, controllerThreadPoolIRQueue, 
-                                           IRStatus, SwSuspensionStatus, 
-                                           lastScheduledThread, 
-                                           SetScheduledIRs, dependencyGraph, 
-                                           stack, ofaInIR, setIRs, nextThread, 
-                                           nextIR, switchIDToReset, 
-                                           setIRsToReset, resetIR, ingressIR, 
-                                           egressMsg, ofaInMsg, 
-                                           ofaOutConfirmation, installerInIR, 
-                                           statusMsg, notFailedSet, failedElem, 
-                                           failedSet, recoveredElem, 
-                                           toBeScheduledIRs, nextIRToSent, 
-                                           monitoringEvent, msg >>
-
-SwitchNicAsicRecovery(self) == /\ pc[self] = "SwitchNicAsicRecovery"
-                               /\ nicAsicStartingMode(self[2])
-                               /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
-                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
-                               /\ IF switchStatus'[self[2]].ofa = Failed
-                                     THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                          /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> OFA_DOWN,
-                                                                                                     swID |-> self[2],
-                                                                                                     num |-> controlMsgCounter'[self[2]]]]
-                                     ELSE /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                          /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
-                                                                                                     swID |-> self[2],
-                                                                                                     num |-> controlMsgCounter'[self[2]],
-                                                                                                     status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                               /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
-                               /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
-                               /\ UNCHANGED << installedIRs, failedTimes, 
-                                               NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Ofa2InstallerBuff, 
-                                               Installer2OfaBuff, TCAM, 
-                                               switch2Controller, 
-                                               controllerState, IR2SW, 
-                                               controllerThreadPoolIRQueue, 
-                                               IRStatus, SwSuspensionStatus, 
-                                               lastScheduledThread, 
-                                               SetScheduledIRs, 
-                                               dependencyGraph, stack, ofaInIR, 
-                                               setIRs, nextThread, nextIR, 
-                                               switchIDToReset, setIRsToReset, 
-                                               resetIR, ingressIR, egressMsg, 
-                                               ofaInMsg, ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, 
-                                               failedSet, recoveredElem, 
-                                               toBeScheduledIRs, nextIRToSent, 
-                                               monitoringEvent, msg >>
-
-SwitchOfaRecovery(self) == /\ pc[self] = "SwitchOfaRecovery"
-                           /\ ofaStartingMode(self[2])
-                           /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                     "Failure of assertion at line 282, column 9 of macro called at line 720, column 61.")
-                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
-                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed
-                                 THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
-                                                                                                 swID |-> self[2],
-                                                                                                 num |-> controlMsgCounter'[self[2]],
-                                                                                                 status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                      /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
-                                 ELSE /\ TRUE
-                                      /\ UNCHANGED << swSeqChangedStatus, 
-                                                      controlMsgCounter, 
-                                                      statusResolveMsg >>
-                           /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
-                           /\ UNCHANGED << installedIRs, failedTimes, 
-                                           NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                           Ofa2InstallerBuff, 
-                                           Installer2OfaBuff, TCAM, 
-                                           controller2Switch, 
-                                           switch2Controller, controllerState, 
-                                           IR2SW, controllerThreadPoolIRQueue, 
-                                           IRStatus, SwSuspensionStatus, 
-                                           lastScheduledThread, 
-                                           SetScheduledIRs, dependencyGraph, 
-                                           stack, ofaInIR, setIRs, nextThread, 
-                                           nextIR, switchIDToReset, 
-                                           setIRsToReset, resetIR, ingressIR, 
-                                           egressMsg, ofaInMsg, 
-                                           ofaOutConfirmation, installerInIR, 
-                                           statusMsg, notFailedSet, failedElem, 
-                                           failedSet, recoveredElem, 
-                                           toBeScheduledIRs, nextIRToSent, 
-                                           monitoringEvent, msg >>
-
-SwitchInstallerRecovery(self) == /\ pc[self] = "SwitchInstallerRecovery"
-                                 /\ installerInStartingMode(self[2])
-                                 /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                           "Failure of assertion at line 320, column 9 of macro called at line 721, column 73.")
-                                 /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
-                                 /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
-                                       THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                      "Failure of assertion at line 323, column 13 of macro called at line 721, column 73.")
-                                            /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                            /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
-                                                                                                       swID |-> self[2],
-                                                                                                       num |-> controlMsgCounter'[self[2]],
-                                                                                                       status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                            /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
-                                       ELSE /\ TRUE
-                                            /\ UNCHANGED << swSeqChangedStatus, 
-                                                            controlMsgCounter, 
-                                                            statusResolveMsg >>
-                                 /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
-                                 /\ UNCHANGED << installedIRs, failedTimes, 
-                                                 NicAsic2OfaBuff, 
-                                                 Ofa2NicAsicBuff, 
-                                                 Ofa2InstallerBuff, 
-                                                 Installer2OfaBuff, TCAM, 
-                                                 controller2Switch, 
-                                                 switch2Controller, 
-                                                 controllerState, IR2SW, 
-                                                 controllerThreadPoolIRQueue, 
-                                                 IRStatus, SwSuspensionStatus, 
-                                                 lastScheduledThread, 
-                                                 SetScheduledIRs, 
-                                                 dependencyGraph, stack, 
-                                                 ofaInIR, setIRs, nextThread, 
-                                                 nextIR, switchIDToReset, 
-                                                 setIRsToReset, resetIR, 
-                                                 ingressIR, egressMsg, 
-                                                 ofaInMsg, ofaOutConfirmation, 
-                                                 installerInIR, statusMsg, 
-                                                 notFailedSet, failedElem, 
-                                                 failedSet, recoveredElem, 
-                                                 toBeScheduledIRs, 
-                                                 nextIRToSent, monitoringEvent, 
-                                                 msg >>
-
 swResolveFailure(self) == SwitchResolveFailure(self)
-                             \/ SwitchCpuRecovery(self)
-                             \/ SwitchNicAsicRecovery(self)
-                             \/ SwitchOfaRecovery(self)
-                             \/ SwitchInstallerRecovery(self)
+
+ghostProc(self) == /\ pc[self] = "ghostProc"
+                   /\ /\ switchLock # <<NO_LOCK, NO_LOCK>>
+                      /\ switchLock[2] = self[2]
+                   /\ IF switchStatus[switchLock[2]].cpu = Failed /\ switchLock[1] = NIC_ASIC_OUT
+                         THEN /\ pc[switchLock] = "SwitchFromOFAPacket"
+                         ELSE /\ IF switchLock[1] \in {NIC_ASIC_IN, NIC_ASIC_OUT}
+                                    THEN /\ switchStatus[switchLock[2]].nicAsic = Failed
+                                         /\ /\ pc[<<NIC_ASIC_IN, self[2]>>] = "SwitchRcvPacket"
+                                            /\ pc[<<NIC_ASIC_OUT, self[2]>>] = "SwitchFromOFAPacket"
+                                    ELSE /\ IF switchLock[1] \in {OFA_IN, OFA_OUT}
+                                               THEN /\ switchStatus[switchLock[2]].ofa = Failed
+                                                    /\ /\ pc[<<OFA_IN, self[2]>>] = "SwitchOfaProcIn"
+                                                       /\ pc[<<OFA_OUT, self[2]>>] = "SwitchOfaProcOut"
+                                               ELSE /\ IF switchLock[1] \in {INSTALLER}
+                                                          THEN /\ switchStatus[switchLock[2]].installer = Failed
+                                                               /\ pc[<<INSTALLER, self[2]>>] = "SwitchInstallerProc"
+                                                          ELSE /\ TRUE
+                   /\ Assert(\/ switchLock[2] = self[2]
+                             \/ switchLock[2] = NO_LOCK, 
+                             "Failure of assertion at line 357, column 9 of macro called at line 777, column 9.")
+                   /\ switchLock' = <<NO_LOCK, NO_LOCK>>
+                   /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
+                   /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
+                                   installedIRs, failedTimes, NicAsic2OfaBuff, 
+                                   Ofa2NicAsicBuff, Ofa2InstallerBuff, 
+                                   Installer2OfaBuff, TCAM, controlMsgCounter, 
+                                   controller2Switch, switch2Controller, 
+                                   controllerState, switchOrdering, IR2SW, 
+                                   controllerThreadPoolIRQueue, IRStatus, 
+                                   SwSuspensionStatus, lastScheduledThread, 
+                                   SetScheduledIRs, dependencyGraph, 
+                                   workerThreadRanking, workerThreadStatus, 
+                                   FirstInstall, stack, setIRs, nextThread, 
+                                   nextIR, switchIDToReset, setIRsToReset, 
+                                   resetIR, ingressPkt, ingressIR, egressMsg, 
+                                   ofaInMsg, ofaOutConfirmation, installerInIR, 
+                                   statusMsg, notFailedSet, failedElem, 
+                                   failedSet, statusResolveMsg, recoveredElem, 
+                                   toBeScheduledIRs, nextIRToSent, 
+                                   monitoringEvent, msg >>
+
+ghostUnlockProcess(self) == ghostProc(self)
 
 ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                            /\ controllerIsMaster(self[1])
-                           /\ pc' = [pc EXCEPT ![self] = "ControllerObj"]
+                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                           /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNext(self[1])]
+                           /\ toBeScheduledIRs'[self] # {}
+                           /\ /\ setIRs' = [setIRs EXCEPT ![self] = toBeScheduledIRs'[self]]
+                              /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "scheduleIRs",
+                                                                       pc        |->  "ControllerSeqProc",
+                                                                       nextThread |->  nextThread[self],
+                                                                       nextIR    |->  nextIR[self],
+                                                                       setIRs    |->  setIRs[self] ] >>
+                                                                   \o stack[self]]
+                           /\ nextThread' = [nextThread EXCEPT ![self] = lastScheduledThread]
+                           /\ nextIR' = [nextIR EXCEPT ![self] = 0]
+                           /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                            /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                            installedIRs, failedTimes, 
                                            NicAsic2OfaBuff, Ofa2NicAsicBuff, 
@@ -2359,117 +2161,56 @@ ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                                            controlMsgCounter, 
                                            controller2Switch, 
                                            switch2Controller, controllerState, 
-                                           IR2SW, controllerThreadPoolIRQueue, 
+                                           switchOrdering, IR2SW, 
+                                           controllerThreadPoolIRQueue, 
                                            IRStatus, SwSuspensionStatus, 
                                            lastScheduledThread, 
                                            SetScheduledIRs, dependencyGraph, 
-                                           stack, ofaInIR, setIRs, nextThread, 
-                                           nextIR, switchIDToReset, 
-                                           setIRsToReset, resetIR, ingressIR, 
-                                           egressMsg, ofaInMsg, 
+                                           workerThreadRanking, 
+                                           workerThreadStatus, switchLock, 
+                                           FirstInstall, switchIDToReset, 
+                                           setIRsToReset, resetIR, ingressPkt, 
+                                           ingressIR, egressMsg, ofaInMsg, 
                                            ofaOutConfirmation, installerInIR, 
                                            statusMsg, notFailedSet, failedElem, 
                                            failedSet, statusResolveMsg, 
-                                           recoveredElem, toBeScheduledIRs, 
-                                           nextIRToSent, monitoringEvent, msg >>
+                                           recoveredElem, nextIRToSent, 
+                                           monitoringEvent, msg >>
 
-ControllerObj(self) == /\ pc[self] = "ControllerObj"
-                       /\ IF ~isFinished /\ controllerIsMaster(self[1])
-                             THEN /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNext(self[1])]
-                                  /\ toBeScheduledIRs'[self] # {}
-                                  /\ /\ setIRs' = [setIRs EXCEPT ![self] = toBeScheduledIRs'[self]]
-                                     /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "scheduleIRs",
-                                                                              pc        |->  "ControllerObj",
-                                                                              nextThread |->  nextThread[self],
-                                                                              nextIR    |->  nextIR[self],
-                                                                              setIRs    |->  setIRs[self] ] >>
-                                                                          \o stack[self]]
-                                  /\ nextThread' = [nextThread EXCEPT ![self] = lastScheduledThread]
-                                  /\ nextIR' = [nextIR EXCEPT ![self] = 0]
-                                  /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
-                             ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                  /\ UNCHANGED << stack, setIRs, nextThread, 
-                                                  nextIR, toBeScheduledIRs >>
-                       /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
-                                       installedIRs, failedTimes, 
-                                       NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                       Ofa2InstallerBuff, Installer2OfaBuff, 
-                                       TCAM, controlMsgCounter, 
-                                       controller2Switch, switch2Controller, 
-                                       controllerState, IR2SW, 
-                                       controllerThreadPoolIRQueue, IRStatus, 
-                                       SwSuspensionStatus, lastScheduledThread, 
-                                       SetScheduledIRs, dependencyGraph, 
-                                       ofaInIR, switchIDToReset, setIRsToReset, 
-                                       resetIR, ingressIR, egressMsg, ofaInMsg, 
-                                       ofaOutConfirmation, installerInIR, 
-                                       statusMsg, notFailedSet, failedElem, 
-                                       failedSet, statusResolveMsg, 
-                                       recoveredElem, nextIRToSent, 
-                                       monitoringEvent, msg >>
-
-controllerSequencer(self) == ControllerSeqProc(self) \/ ControllerObj(self)
+controllerSequencer(self) == ControllerSeqProc(self)
 
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
                           /\ controllerIsMaster(self[1])
-                          /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIRs"]
+                          /\ controllerThreadPoolIRQueue[self[1]] # <<>>
+                          /\ canWorkerThreadContinue(self[1], self[2])
+                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                          /\ workerThreadStatus' = [workerThreadStatus EXCEPT ![self[2]] = 1]
+                          /\ nextIRToSent' = [nextIRToSent EXCEPT ![self] = Head(controllerThreadPoolIRQueue[self[1]])]
+                          /\ controllerThreadPoolIRQueue' = [controllerThreadPoolIRQueue EXCEPT ![self[1]] = Tail(controllerThreadPoolIRQueue[self[1]])]
+                          /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                           /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                           installedIRs, failedTimes, 
                                           NicAsic2OfaBuff, Ofa2NicAsicBuff, 
                                           Ofa2InstallerBuff, Installer2OfaBuff, 
                                           TCAM, controlMsgCounter, 
                                           controller2Switch, switch2Controller, 
-                                          controllerState, IR2SW, 
-                                          controllerThreadPoolIRQueue, 
-                                          IRStatus, SwSuspensionStatus, 
+                                          controllerState, switchOrdering, 
+                                          IR2SW, IRStatus, SwSuspensionStatus, 
                                           lastScheduledThread, SetScheduledIRs, 
-                                          dependencyGraph, stack, ofaInIR, 
+                                          dependencyGraph, workerThreadRanking, 
+                                          switchLock, FirstInstall, stack, 
                                           setIRs, nextThread, nextIR, 
                                           switchIDToReset, setIRsToReset, 
-                                          resetIR, ingressIR, egressMsg, 
-                                          ofaInMsg, ofaOutConfirmation, 
-                                          installerInIR, statusMsg, 
-                                          notFailedSet, failedElem, failedSet, 
-                                          statusResolveMsg, recoveredElem, 
-                                          toBeScheduledIRs, nextIRToSent, 
+                                          resetIR, ingressPkt, ingressIR, 
+                                          egressMsg, ofaInMsg, 
+                                          ofaOutConfirmation, installerInIR, 
+                                          statusMsg, notFailedSet, failedElem, 
+                                          failedSet, statusResolveMsg, 
+                                          recoveredElem, toBeScheduledIRs, 
                                           monitoringEvent, msg >>
 
-ControllerThreadSendIRs(self) == /\ pc[self] = "ControllerThreadSendIRs"
-                                 /\ IF ~isFinished /\ controllerIsMaster(self[1])
-                                       THEN /\ controllerThreadPoolIRQueue[self[1]] # <<>>
-                                            /\ nextIRToSent' = [nextIRToSent EXCEPT ![self] = Head(controllerThreadPoolIRQueue[self[1]])]
-                                            /\ controllerThreadPoolIRQueue' = [controllerThreadPoolIRQueue EXCEPT ![self[1]] = Tail(controllerThreadPoolIRQueue[self[1]])]
-                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
-                                       ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                            /\ UNCHANGED << controllerThreadPoolIRQueue, 
-                                                            nextIRToSent >>
-                                 /\ UNCHANGED << swSeqChangedStatus, 
-                                                 switchStatus, installedIRs, 
-                                                 failedTimes, NicAsic2OfaBuff, 
-                                                 Ofa2NicAsicBuff, 
-                                                 Ofa2InstallerBuff, 
-                                                 Installer2OfaBuff, TCAM, 
-                                                 controlMsgCounter, 
-                                                 controller2Switch, 
-                                                 switch2Controller, 
-                                                 controllerState, IR2SW, 
-                                                 IRStatus, SwSuspensionStatus, 
-                                                 lastScheduledThread, 
-                                                 SetScheduledIRs, 
-                                                 dependencyGraph, stack, 
-                                                 ofaInIR, setIRs, nextThread, 
-                                                 nextIR, switchIDToReset, 
-                                                 setIRsToReset, resetIR, 
-                                                 ingressIR, egressMsg, 
-                                                 ofaInMsg, ofaOutConfirmation, 
-                                                 installerInIR, statusMsg, 
-                                                 notFailedSet, failedElem, 
-                                                 failedSet, statusResolveMsg, 
-                                                 recoveredElem, 
-                                                 toBeScheduledIRs, 
-                                                 monitoringEvent, msg >>
-
 ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
+                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                 /\ IF ~isSwitchSuspended(IR2SW[nextIRToSent[self]]) /\ IRStatus[nextIRToSent[self]] = IR_NONE
                                       THEN /\ IRStatus' = [IRStatus EXCEPT ![nextIRToSent[self]] = IR_SENT]
                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIR"]
@@ -2484,16 +2225,20 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 controlMsgCounter, 
                                                 controller2Switch, 
                                                 switch2Controller, 
-                                                controllerState, IR2SW, 
+                                                controllerState, 
+                                                switchOrdering, IR2SW, 
                                                 controllerThreadPoolIRQueue, 
                                                 SwSuspensionStatus, 
                                                 lastScheduledThread, 
                                                 SetScheduledIRs, 
-                                                dependencyGraph, stack, 
-                                                ofaInIR, setIRs, nextThread, 
-                                                nextIR, switchIDToReset, 
-                                                setIRsToReset, resetIR, 
-                                                ingressIR, egressMsg, ofaInMsg, 
+                                                dependencyGraph, 
+                                                workerThreadRanking, 
+                                                workerThreadStatus, switchLock, 
+                                                FirstInstall, stack, setIRs, 
+                                                nextThread, nextIR, 
+                                                switchIDToReset, setIRsToReset, 
+                                                resetIR, ingressPkt, ingressIR, 
+                                                egressMsg, ofaInMsg, 
                                                 ofaOutConfirmation, 
                                                 installerInIR, statusMsg, 
                                                 notFailedSet, failedElem, 
@@ -2503,6 +2248,7 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 monitoringEvent, msg >>
 
 ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
+                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                    /\ controller2Switch' = [controller2Switch EXCEPT ![IR2SW[nextIRToSent[self]]] = Append(controller2Switch[IR2SW[nextIRToSent[self]]], [type |-> INSTALL_FLOW,
                                                                                                                                                                           to |-> IR2SW[nextIRToSent[self]],
                                                                                                                                                                           IR |-> nextIRToSent[self]])]
@@ -2516,18 +2262,22 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    Installer2OfaBuff, TCAM, 
                                                    controlMsgCounter, 
                                                    switch2Controller, 
-                                                   controllerState, IR2SW, 
+                                                   controllerState, 
+                                                   switchOrdering, IR2SW, 
                                                    controllerThreadPoolIRQueue, 
                                                    IRStatus, 
                                                    SwSuspensionStatus, 
                                                    lastScheduledThread, 
                                                    SetScheduledIRs, 
-                                                   dependencyGraph, stack, 
-                                                   ofaInIR, setIRs, nextThread, 
+                                                   dependencyGraph, 
+                                                   workerThreadRanking, 
+                                                   workerThreadStatus, 
+                                                   switchLock, FirstInstall, 
+                                                   stack, setIRs, nextThread, 
                                                    nextIR, switchIDToReset, 
                                                    setIRsToReset, resetIR, 
-                                                   ingressIR, egressMsg, 
-                                                   ofaInMsg, 
+                                                   ingressPkt, ingressIR, 
+                                                   egressMsg, ofaInMsg, 
                                                    ofaOutConfirmation, 
                                                    installerInIR, statusMsg, 
                                                    notFailedSet, failedElem, 
@@ -2538,6 +2288,7 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    monitoringEvent, msg >>
 
 WaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "WaitForIRToHaveCorrectStatus"
+                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                       /\ ~isSwitchSuspended(IR2SW[nextIRToSent[self]])
                                       /\ pc' = [pc EXCEPT ![self] = "ReScheduleifIRNone"]
                                       /\ UNCHANGED << swSeqChangedStatus, 
@@ -2551,19 +2302,23 @@ WaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "WaitForIRToHaveCorrectStatu
                                                       controlMsgCounter, 
                                                       controller2Switch, 
                                                       switch2Controller, 
-                                                      controllerState, IR2SW, 
+                                                      controllerState, 
+                                                      switchOrdering, IR2SW, 
                                                       controllerThreadPoolIRQueue, 
                                                       IRStatus, 
                                                       SwSuspensionStatus, 
                                                       lastScheduledThread, 
                                                       SetScheduledIRs, 
-                                                      dependencyGraph, stack, 
-                                                      ofaInIR, setIRs, 
+                                                      dependencyGraph, 
+                                                      workerThreadRanking, 
+                                                      workerThreadStatus, 
+                                                      switchLock, FirstInstall, 
+                                                      stack, setIRs, 
                                                       nextThread, nextIR, 
                                                       switchIDToReset, 
                                                       setIRsToReset, resetIR, 
-                                                      ingressIR, egressMsg, 
-                                                      ofaInMsg, 
+                                                      ingressPkt, ingressIR, 
+                                                      egressMsg, ofaInMsg, 
                                                       ofaOutConfirmation, 
                                                       installerInIR, statusMsg, 
                                                       notFailedSet, failedElem, 
@@ -2575,6 +2330,7 @@ WaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "WaitForIRToHaveCorrectStatu
                                                       monitoringEvent, msg >>
 
 ReScheduleifIRNone(self) == /\ pc[self] = "ReScheduleifIRNone"
+                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF IRStatus[nextIRToSent[self]] = IR_NONE
                                   THEN /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                                   ELSE /\ pc' = [pc EXCEPT ![self] = "RemoveFromScheduledIRSet"]
@@ -2586,13 +2342,17 @@ ReScheduleifIRNone(self) == /\ pc[self] = "ReScheduleifIRNone"
                                             controlMsgCounter, 
                                             controller2Switch, 
                                             switch2Controller, controllerState, 
-                                            IR2SW, controllerThreadPoolIRQueue, 
+                                            switchOrdering, IR2SW, 
+                                            controllerThreadPoolIRQueue, 
                                             IRStatus, SwSuspensionStatus, 
                                             lastScheduledThread, 
                                             SetScheduledIRs, dependencyGraph, 
-                                            stack, ofaInIR, setIRs, nextThread, 
-                                            nextIR, switchIDToReset, 
-                                            setIRsToReset, resetIR, ingressIR, 
+                                            workerThreadRanking, 
+                                            workerThreadStatus, switchLock, 
+                                            FirstInstall, stack, setIRs, 
+                                            nextThread, nextIR, 
+                                            switchIDToReset, setIRsToReset, 
+                                            resetIR, ingressPkt, ingressIR, 
                                             egressMsg, ofaInMsg, 
                                             ofaOutConfirmation, installerInIR, 
                                             statusMsg, notFailedSet, 
@@ -2602,10 +2362,12 @@ ReScheduleifIRNone(self) == /\ pc[self] = "ReScheduleifIRNone"
                                             monitoringEvent, msg >>
 
 RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
+                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                   /\ Assert(nextIRToSent[self] \in SetScheduledIRs[self[1]][IR2SW[nextIRToSent[self]]], 
-                                            "Failure of assertion at line 775, column 13.")
+                                            "Failure of assertion at line 832, column 13.")
                                   /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![self[1]][IR2SW[nextIRToSent[self]]] = SetScheduledIRs[self[1]][IR2SW[nextIRToSent[self]]]\{nextIRToSent[self]}]
-                                  /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIRs"]
+                                  /\ workerThreadStatus' = [workerThreadStatus EXCEPT ![self[2]] = 0]
+                                  /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                   /\ UNCHANGED << swSeqChangedStatus, 
                                                   switchStatus, installedIRs, 
                                                   failedTimes, NicAsic2OfaBuff, 
@@ -2615,16 +2377,20 @@ RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
                                                   controlMsgCounter, 
                                                   controller2Switch, 
                                                   switch2Controller, 
-                                                  controllerState, IR2SW, 
+                                                  controllerState, 
+                                                  switchOrdering, IR2SW, 
                                                   controllerThreadPoolIRQueue, 
                                                   IRStatus, SwSuspensionStatus, 
                                                   lastScheduledThread, 
-                                                  dependencyGraph, stack, 
-                                                  ofaInIR, setIRs, nextThread, 
+                                                  dependencyGraph, 
+                                                  workerThreadRanking, 
+                                                  switchLock, FirstInstall, 
+                                                  stack, setIRs, nextThread, 
                                                   nextIR, switchIDToReset, 
                                                   setIRsToReset, resetIR, 
-                                                  ingressIR, egressMsg, 
-                                                  ofaInMsg, ofaOutConfirmation, 
+                                                  ingressPkt, ingressIR, 
+                                                  egressMsg, ofaInMsg, 
+                                                  ofaOutConfirmation, 
                                                   installerInIR, statusMsg, 
                                                   notFailedSet, failedElem, 
                                                   failedSet, statusResolveMsg, 
@@ -2634,7 +2400,6 @@ RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
                                                   monitoringEvent, msg >>
 
 controllerWorkerThreads(self) == ControllerThread(self)
-                                    \/ ControllerThreadSendIRs(self)
                                     \/ ControllerThreadSendIR(self)
                                     \/ ControllerThreadForwardIR(self)
                                     \/ WaitForIRToHaveCorrectStatus(self)
@@ -2643,9 +2408,16 @@ controllerWorkerThreads(self) == ControllerThread(self)
 
 ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                     /\ controllerIsMaster(self[1])
-                                    /\ pc' = [pc EXCEPT ![self] = "ControllerTrack"]
-                                    /\ UNCHANGED << swSeqChangedStatus, 
-                                                    switchStatus, installedIRs, 
+                                    /\ swSeqChangedStatus # <<>>
+                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ monitoringEvent' = [monitoringEvent EXCEPT ![self] = Head(swSeqChangedStatus)]
+                                    /\ swSeqChangedStatus' = Tail(swSeqChangedStatus)
+                                    /\ IF shouldSuspendSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_RUN
+                                          THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSuspendSW"]
+                                          ELSE /\ IF canfreeSuspendedSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_SUSPEND
+                                                     THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
+                                                     ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerProc"]
+                                    /\ UNCHANGED << switchStatus, installedIRs, 
                                                     failedTimes, 
                                                     NicAsic2OfaBuff, 
                                                     Ofa2NicAsicBuff, 
@@ -2654,19 +2426,22 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     controlMsgCounter, 
                                                     controller2Switch, 
                                                     switch2Controller, 
-                                                    controllerState, IR2SW, 
+                                                    controllerState, 
+                                                    switchOrdering, IR2SW, 
                                                     controllerThreadPoolIRQueue, 
                                                     IRStatus, 
                                                     SwSuspensionStatus, 
                                                     lastScheduledThread, 
                                                     SetScheduledIRs, 
-                                                    dependencyGraph, stack, 
-                                                    ofaInIR, setIRs, 
-                                                    nextThread, nextIR, 
-                                                    switchIDToReset, 
+                                                    dependencyGraph, 
+                                                    workerThreadRanking, 
+                                                    workerThreadStatus, 
+                                                    switchLock, FirstInstall, 
+                                                    stack, setIRs, nextThread, 
+                                                    nextIR, switchIDToReset, 
                                                     setIRsToReset, resetIR, 
-                                                    ingressIR, egressMsg, 
-                                                    ofaInMsg, 
+                                                    ingressPkt, ingressIR, 
+                                                    egressMsg, ofaInMsg, 
                                                     ofaOutConfirmation, 
                                                     installerInIR, statusMsg, 
                                                     notFailedSet, failedElem, 
@@ -2674,44 +2449,12 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     statusResolveMsg, 
                                                     recoveredElem, 
                                                     toBeScheduledIRs, 
-                                                    nextIRToSent, 
-                                                    monitoringEvent, msg >>
-
-ControllerTrack(self) == /\ pc[self] = "ControllerTrack"
-                         /\ IF ~isFinished /\ controllerIsMaster(self[1])
-                               THEN /\ swSeqChangedStatus # <<>>
-                                    /\ monitoringEvent' = [monitoringEvent EXCEPT ![self] = Head(swSeqChangedStatus)]
-                                    /\ swSeqChangedStatus' = Tail(swSeqChangedStatus)
-                                    /\ IF shouldSuspendSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_RUN
-                                          THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSuspendSW"]
-                                          ELSE /\ IF canfreeSuspendedSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_SUSPEND
-                                                     THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
-                                                     ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTrack"]
-                               ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                    /\ UNCHANGED << swSeqChangedStatus, 
-                                                    monitoringEvent >>
-                         /\ UNCHANGED << switchStatus, installedIRs, 
-                                         failedTimes, NicAsic2OfaBuff, 
-                                         Ofa2NicAsicBuff, Ofa2InstallerBuff, 
-                                         Installer2OfaBuff, TCAM, 
-                                         controlMsgCounter, controller2Switch, 
-                                         switch2Controller, controllerState, 
-                                         IR2SW, controllerThreadPoolIRQueue, 
-                                         IRStatus, SwSuspensionStatus, 
-                                         lastScheduledThread, SetScheduledIRs, 
-                                         dependencyGraph, stack, ofaInIR, 
-                                         setIRs, nextThread, nextIR, 
-                                         switchIDToReset, setIRsToReset, 
-                                         resetIR, ingressIR, egressMsg, 
-                                         ofaInMsg, ofaOutConfirmation, 
-                                         installerInIR, statusMsg, 
-                                         notFailedSet, failedElem, failedSet, 
-                                         statusResolveMsg, recoveredElem, 
-                                         toBeScheduledIRs, nextIRToSent, msg >>
+                                                    nextIRToSent, msg >>
 
 ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
+                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                              /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_SUSPEND]
-                             /\ pc' = [pc EXCEPT ![self] = "ControllerTrack"]
+                             /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerProc"]
                              /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                              installedIRs, failedTimes, 
                                              NicAsic2OfaBuff, Ofa2NicAsicBuff, 
@@ -2720,23 +2463,27 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              controlMsgCounter, 
                                              controller2Switch, 
                                              switch2Controller, 
-                                             controllerState, IR2SW, 
+                                             controllerState, switchOrdering, 
+                                             IR2SW, 
                                              controllerThreadPoolIRQueue, 
                                              IRStatus, lastScheduledThread, 
                                              SetScheduledIRs, dependencyGraph, 
-                                             stack, ofaInIR, setIRs, 
+                                             workerThreadRanking, 
+                                             workerThreadStatus, switchLock, 
+                                             FirstInstall, stack, setIRs, 
                                              nextThread, nextIR, 
                                              switchIDToReset, setIRsToReset, 
-                                             resetIR, ingressIR, egressMsg, 
-                                             ofaInMsg, ofaOutConfirmation, 
-                                             installerInIR, statusMsg, 
-                                             notFailedSet, failedElem, 
-                                             failedSet, statusResolveMsg, 
-                                             recoveredElem, toBeScheduledIRs, 
-                                             nextIRToSent, monitoringEvent, 
-                                             msg >>
+                                             resetIR, ingressPkt, ingressIR, 
+                                             egressMsg, ofaInMsg, 
+                                             ofaOutConfirmation, installerInIR, 
+                                             statusMsg, notFailedSet, 
+                                             failedElem, failedSet, 
+                                             statusResolveMsg, recoveredElem, 
+                                             toBeScheduledIRs, nextIRToSent, 
+                                             monitoringEvent, msg >>
 
 ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
+                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                    /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_RUN]
                                    /\ pc' = [pc EXCEPT ![self] = "ControllerCheckIfThisIsLastEvent"]
                                    /\ UNCHANGED << swSeqChangedStatus, 
@@ -2749,17 +2496,21 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    controlMsgCounter, 
                                                    controller2Switch, 
                                                    switch2Controller, 
-                                                   controllerState, IR2SW, 
+                                                   controllerState, 
+                                                   switchOrdering, IR2SW, 
                                                    controllerThreadPoolIRQueue, 
                                                    IRStatus, 
                                                    lastScheduledThread, 
                                                    SetScheduledIRs, 
-                                                   dependencyGraph, stack, 
-                                                   ofaInIR, setIRs, nextThread, 
+                                                   dependencyGraph, 
+                                                   workerThreadRanking, 
+                                                   workerThreadStatus, 
+                                                   switchLock, FirstInstall, 
+                                                   stack, setIRs, nextThread, 
                                                    nextIR, switchIDToReset, 
                                                    setIRsToReset, resetIR, 
-                                                   ingressIR, egressMsg, 
-                                                   ofaInMsg, 
+                                                   ingressPkt, ingressIR, 
+                                                   egressMsg, ofaInMsg, 
                                                    ofaOutConfirmation, 
                                                    installerInIR, statusMsg, 
                                                    notFailedSet, failedElem, 
@@ -2770,9 +2521,10 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    monitoringEvent, msg >>
 
 ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIsLastEvent"
+                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                           /\ IF ~existsMonitoringEventHigherNum(monitoringEvent[self])
                                                 THEN /\ /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "resetStateWithRecoveredSW",
-                                                                                                 pc        |->  "ControllerTrack",
+                                                                                                 pc        |->  "ControllerEventHandlerProc",
                                                                                                  setIRsToReset |->  setIRsToReset[self],
                                                                                                  resetIR   |->  resetIR[self],
                                                                                                  switchIDToReset |->  switchIDToReset[self] ] >>
@@ -2781,7 +2533,7 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                      /\ setIRsToReset' = [setIRsToReset EXCEPT ![self] = {}]
                                                      /\ resetIR' = [resetIR EXCEPT ![self] = 0]
                                                      /\ pc' = [pc EXCEPT ![self] = "getIRsToBeChecked"]
-                                                ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTrack"]
+                                                ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerProc"]
                                                      /\ UNCHANGED << stack, 
                                                                      switchIDToReset, 
                                                                      setIRsToReset, 
@@ -2799,6 +2551,7 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           controller2Switch, 
                                                           switch2Controller, 
                                                           controllerState, 
+                                                          switchOrdering, 
                                                           IR2SW, 
                                                           controllerThreadPoolIRQueue, 
                                                           IRStatus, 
@@ -2806,8 +2559,12 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           lastScheduledThread, 
                                                           SetScheduledIRs, 
                                                           dependencyGraph, 
-                                                          ofaInIR, setIRs, 
+                                                          workerThreadRanking, 
+                                                          workerThreadStatus, 
+                                                          switchLock, 
+                                                          FirstInstall, setIRs, 
                                                           nextThread, nextIR, 
+                                                          ingressPkt, 
                                                           ingressIR, egressMsg, 
                                                           ofaInMsg, 
                                                           ofaOutConfirmation, 
@@ -2823,14 +2580,25 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           monitoringEvent, msg >>
 
 controllerEventHandler(self) == ControllerEventHandlerProc(self)
-                                   \/ ControllerTrack(self)
                                    \/ ControllerSuspendSW(self)
                                    \/ ControllerFreeSuspendedSW(self)
                                    \/ ControllerCheckIfThisIsLastEvent(self)
 
 ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMastr"
                                        /\ controllerIsMaster(self[1])
-                                       /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorProc"]
+                                       /\ switch2Controller # <<>>
+                                       /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
+                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                       /\ switch2Controller' = Tail(switch2Controller)
+                                       /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
+                                                 "Failure of assertion at line 881, column 9.")
+                                       /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
+                                                 "Failure of assertion at line 882, column 9.")
+                                       /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
+                                             THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
+                                             ELSE /\ Assert(FALSE, 
+                                                            "Failure of assertion at line 905, column 18.")
+                                                  /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
                                        /\ UNCHANGED << swSeqChangedStatus, 
                                                        switchStatus, 
                                                        installedIRs, 
@@ -2841,20 +2609,23 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        Installer2OfaBuff, TCAM, 
                                                        controlMsgCounter, 
                                                        controller2Switch, 
-                                                       switch2Controller, 
-                                                       controllerState, IR2SW, 
+                                                       controllerState, 
+                                                       switchOrdering, IR2SW, 
                                                        controllerThreadPoolIRQueue, 
                                                        IRStatus, 
                                                        SwSuspensionStatus, 
                                                        lastScheduledThread, 
                                                        SetScheduledIRs, 
-                                                       dependencyGraph, stack, 
-                                                       ofaInIR, setIRs, 
-                                                       nextThread, nextIR, 
-                                                       switchIDToReset, 
+                                                       dependencyGraph, 
+                                                       workerThreadRanking, 
+                                                       workerThreadStatus, 
+                                                       switchLock, 
+                                                       FirstInstall, stack, 
+                                                       setIRs, nextThread, 
+                                                       nextIR, switchIDToReset, 
                                                        setIRsToReset, resetIR, 
-                                                       ingressIR, egressMsg, 
-                                                       ofaInMsg, 
+                                                       ingressPkt, ingressIR, 
+                                                       egressMsg, ofaInMsg, 
                                                        ofaOutConfirmation, 
                                                        installerInIR, 
                                                        statusMsg, notFailedSet, 
@@ -2863,52 +2634,13 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        recoveredElem, 
                                                        toBeScheduledIRs, 
                                                        nextIRToSent, 
-                                                       monitoringEvent, msg >>
-
-ControllerMonitorProc(self) == /\ pc[self] = "ControllerMonitorProc"
-                               /\ IF ~isFinished /\ controllerIsMaster(self[1])
-                                     THEN /\ switch2Controller # <<>>
-                                          /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
-                                          /\ switch2Controller' = Tail(switch2Controller)
-                                          /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                    "Failure of assertion at line 818, column 9.")
-                                          /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                    "Failure of assertion at line 819, column 9.")
-                                          /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
-                                                THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
-                                                ELSE /\ Assert(FALSE, 
-                                                               "Failure of assertion at line 839, column 18.")
-                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorProc"]
-                                     ELSE /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                          /\ UNCHANGED << switch2Controller, 
-                                                          msg >>
-                               /\ UNCHANGED << swSeqChangedStatus, 
-                                               switchStatus, installedIRs, 
-                                               failedTimes, NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Ofa2InstallerBuff, 
-                                               Installer2OfaBuff, TCAM, 
-                                               controlMsgCounter, 
-                                               controller2Switch, 
-                                               controllerState, IR2SW, 
-                                               controllerThreadPoolIRQueue, 
-                                               IRStatus, SwSuspensionStatus, 
-                                               lastScheduledThread, 
-                                               SetScheduledIRs, 
-                                               dependencyGraph, stack, ofaInIR, 
-                                               setIRs, nextThread, nextIR, 
-                                               switchIDToReset, setIRsToReset, 
-                                               resetIR, ingressIR, egressMsg, 
-                                               ofaInMsg, ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, 
-                                               failedSet, statusResolveMsg, 
-                                               recoveredElem, toBeScheduledIRs, 
-                                               nextIRToSent, monitoringEvent >>
+                                                       monitoringEvent >>
 
 ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
+                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                             /\ FirstInstall' = [FirstInstall EXCEPT ![msg[self].IR] = 1]
                              /\ IRStatus' = [IRStatus EXCEPT ![msg[self].IR] = IR_DONE]
-                             /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorProc"]
+                             /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
                              /\ UNCHANGED << swSeqChangedStatus, switchStatus, 
                                              installedIRs, failedTimes, 
                                              NicAsic2OfaBuff, Ofa2NicAsicBuff, 
@@ -2917,34 +2649,31 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                              controlMsgCounter, 
                                              controller2Switch, 
                                              switch2Controller, 
-                                             controllerState, IR2SW, 
+                                             controllerState, switchOrdering, 
+                                             IR2SW, 
                                              controllerThreadPoolIRQueue, 
                                              SwSuspensionStatus, 
                                              lastScheduledThread, 
                                              SetScheduledIRs, dependencyGraph, 
-                                             stack, ofaInIR, setIRs, 
-                                             nextThread, nextIR, 
+                                             workerThreadRanking, 
+                                             workerThreadStatus, switchLock, 
+                                             stack, setIRs, nextThread, nextIR, 
                                              switchIDToReset, setIRsToReset, 
-                                             resetIR, ingressIR, egressMsg, 
-                                             ofaInMsg, ofaOutConfirmation, 
-                                             installerInIR, statusMsg, 
-                                             notFailedSet, failedElem, 
-                                             failedSet, statusResolveMsg, 
-                                             recoveredElem, toBeScheduledIRs, 
-                                             nextIRToSent, monitoringEvent, 
-                                             msg >>
+                                             resetIR, ingressPkt, ingressIR, 
+                                             egressMsg, ofaInMsg, 
+                                             ofaOutConfirmation, installerInIR, 
+                                             statusMsg, notFailedSet, 
+                                             failedElem, failedSet, 
+                                             statusResolveMsg, recoveredElem, 
+                                             toBeScheduledIRs, nextIRToSent, 
+                                             monitoringEvent, msg >>
 
 controllerMonitoringServer(self) == ControllerMonitorCheckIfMastr(self)
-                                       \/ ControllerMonitorProc(self)
                                        \/ ControllerUpdateIR2(self)
 
-(* Allow infinite stuttering to prevent deadlock on termination. *)
-Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
-               /\ UNCHANGED vars
-
-Next == (\E self \in ProcSet:  \/ ofaInstallFlowEntry(self)
-                               \/ scheduleIRs(self)
+Next == (\E self \in ProcSet:  \/ scheduleIRs(self)
                                \/ resetStateWithRecoveredSW(self))
+           \/ (\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
            \/ (\E self \in ({NIC_ASIC_IN} \X SW): swNicAsicProcPacketIn(self))
            \/ (\E self \in ({NIC_ASIC_OUT} \X SW): swNicAsicProcPacketOut(self))
            \/ (\E self \in ({OFA_IN} \X SW): ofaModuleProcPacketIn(self))
@@ -2952,52 +2681,47 @@ Next == (\E self \in ProcSet:  \/ ofaInstallFlowEntry(self)
            \/ (\E self \in ({INSTALLER} \X SW): installerModuleProc(self))
            \/ (\E self \in ({SW_FAILURE_PROC} \X SW): swFailureProc(self))
            \/ (\E self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self))
-           \/ (\E self \in ({c0, c1} \X {CONT_SEQ}): controllerSequencer(self))
-           \/ (\E self \in ({c0, c1} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
-           \/ (\E self \in ({c0, c1} \X {CONT_EVENT}): controllerEventHandler(self))
-           \/ (\E self \in ({c0, c1} \X {CONT_MONITOR}): controllerMonitoringServer(self))
-           \/ Terminating
+           \/ (\E self \in ({GHOST_UNLOCK_PROC} \X SW): ghostUnlockProcess(self))
+           \/ (\E self \in ({c0} \X {CONT_SEQ}): controllerSequencer(self))
+           \/ (\E self \in ({c0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
+           \/ (\E self \in ({c0} \X {CONT_EVENT}): controllerEventHandler(self))
+           \/ (\E self \in ({c0} \X {CONT_MONITOR}): controllerMonitoringServer(self))
 
 Spec == /\ Init /\ [][Next]_vars
         /\ WF_vars(Next)
+        /\ \A self \in ({SW_SIMPLE_ID} \X SW) : WF_vars(swProcess(self))
         /\ \A self \in ({NIC_ASIC_IN} \X SW) : WF_vars(swNicAsicProcPacketIn(self))
         /\ \A self \in ({NIC_ASIC_OUT} \X SW) : WF_vars(swNicAsicProcPacketOut(self))
-        /\ \A self \in ({OFA_IN} \X SW) : /\ WF_vars(ofaModuleProcPacketIn(self))
-                                          /\ WF_vars(ofaInstallFlowEntry(self))
+        /\ \A self \in ({OFA_IN} \X SW) : WF_vars(ofaModuleProcPacketIn(self))
         /\ \A self \in ({OFA_OUT} \X SW) : WF_vars(ofaModuleProcPacketOut(self))
         /\ \A self \in ({INSTALLER} \X SW) : WF_vars(installerModuleProc(self))
         /\ \A self \in ({SW_FAILURE_PROC} \X SW) : WF_vars(swFailureProc(self))
         /\ \A self \in ({SW_RESOLVE_PROC} \X SW) : WF_vars(swResolveFailure(self))
-        /\ \A self \in ({c0, c1} \X {CONT_SEQ}) : WF_vars(controllerSequencer(self)) /\ WF_vars(scheduleIRs(self))
-        /\ \A self \in ({c0, c1} \X CONTROLLER_THREAD_POOL) : WF_vars(controllerWorkerThreads(self))
-        /\ \A self \in ({c0, c1} \X {CONT_EVENT}) : /\ WF_vars(controllerEventHandler(self))
-                                                    /\ WF_vars(resetStateWithRecoveredSW(self))
-        /\ \A self \in ({c0, c1} \X {CONT_MONITOR}) : WF_vars(controllerMonitoringServer(self))
+        /\ \A self \in ({GHOST_UNLOCK_PROC} \X SW) : WF_vars(ghostUnlockProcess(self))
+        /\ \A self \in ({c0} \X {CONT_SEQ}) : WF_vars(controllerSequencer(self)) /\ WF_vars(scheduleIRs(self))
+        /\ \A self \in ({c0} \X CONTROLLER_THREAD_POOL) : WF_vars(controllerWorkerThreads(self))
+        /\ \A self \in ({c0} \X {CONT_EVENT}) : /\ WF_vars(controllerEventHandler(self))
+                                                /\ WF_vars(resetStateWithRecoveredSW(self))
+        /\ \A self \in ({c0} \X {CONT_MONITOR}) : WF_vars(controllerMonitoringServer(self))
 
-Termination == <>(\A self \in ProcSet: pc[self] = "Done")
+\* END TRANSLATION - the hash of the generated TLA code (remove to silence divergence warnings): TLA-1127f38265f9486bb7d8f26f54b8d128
 
-\* END TRANSLATION - the hash of the generated TLA code (remove to silence divergence warnings): TLA-289dd9a47aba06a4e2b0edcba0a5c1d6
-SwProcSet == (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) 
-ContProcSet == (({c0, c1} \X {CONT_SEQ})) \cup (({c0, c1} \X CONTROLLER_THREAD_POOL)) \cup (({c0, c1} \X {CONT_EVENT})) \cup (({c0, c1} \X {CONT_MONITOR}))
-
-
-SystemFinished == <>(/\ \A self \in SwProcSet: pc[self] = "Done" 
-                     /\ \A self \in ContProcSet: \/ /\ controllerState.c1 = "backup"
-                                                       \/ self[1] = c1
-                                                       \/ /\ self[1] = c0 
-                                                          /\ pc[self] = "Done"
-                                                 \/ /\ controllerState.c1 = "primary" 
-                                                    /\ pc[self] = "Done")
-                                                            
-AllInstalled == <>[](\A x \in 1..MaxNumIRs: \E y \in DOMAIN installedIRs: installedIRs[y] = x)
-AllDoneStatusController == <>[](\A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE)
-ConsistencyReq == <>[](\A <<x,y>> \in dependencyGraph: \/ y = 0
-                                                       \/ \E z, w \in DOMAIN installedIRs: /\ installedIRs[z] = x
-                                                                                           /\ installedIRs[w] = y
-                                                                                           /\ z < w )
-
+\* Liveness Properties
+AllInstalled == (\A x \in 1..MaxNumIRs: \E y \in DOMAIN installedIRs: installedIRs[y] = x)
+AllDoneStatusController == (\A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE)
+InstallationLivenessProp == <>[] (AllInstalled /\ AllDoneStatusController)
+\* Safety Properties
+RedundantInstallation == \A x \in 1..MaxNumIRs: \/ IRStatus[x] = IR_DONE
+                                                \/ FirstInstall[x] = 0
+firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
+ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
+                                                      \/ /\ firstHappening(installedIRs, x) < firstHappening(installedIRs, y)
+                                                         /\ <<y, x>> \notin dependencyGraph
+                                                      \/ /\ firstHappening(installedIRs, x) > firstHappening(installedIRs, y)
+                                                         /\ <<x, y>> \notin dependencyGraph
 
 =============================================================================
 \* Modification History
-\* Last modified Thu Sep 03 03:34:09 UTC 2020 by root
+\* Last modified Sat Sep 19 21:32:11 UTC 2020 by root
 \* Created Sat Aug 08 17:44:35 UTC 2020 by root
+
