@@ -1,0 +1,7 @@
+Bug#1 (deadlock in Failover): RCS Sequencer schedules an IR for sw0 → OFC0 NIB event handler receives the notification, and schedules the IR → Failover module receives the failover request, and sends FAILOVER_INIT signal to OFC1 →  OFC1 NIB event handler receives the notification and schedule role update request for sw0 → OFC0 worker forwards the IR to sw0 → sw0 receives the IR, successfully installs the IR, and sends the confirmation to OFC0 →  sw0 CPU fails → OFC0 topo event handler receives the notification about sw0 failure and suspends the sw0 (both in NIB, and its local)→ OFC1 topo event handler receives the notification about sw0 failure and suspends the switch (both in NIB and its local) → OFC0 changes the flag of IR to IR_DONE → OFC1 worker does not forward the role-req since its switch is suspended 
+
++ The problem is Failover is not finished successfully since OFC1 is waiting for all the switches to have ROLE_EQUAL. 
+
++ Solution: OFC1 should skip failed switches, and get back to them when they are recovered. 
+
+======================================================================================================

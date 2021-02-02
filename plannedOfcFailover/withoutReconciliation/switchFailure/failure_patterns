@@ -1,0 +1,12 @@
+Switch-level:
+	Transient Partial Failures:
+		* Each switch module can fail at any time, and recover afterwards. 
+
+	TCAM Failures:
+		* IR Installation failure because of some problems in TCAM that should be resolved by RC. (e.g. Bad Port error, Bad Table error)
+
+	Asynchronous Events:
+		* Events due to changes in the switch (e.g. Port Change, Table Change)
+
+OFC-level:
+	No Failure

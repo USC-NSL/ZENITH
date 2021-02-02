@@ -1,0 +1,14 @@
+Liveness;
+1. All IRs are eventually installed.
+2. IRs have entually IR_DONE status in NIB.
+3. If SHOULD_FAILOVER=1;
+	3.1. all switches should eventually have the correct master.
+	3.2. the masterState in NIB should eventually be correct.
+
+Safety;
+1. No two workers working on the same IR. 
+2. No Redundant Installation (If the status IR becomes IR_DONE for the first time, it should always remain IR_DONE)
+3. No violation of dependency graph
+4. correctness of failover;
+	4.1. Each IR should be installed by at most one OFC
+5. Each switch should have at most one master.
