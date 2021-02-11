@@ -1,0 +1,8 @@
+Liveness;
+1. All IRs are eventually installed.
+2. IRs have eventually IR_DONE flag in NIB.
+
+Safety; 
+1. No two workers working on the same IR. 
+2. No Redundant Installation (If the status of IR becomes IR_DONE for the first time, it should always remain IR_DONE)
+3. No violation of dependency graph of IRs. 
