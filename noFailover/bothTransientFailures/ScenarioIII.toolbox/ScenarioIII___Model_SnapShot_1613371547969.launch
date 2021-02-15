@@ -2,7 +2,7 @@
 <launchConfiguration type="org.lamport.tla.toolbox.tool.tlc.modelCheck">
     <stringAttribute key="TLCCmdLineParameters" value="-checkpoint 0&#10;-coverage 99999"/>
     <intAttribute key="collectCoverage" value="1"/>
-    <stringAttribute key="configurationName" value="Model"/>
+    <stringAttribute key="configurationName" value="Model_SnapShot_1613371547969"/>
     <booleanAttribute key="deferLiveness" value="false"/>
     <intAttribute key="dfidDepth" value="100"/>
     <booleanAttribute key="dfidMode" value="false"/>
@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="83"/>
+    <intAttribute key="fpIndex" value="18"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="33"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -53,7 +53,7 @@
         <listEntry value="STATUS_NONE;;STATUS_NONE;1;0"/>
         <listEntry value="STATUS_LOCKING;;STATUS_LOCKING;1;0"/>
         <listEntry value="GHOST_UNLOCK_PROC;;GHOST_UNLOCK_PROC;1;0"/>
-        <listEntry value="SW_FAIL_ORDERING;;&lt;&lt;&gt;&gt;;0;0"/>
+        <listEntry value="SW_FAIL_ORDERING;;&lt;&lt;{s0}, {s1}&gt;&gt;;0;0"/>
         <listEntry value="INSTALLER;;INSTALLER;1;0"/>
         <listEntry value="SW_SIMPLE_ID;;SW_SIMPLE_ID;1;0"/>
         <listEntry value="START_RESET_IR;;START_RESET_IR;1;0"/>

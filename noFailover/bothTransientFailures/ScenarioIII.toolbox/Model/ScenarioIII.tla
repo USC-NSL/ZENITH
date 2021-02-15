@@ -15,7 +15,8 @@ EXTENDS Integers, Sequences, FiniteSets, TLC
 (***************************************************************************)
 CONSTANTS SW,  \* set of switches
           SW_SIMPLE_MODEL, \* switch simple model thread identifier
-          SW_COMPLEX_MODEL \* switch complex model thread identifier
+          SW_COMPLEX_MODEL, \* switch complex model thread identifier
+          WHICH_SWITCH_MODEL\*map from SW->{SW_SIMPLE_MODEL,SW_COMPLEX_MODEL}
           
 (***************************************************************************)
 (******************************** OFC Model ********************************)
@@ -152,19 +153,18 @@ CONSTANTS NO_LOCK
 \* should not implement these
 CONSTANTS MAX_NUM_CONTROLLER_SUB_FAILURE, 
           MaxNumIRs,
-          MAX_NUM_SW_FAILURE,
           SW_FAIL_ORDERING
 
 
 CONSTANTS SW_UP, SW_DOWN          
           
 (* Assumption1: at most one instruction is associated with one switch *)
-ASSUME Cardinality(SW) >= MaxNumIRs          
-(* Assumption2: all the switches appear in the failure ordering *)
-ASSUME \A x \in SW: \E y \in DOMAIN SW_FAIL_ORDERING: x \in SW_FAIL_ORDERING[y]
+ASSUME Cardinality(SW) >= MaxNumIRs
 (* Assumption3: MAX_NUM_CONTROLLER_SUB_FAILURE is a function from control plane *)
 (* modules (e.g. OFC, RC) to maximum number of submodule failure each can face *)
-ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE          
+ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
+(* WHICH_SWITCH_MODEL should be a valid function with domain SW *)
+ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]          
 
 (*--fair algorithm stateConsistency
 (************************* variables ***************************************)
@@ -203,10 +203,6 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
               \* installedIRs is an ordered set of all the IRs installed accross
               \* all the switches (used for checking consistency invariance
               installedIRs = <<>>,
-              
-              \* auxiliary variable to make sure each switch fails at most
-              \* MAX_NUM_SW_FAILURE times
-              swFailedNum = [x \in SW |-> 0],
               
               \* Buffers between different modules of the switch
               NicAsic2OfaBuff = [x \in SW |-> <<>>], 
@@ -338,9 +334,7 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         (****************** Used by system logic *****************************)
         
         (***************************** Switch ********************************)                                  
-        whichSwitchModel(swID) == IF MAX_NUM_SW_FAILURE = 0
-                                     THEN SW_SIMPLE_MODEL
-                                     ELSE SW_COMPLEX_MODEL 
+        whichSwitchModel(swID) == WHICH_SWITCH_MODEL[swID] 
         \***************************** NIC/ASIC ******************************
         swCanReceivePackets(sw) == switchStatus[sw].nicAsic = NotFailed 
         
@@ -470,7 +464,6 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         \* 3. send a statusMsg to the event handler 
         assert switchStatus[self[2]].nicAsic = NotFailed;
         switchStatus[self[2]].nicAsic := Failed;
-        swFailedNum[self[2]] := swFailedNum[self[2]] + 1;
         controller2Switch[self[2]] := <<>>;
         controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;
         statusMsg := [type |-> NIC_ASIC_DOWN, 
@@ -525,7 +518,6 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         \*          event handler. 
         assert switchStatus[self[2]].cpu = NotFailed;
         switchStatus[self[2]].cpu := Failed || switchStatus[self[2]].ofa := Failed || switchStatus[self[2]].installer := Failed;
-        swFailedNum[self[2]] := swFailedNum[self[2]] + 1;
         NicAsic2OfaBuff[self[2]] := <<>>;
         Ofa2InstallerBuff[self[2]] := <<>>;
         Installer2OfaBuff[self[2]] := <<>>;
@@ -577,8 +569,7 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         \* 1. Change the status of OFA to failed
         \* 2. If NIC/ASIC is OK, SW sends a OFA_DOWN message to event handler
         assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed;
-        switchStatus[self[2]].ofa := Failed;
-        swFailedNum[self[2]] := swFailedNum[self[2]] + 1;       
+        switchStatus[self[2]].ofa := Failed;       
         \*OfaCacheReceived[self[2]] := {};
         \*OfaCacheInstalled[self[2]] := {};
         if switchStatus[self[2]].nicAsic = NotFailed then  
@@ -622,8 +613,7 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         \* 1. Change the status of Installer to failed
         \* 2. IF OFA and NIC/ASIC are OK, SW exchanges KEEP_ALIVE messages with INSTALLER_DOWN status
         assert switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed;
-        switchStatus[self[2]].installer := Failed;
-        swFailedNum[self[2]] := swFailedNum[self[2]] + 1;        
+        switchStatus[self[2]].installer := Failed;  
         if switchStatus[self[2]].nicAsic = NotFailed /\ switchStatus[self[2]].ofa = NotFailed then
             assert switchStatus[self[2]].installer = Failed;
             controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;    
@@ -1222,11 +1212,11 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         \*    this switch should be at the head of failure ordering sequence.  
         await notFailedSet # {};
         await ~isFinished;
-        await swFailedNum[self[2]] < MAX_NUM_SW_FAILURE;
         await /\ controllerLock = <<NO_LOCK, NO_LOCK>>
               /\ \/ switchLock = <<NO_LOCK, NO_LOCK>>
                  \/ switchLock[2] = self[2];
         await \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE;
+        await sw_fail_ordering_var # <<>>;
         await self[2] \in Head(sw_fail_ordering_var);
         removeFromSeqSet(sw_fail_ordering_var, self[2]);
         
@@ -1859,18 +1849,18 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
        
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a")
-\* Process variable stepOfFailure of process controllerSequencer at line 1327 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1423 col 64 changed to stepOfFailure_c
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df")
+\* Process variable stepOfFailure of process controllerSequencer at line 1317 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1413 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
-          switch2Controller, switchStatus, installedIRs, swFailedNum, 
-          NicAsic2OfaBuff, Ofa2NicAsicBuff, Installer2OfaBuff, 
-          Ofa2InstallerBuff, TCAM, controlMsgCounter, 
-          controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-          switchOrdering, dependencyGraph, IR2SW, idThreadWorkingOnIR, 
-          workerThreadRanking, masterState, controllerStateNIB, IRStatus, 
-          SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, pc
+          switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
+          Ofa2NicAsicBuff, Installer2OfaBuff, Ofa2InstallerBuff, TCAM, 
+          controlMsgCounter, controllerSubmoduleFailNum, 
+          controllerSubmoduleFailStat, switchOrdering, dependencyGraph, IR2SW, 
+          idThreadWorkingOnIR, workerThreadRanking, masterState, 
+          controllerStateNIB, IRStatus, SwSuspensionStatus, IRQueueNIB, 
+          SetScheduledIRs, pc
 
 (* define statement *)
 max(set) == CHOOSE x \in set: \A y \in set: x \geq y
@@ -1947,9 +1937,7 @@ PlausibleDependencySet == UNION {GeneralSetSetUnion({generateConnectedDAG(((sum(
 
 
 
-whichSwitchModel(swID) == IF MAX_NUM_SW_FAILURE = 0
-                             THEN SW_SIMPLE_MODEL
-                             ELSE SW_COMPLEX_MODEL
+whichSwitchModel(swID) == WHICH_SWITCH_MODEL[swID]
 
 swCanReceivePackets(sw) == switchStatus[sw].nicAsic = NotFailed
 
@@ -2060,19 +2048,18 @@ VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation,
 
 vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
            ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
-           switch2Controller, switchStatus, installedIRs, swFailedNum, 
-           NicAsic2OfaBuff, Ofa2NicAsicBuff, Installer2OfaBuff, 
-           Ofa2InstallerBuff, TCAM, controlMsgCounter, 
-           controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-           switchOrdering, dependencyGraph, IR2SW, idThreadWorkingOnIR, 
-           workerThreadRanking, masterState, controllerStateNIB, IRStatus, 
-           SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, pc, ingressPkt, 
-           ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, installerInIR, 
-           statusMsg, notFailedSet, failedElem, failedSet, statusResolveMsg, 
-           recoveredElem, toBeScheduledIRs, nextIR, stepOfFailure_, 
-           nextIRToSent, rowIndex, rowRemove, stepOfFailure_c, 
-           monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
-           controllerFailedModules >>
+           switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
+           Ofa2NicAsicBuff, Installer2OfaBuff, Ofa2InstallerBuff, TCAM, 
+           controlMsgCounter, controllerSubmoduleFailNum, 
+           controllerSubmoduleFailStat, switchOrdering, dependencyGraph, 
+           IR2SW, idThreadWorkingOnIR, workerThreadRanking, masterState, 
+           controllerStateNIB, IRStatus, SwSuspensionStatus, IRQueueNIB, 
+           SetScheduledIRs, pc, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
+           ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
+           failedElem, failedSet, statusResolveMsg, recoveredElem, 
+           toBeScheduledIRs, nextIR, stepOfFailure_, nextIRToSent, rowIndex, 
+           rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
+           resetIR, stepOfFailure, msg, controllerFailedModules >>
 
 ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({rc0} \X {CONT_SEQ})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR})) \cup (({ofc0, rc0} \X {WATCH_DOG}))
 
@@ -2093,7 +2080,6 @@ Init == (* Global variables *)
         /\ switchStatus = [x\in SW |-> [cpu |-> NotFailed, nicAsic |-> NotFailed,
                            ofa |-> NotFailed, installer |-> NotFailed]]
         /\ installedIRs = <<>>
-        /\ swFailedNum = [x \in SW |-> 0]
         /\ NicAsic2OfaBuff = [x \in SW |-> <<>>]
         /\ Ofa2NicAsicBuff = [x \in SW |-> <<>>]
         /\ Installer2OfaBuff = [x \in SW |-> <<>>]
@@ -2174,7 +2160,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type = INSTALL_FLOW, 
-                                       "Failure of assertion at line 1015, column 9.")
+                                       "Failure of assertion at line 1005, column 9.")
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ installedIRs' = Append(installedIRs, ingressPkt'[self].IR)
                              /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], ingressPkt'[self].IR)]
@@ -2183,14 +2169,14 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                                                                 IR |-> ingressPkt'[self].IR])
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 702, column 9 of macro called at line 1022, column 9.")
+                                       "Failure of assertion at line 692, column 9 of macro called at line 1012, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
-                                             switchStatus, swFailedNum, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                             switchStatus, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
                                              Installer2OfaBuff, 
                                              Ofa2InstallerBuff, 
                                              controlMsgCounter, 
@@ -2224,7 +2210,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
                                    \/ ingressIR'[self].type = INSTALL_FLOW, 
-                                   "Failure of assertion at line 1047, column 9.")
+                                   "Failure of assertion at line 1037, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -2234,10 +2220,10 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          sw_fail_ordering_var, ContProcSet, 
                                          SwProcSet, swSeqChangedStatus, 
                                          switch2Controller, switchStatus, 
-                                         installedIRs, swFailedNum, 
-                                         NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                         Installer2OfaBuff, Ofa2InstallerBuff, 
-                                         TCAM, controlMsgCounter, 
+                                         installedIRs, NicAsic2OfaBuff, 
+                                         Ofa2NicAsicBuff, Installer2OfaBuff, 
+                                         Ofa2InstallerBuff, TCAM, 
+                                         controlMsgCounter, 
                                          controllerSubmoduleFailNum, 
                                          controllerSubmoduleFailStat, 
                                          switchOrdering, dependencyGraph, 
@@ -2278,7 +2264,6 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       switch2Controller, 
                                                       switchStatus, 
                                                       installedIRs, 
-                                                      swFailedNum, 
                                                       Ofa2NicAsicBuff, 
                                                       Installer2OfaBuff, 
                                                       Ofa2InstallerBuff, TCAM, 
@@ -2326,7 +2311,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
-                                       "Failure of assertion at line 1075, column 9.")
+                                       "Failure of assertion at line 1065, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2334,8 +2319,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
                                              switch2Controller, switchStatus, 
-                                             installedIRs, swFailedNum, 
-                                             NicAsic2OfaBuff, 
+                                             installedIRs, NicAsic2OfaBuff, 
                                              Installer2OfaBuff, 
                                              Ofa2InstallerBuff, TCAM, 
                                              controlMsgCounter, 
@@ -2366,7 +2350,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 702, column 9 of macro called at line 1084, column 17.")
+                                                      "Failure of assertion at line 692, column 9 of macro called at line 1074, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -2381,7 +2365,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  swSeqChangedStatus, 
                                                  controller2Switch, 
                                                  switchStatus, installedIRs, 
-                                                 swFailedNum, NicAsic2OfaBuff, 
+                                                 NicAsic2OfaBuff, 
                                                  Ofa2NicAsicBuff, 
                                                  Installer2OfaBuff, 
                                                  Ofa2InstallerBuff, TCAM, 
@@ -2422,9 +2406,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1112, column 9.")
+                                   "Failure of assertion at line 1102, column 9.")
                          /\ Assert(ofaInMsg'[self].IR  \in 1..MaxNumIRs, 
-                                   "Failure of assertion at line 1113, column 9.")
+                                   "Failure of assertion at line 1103, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2432,9 +2416,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          SwProcSet, swSeqChangedStatus, 
                                          controller2Switch, switch2Controller, 
                                          switchStatus, installedIRs, 
-                                         swFailedNum, Ofa2NicAsicBuff, 
-                                         Installer2OfaBuff, Ofa2InstallerBuff, 
-                                         TCAM, controlMsgCounter, 
+                                         Ofa2NicAsicBuff, Installer2OfaBuff, 
+                                         Ofa2InstallerBuff, TCAM, 
+                                         controlMsgCounter, 
                                          controllerSubmoduleFailNum, 
                                          controllerSubmoduleFailStat, 
                                          switchOrdering, dependencyGraph, 
@@ -2462,7 +2446,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                            /\ IF ofaInMsg[self].type = INSTALL_FLOW
                                                  THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInMsg[self].IR)]
                                                  ELSE /\ Assert(FALSE, 
-                                                                "Failure of assertion at line 1126, column 21.")
+                                                                "Failure of assertion at line 1116, column 21.")
                                                       /\ UNCHANGED Ofa2InstallerBuff
                                            /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
                                            /\ UNCHANGED ofaInMsg
@@ -2477,7 +2461,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 controller2Switch, 
                                                 switch2Controller, 
                                                 switchStatus, installedIRs, 
-                                                swFailedNum, NicAsic2OfaBuff, 
+                                                NicAsic2OfaBuff, 
                                                 Ofa2NicAsicBuff, 
                                                 Installer2OfaBuff, TCAM, 
                                                 controlMsgCounter, 
@@ -2517,16 +2501,16 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self] \in 1..MaxNumIRs, 
-                                    "Failure of assertion at line 1147, column 9.")
+                                    "Failure of assertion at line 1137, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
                                           SwProcSet, swSeqChangedStatus, 
                                           controller2Switch, switch2Controller, 
                                           switchStatus, installedIRs, 
-                                          swFailedNum, NicAsic2OfaBuff, 
-                                          Ofa2NicAsicBuff, Ofa2InstallerBuff, 
-                                          TCAM, controlMsgCounter, 
+                                          NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                          Ofa2InstallerBuff, TCAM, 
+                                          controlMsgCounter, 
                                           controllerSubmoduleFailNum, 
                                           controllerSubmoduleFailStat, 
                                           switchOrdering, dependencyGraph, 
@@ -2569,7 +2553,6 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       switch2Controller, 
                                                       switchStatus, 
                                                       installedIRs, 
-                                                      swFailedNum, 
                                                       NicAsic2OfaBuff, 
                                                       Installer2OfaBuff, 
                                                       Ofa2InstallerBuff, TCAM, 
@@ -2614,7 +2597,7 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self] \in 1..MaxNumIRs, 
-                                       "Failure of assertion at line 1179, column 8.")
+                                       "Failure of assertion at line 1169, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2622,8 +2605,8 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
                                              switch2Controller, switchStatus, 
-                                             installedIRs, swFailedNum, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                             installedIRs, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
                                              Installer2OfaBuff, TCAM, 
                                              controlMsgCounter, 
                                              controllerSubmoduleFailNum, 
@@ -2667,7 +2650,7 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     swSeqChangedStatus, 
                                                     controller2Switch, 
                                                     switch2Controller, 
-                                                    switchStatus, swFailedNum, 
+                                                    switchStatus, 
                                                     NicAsic2OfaBuff, 
                                                     Ofa2NicAsicBuff, 
                                                     Installer2OfaBuff, 
@@ -2723,7 +2706,6 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          switch2Controller, 
                                                          switchStatus, 
                                                          installedIRs, 
-                                                         swFailedNum, 
                                                          NicAsic2OfaBuff, 
                                                          Ofa2NicAsicBuff, 
                                                          Ofa2InstallerBuff, 
@@ -2770,14 +2752,14 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ notFailedSet' = [notFailedSet EXCEPT ![self] = returnSwitchElementsNotFailed(self[2])]
                        /\ notFailedSet'[self] # {}
                        /\ ~isFinished
-                       /\ swFailedNum[self[2]] < MAX_NUM_SW_FAILURE
                        /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                           /\ \/ switchLock = <<NO_LOCK, NO_LOCK>>
                              \/ switchLock[2] = self[2]
                        /\ \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE
+                       /\ sw_fail_ordering_var # <<>>
                        /\ self[2] \in Head(sw_fail_ordering_var)
                        /\ Assert((self[2]) \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 452, column 9 of macro called at line 1231, column 9.")
+                                 "Failure of assertion at line 446, column 9 of macro called at line 1221, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{(self[2])})>> \o Tail(sw_fail_ordering_var)
@@ -2786,11 +2768,10 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ IF failedElem'[self] = "cpu"
                              THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                   /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                            "Failure of assertion at line 526, column 9 of macro called at line 1240, column 17.")
+                                            "Failure of assertion at line 519, column 9 of macro called at line 1230, column 17.")
                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                           ![self[2]].ofa = Failed,
                                                                           ![self[2]].installer = Failed]
-                                  /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                   /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = <<>>]
                                   /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = <<>>]
                                   /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = <<>>]
@@ -2809,9 +2790,8 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                              ELSE /\ IF failedElem'[self] = "ofa"
                                         THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                              /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                       "Failure of assertion at line 579, column 9 of macro called at line 1243, column 17.")
+                                                       "Failure of assertion at line 571, column 9 of macro called at line 1233, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
-                                             /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                              /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                    THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                         /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
@@ -2826,12 +2806,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                         ELSE /\ IF failedElem'[self] = "installer"
                                                    THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                         /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                  "Failure of assertion at line 624, column 9 of macro called at line 1246, column 17.")
+                                                                  "Failure of assertion at line 615, column 9 of macro called at line 1236, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
-                                                        /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                               THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                             "Failure of assertion at line 628, column 13 of macro called at line 1246, column 17.")
+                                                                             "Failure of assertion at line 618, column 13 of macro called at line 1236, column 17.")
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                 swID |-> self[2],
@@ -2846,9 +2825,8 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                    ELSE /\ IF failedElem'[self] = "nicAsic"
                                                               THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                                    /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                             "Failure of assertion at line 471, column 9 of macro called at line 1249, column 17.")
+                                                                             "Failure of assertion at line 465, column 9 of macro called at line 1239, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
-                                                                   /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
@@ -2856,11 +2834,10 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                 num |-> controlMsgCounter'[self[2]]]]
                                                                    /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                               ELSE /\ Assert(FALSE, 
-                                                                             "Failure of assertion at line 1250, column 14.")
+                                                                             "Failure of assertion at line 1240, column 14.")
                                                                    /\ UNCHANGED << swSeqChangedStatus, 
                                                                                    controller2Switch, 
                                                                                    switchStatus, 
-                                                                                   swFailedNum, 
                                                                                    controlMsgCounter, 
                                                                                    statusMsg >>
                                   /\ UNCHANGED << NicAsic2OfaBuff, 
@@ -2902,7 +2879,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ IF recoveredElem'[self] = "cpu"
                                     THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                          /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 554, column 9 of macro called at line 1275, column 39.")
+                                                   "Failure of assertion at line 546, column 9 of macro called at line 1265, column 39.")
                                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                  ![self[2]].ofa = NotFailed,
                                                                                  ![self[2]].installer = NotFailed]
@@ -2925,7 +2902,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                     ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                THEN /\ nicAsicStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                              "Failure of assertion at line 498, column 9 of macro called at line 1276, column 46.")
+                                                              "Failure of assertion at line 491, column 9 of macro called at line 1266, column 46.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                     /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                     /\ IF switchStatus'[self[2]].ofa = Failed
@@ -2942,7 +2919,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "ofa"
                                                           THEN /\ ofaStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                         "Failure of assertion at line 602, column 9 of macro called at line 1277, column 42.")
+                                                                         "Failure of assertion at line 593, column 9 of macro called at line 1267, column 42.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                      THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -2958,11 +2935,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "installer"
                                                                      THEN /\ installerInStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                    "Failure of assertion at line 647, column 9 of macro called at line 1278, column 48.")
+                                                                                    "Failure of assertion at line 637, column 9 of macro called at line 1268, column 48.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                 THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                               "Failure of assertion at line 650, column 13 of macro called at line 1278, column 48.")
+                                                                                               "Failure of assertion at line 640, column 13 of macro called at line 1268, column 48.")
                                                                                      /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                 swID |-> self[2],
@@ -2974,7 +2951,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                      controlMsgCounter, 
                                                                                                      statusResolveMsg >>
                                                                      ELSE /\ Assert(FALSE, 
-                                                                                    "Failure of assertion at line 1279, column 14.")
+                                                                                    "Failure of assertion at line 1269, column 14.")
                                                                           /\ UNCHANGED << swSeqChangedStatus, 
                                                                                           switchStatus, 
                                                                                           controlMsgCounter, 
@@ -2990,8 +2967,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               sw_fail_ordering_var, 
                                               ContProcSet, SwProcSet, 
                                               switch2Controller, installedIRs, 
-                                              swFailedNum, TCAM, 
-                                              controllerSubmoduleFailNum, 
+                                              TCAM, controllerSubmoduleFailNum, 
                                               controllerSubmoduleFailStat, 
                                               switchOrdering, dependencyGraph, 
                                               IR2SW, idThreadWorkingOnIR, 
@@ -3033,17 +3009,16 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 702, column 9 of macro called at line 1313, column 9.")
+                             "Failure of assertion at line 692, column 9 of macro called at line 1303, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstall, 
                                    sw_fail_ordering_var, ContProcSet, 
                                    SwProcSet, swSeqChangedStatus, 
                                    controller2Switch, switch2Controller, 
-                                   switchStatus, installedIRs, swFailedNum, 
-                                   NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                   Installer2OfaBuff, Ofa2InstallerBuff, TCAM, 
-                                   controlMsgCounter, 
+                                   switchStatus, installedIRs, NicAsic2OfaBuff, 
+                                   Ofa2NicAsicBuff, Installer2OfaBuff, 
+                                   Ofa2InstallerBuff, TCAM, controlMsgCounter, 
                                    controllerSubmoduleFailNum, 
                                    controllerSubmoduleFailStat, switchOrdering, 
                                    dependencyGraph, IR2SW, idThreadWorkingOnIR, 
@@ -3076,9 +3051,8 @@ ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                                            swSeqChangedStatus, 
                                            controller2Switch, 
                                            switch2Controller, switchStatus, 
-                                           installedIRs, swFailedNum, 
-                                           NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                           Installer2OfaBuff, 
+                                           installedIRs, NicAsic2OfaBuff, 
+                                           Ofa2NicAsicBuff, Installer2OfaBuff, 
                                            Ofa2InstallerBuff, TCAM, 
                                            controlMsgCounter, 
                                            controllerSubmoduleFailNum, 
@@ -3135,9 +3109,8 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             swSeqChangedStatus, 
                                             controller2Switch, 
                                             switch2Controller, switchStatus, 
-                                            installedIRs, swFailedNum, 
-                                            NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                            Installer2OfaBuff, 
+                                            installedIRs, NicAsic2OfaBuff, 
+                                            Ofa2NicAsicBuff, Installer2OfaBuff, 
                                             Ofa2InstallerBuff, TCAM, 
                                             controlMsgCounter, switchOrdering, 
                                             dependencyGraph, IR2SW, 
@@ -3188,10 +3161,10 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                        ContProcSet, SwProcSet, 
                                        swSeqChangedStatus, controller2Switch, 
                                        switch2Controller, switchStatus, 
-                                       installedIRs, swFailedNum, 
-                                       NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                       Installer2OfaBuff, Ofa2InstallerBuff, 
-                                       TCAM, controlMsgCounter, switchOrdering, 
+                                       installedIRs, NicAsic2OfaBuff, 
+                                       Ofa2NicAsicBuff, Installer2OfaBuff, 
+                                       Ofa2InstallerBuff, TCAM, 
+                                       controlMsgCounter, switchOrdering, 
                                        dependencyGraph, IR2SW, 
                                        idThreadWorkingOnIR, 
                                        workerThreadRanking, masterState, 
@@ -3228,7 +3201,6 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           switch2Controller, 
                                                           switchStatus, 
                                                           installedIRs, 
-                                                          swFailedNum, 
                                                           NicAsic2OfaBuff, 
                                                           Ofa2NicAsicBuff, 
                                                           Installer2OfaBuff, 
@@ -3315,20 +3287,20 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           swSeqChangedStatus, 
                                           controller2Switch, switch2Controller, 
                                           switchStatus, installedIRs, 
-                                          swFailedNum, NicAsic2OfaBuff, 
-                                          Ofa2NicAsicBuff, Installer2OfaBuff, 
-                                          Ofa2InstallerBuff, TCAM, 
-                                          controlMsgCounter, switchOrdering, 
-                                          dependencyGraph, IR2SW, 
-                                          workerThreadRanking, masterState, 
-                                          IRStatus, SwSuspensionStatus, 
-                                          SetScheduledIRs, ingressPkt, 
-                                          ingressIR, egressMsg, ofaInMsg, 
-                                          ofaOutConfirmation, installerInIR, 
-                                          statusMsg, notFailedSet, failedElem, 
-                                          failedSet, statusResolveMsg, 
-                                          recoveredElem, toBeScheduledIRs, 
-                                          nextIR, stepOfFailure_, rowRemove, 
+                                          NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                          Installer2OfaBuff, Ofa2InstallerBuff, 
+                                          TCAM, controlMsgCounter, 
+                                          switchOrdering, dependencyGraph, 
+                                          IR2SW, workerThreadRanking, 
+                                          masterState, IRStatus, 
+                                          SwSuspensionStatus, SetScheduledIRs, 
+                                          ingressPkt, ingressIR, egressMsg, 
+                                          ofaInMsg, ofaOutConfirmation, 
+                                          installerInIR, statusMsg, 
+                                          notFailedSet, failedElem, failedSet, 
+                                          statusResolveMsg, recoveredElem, 
+                                          toBeScheduledIRs, nextIR, 
+                                          stepOfFailure_, rowRemove, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, msg, 
                                           controllerFailedModules >>
@@ -3361,7 +3333,7 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 controller2Switch, 
                                                 switch2Controller, 
                                                 switchStatus, installedIRs, 
-                                                swFailedNum, NicAsic2OfaBuff, 
+                                                NicAsic2OfaBuff, 
                                                 Ofa2NicAsicBuff, 
                                                 Installer2OfaBuff, 
                                                 Ofa2InstallerBuff, TCAM, 
@@ -3424,7 +3396,6 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    swSeqChangedStatus, 
                                                    switch2Controller, 
                                                    switchStatus, installedIRs, 
-                                                   swFailedNum, 
                                                    NicAsic2OfaBuff, 
                                                    Ofa2NicAsicBuff, 
                                                    Installer2OfaBuff, 
@@ -3478,7 +3449,6 @@ WaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "WaitForIRToHaveCorrectStatu
                                                       switch2Controller, 
                                                       switchStatus, 
                                                       installedIRs, 
-                                                      swFailedNum, 
                                                       NicAsic2OfaBuff, 
                                                       Ofa2NicAsicBuff, 
                                                       Installer2OfaBuff, 
@@ -3538,9 +3508,8 @@ ReScheduleifIRNone(self) == /\ pc[self] = "ReScheduleifIRNone"
                                             swSeqChangedStatus, 
                                             controller2Switch, 
                                             switch2Controller, switchStatus, 
-                                            installedIRs, swFailedNum, 
-                                            NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                            Installer2OfaBuff, 
+                                            installedIRs, NicAsic2OfaBuff, 
+                                            Ofa2NicAsicBuff, Installer2OfaBuff, 
                                             Ofa2InstallerBuff, TCAM, 
                                             controlMsgCounter, switchOrdering, 
                                             dependencyGraph, IR2SW, 
@@ -3592,7 +3561,6 @@ ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSe
                                                          switch2Controller, 
                                                          switchStatus, 
                                                          installedIRs, 
-                                                         swFailedNum, 
                                                          NicAsic2OfaBuff, 
                                                          Ofa2NicAsicBuff, 
                                                          Installer2OfaBuff, 
@@ -3671,7 +3639,7 @@ RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
                                                   controller2Switch, 
                                                   switch2Controller, 
                                                   switchStatus, installedIRs, 
-                                                  swFailedNum, NicAsic2OfaBuff, 
+                                                  NicAsic2OfaBuff, 
                                                   Ofa2NicAsicBuff, 
                                                   Installer2OfaBuff, 
                                                   Ofa2InstallerBuff, TCAM, 
@@ -3712,7 +3680,6 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
                                                       switch2Controller, 
                                                       switchStatus, 
                                                       installedIRs, 
-                                                      swFailedNum, 
                                                       NicAsic2OfaBuff, 
                                                       Ofa2NicAsicBuff, 
                                                       Installer2OfaBuff, 
@@ -3786,7 +3753,6 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              switch2Controller, 
                                                              switchStatus, 
                                                              installedIRs, 
-                                                             swFailedNum, 
                                                              NicAsic2OfaBuff, 
                                                              Ofa2NicAsicBuff, 
                                                              Installer2OfaBuff, 
@@ -3859,7 +3825,6 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     controller2Switch, 
                                                     switch2Controller, 
                                                     switchStatus, installedIRs, 
-                                                    swFailedNum, 
                                                     NicAsic2OfaBuff, 
                                                     Ofa2NicAsicBuff, 
                                                     Installer2OfaBuff, 
@@ -3926,7 +3891,6 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    switch2Controller, 
                                                                    switchStatus, 
                                                                    installedIRs, 
-                                                                   swFailedNum, 
                                                                    NicAsic2OfaBuff, 
                                                                    Ofa2NicAsicBuff, 
                                                                    Installer2OfaBuff, 
@@ -3991,8 +3955,8 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
                                              switch2Controller, switchStatus, 
-                                             installedIRs, swFailedNum, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                             installedIRs, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
                                              Installer2OfaBuff, 
                                              Ofa2InstallerBuff, TCAM, 
                                              controlMsgCounter, switchOrdering, 
@@ -4045,7 +4009,6 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    controller2Switch, 
                                                    switch2Controller, 
                                                    switchStatus, installedIRs, 
-                                                   swFailedNum, 
                                                    NicAsic2OfaBuff, 
                                                    Ofa2NicAsicBuff, 
                                                    Installer2OfaBuff, 
@@ -4100,7 +4063,6 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           switch2Controller, 
                                                           switchStatus, 
                                                           installedIRs, 
-                                                          swFailedNum, 
                                                           NicAsic2OfaBuff, 
                                                           Ofa2NicAsicBuff, 
                                                           Installer2OfaBuff, 
@@ -4166,9 +4128,8 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            swSeqChangedStatus, 
                                            controller2Switch, 
                                            switch2Controller, switchStatus, 
-                                           installedIRs, swFailedNum, 
-                                           NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                           Installer2OfaBuff, 
+                                           installedIRs, NicAsic2OfaBuff, 
+                                           Ofa2NicAsicBuff, Installer2OfaBuff, 
                                            Ofa2InstallerBuff, TCAM, 
                                            controlMsgCounter, switchOrdering, 
                                            dependencyGraph, IR2SW, 
@@ -4217,7 +4178,7 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      sw_fail_ordering_var, ContProcSet, 
                                      SwProcSet, swSeqChangedStatus, 
                                      controller2Switch, switch2Controller, 
-                                     switchStatus, installedIRs, swFailedNum, 
+                                     switchStatus, installedIRs, 
                                      NicAsic2OfaBuff, Ofa2NicAsicBuff, 
                                      Installer2OfaBuff, Ofa2InstallerBuff, 
                                      TCAM, controlMsgCounter, switchOrdering, 
@@ -4258,7 +4219,6 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    switch2Controller, 
                                                                    switchStatus, 
                                                                    installedIRs, 
-                                                                   swFailedNum, 
                                                                    NicAsic2OfaBuff, 
                                                                    Ofa2NicAsicBuff, 
                                                                    Installer2OfaBuff, 
@@ -4322,13 +4282,13 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                        /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                 "Failure of assertion at line 1783, column 9.")
+                                                 "Failure of assertion at line 1773, column 9.")
                                        /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                 "Failure of assertion at line 1784, column 9.")
+                                                 "Failure of assertion at line 1774, column 9.")
                                        /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                              ELSE /\ Assert(FALSE, 
-                                                            "Failure of assertion at line 1814, column 18.")
+                                                            "Failure of assertion at line 1804, column 18.")
                                                   /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED << switchLock, 
                                                        FirstInstall, 
@@ -4339,7 +4299,6 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        switch2Controller, 
                                                        switchStatus, 
                                                        installedIRs, 
-                                                       swFailedNum, 
                                                        NicAsic2OfaBuff, 
                                                        Ofa2NicAsicBuff, 
                                                        Installer2OfaBuff, 
@@ -4402,7 +4361,6 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          controller2Switch, 
                                                          switchStatus, 
                                                          installedIRs, 
-                                                         swFailedNum, 
                                                          NicAsic2OfaBuff, 
                                                          Ofa2NicAsicBuff, 
                                                          Installer2OfaBuff, 
@@ -4464,8 +4422,8 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
                                              switch2Controller, switchStatus, 
-                                             installedIRs, swFailedNum, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+                                             installedIRs, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
                                              Installer2OfaBuff, 
                                              Ofa2InstallerBuff, TCAM, 
                                              controlMsgCounter, switchOrdering, 
@@ -4499,7 +4457,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 1851, column 13.")
+                                               "Failure of assertion at line 1841, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -4510,7 +4468,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                                 controller2Switch, 
                                                 switch2Controller, 
                                                 switchStatus, installedIRs, 
-                                                swFailedNum, NicAsic2OfaBuff, 
+                                                NicAsic2OfaBuff, 
                                                 Ofa2NicAsicBuff, 
                                                 Installer2OfaBuff, 
                                                 Ofa2InstallerBuff, TCAM, 
@@ -4683,5 +4641,5 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
 
 =============================================================================
 \* Modification History
-\* Last modified Wed Feb 10 10:41:45 PST 2021 by root
+\* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root

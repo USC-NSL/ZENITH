@@ -11,3 +11,6 @@ might fail in any order.
 * MAX_NUM_CONTROLLER_SUB_FAILURE; defines the maxmimum number of internal partial failures, each component of 
 control plane might face. e.g. [ofc0 |-> 1, rc0 |-> 0]
 * MaxNumIRs; the maximum number of IRs (all the possible non-isomorphic DAGs are generated based on this). 
+* WHICH_SW_MODEL; determines which of the two available models each switch use (either SW_SIMPLE_MODEL or 
+SW_COMPLEX_MODEL. e.g. (s0 :> SW_COMPLEX_MODEL) @@ (s1 :> SW_SIMPLE_MODEL). Note that SW_SIMPLE_MODEL does
+everything in one atomic operation and does not fail at all. 
