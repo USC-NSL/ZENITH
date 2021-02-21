@@ -29,7 +29,6 @@ CONSTANTS SW,  \* set of switches
 (*  + NIB Event Handler: responsible for handling notifications fron NIB   *)
 (*          and making necessary changes to NIB (including failover)       *)
 (*  + Watchdog: in case of detecting failure in each of the above          *)
-(*          processes, it restarts the process                             *)
 (*       each of these modules execpt Watchdog can fail independently      *)
 (***************************************************************************)
 (***************************************************************************)
@@ -219,7 +218,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
 (************************* variables ***************************************)
     variables (*************** Some Auxiliary Vars ***********************)
               switchLock = <<NO_LOCK, NO_LOCK>>,
-              controllerLock = <<NO_LOCK, NO_LOCK>>, 
+              controllerLocalLock = [x \in {ofc0, ofc1, rc0} |-> <<NO_LOCK, NO_LOCK>>],
+              controllerGlobalLock = <<NO_LOCK, NO_LOCK>>, 
               FirstInstall = [x \in 1..MAX_NUM_IRs |-> 0],
               sw_fail_ordering_var = SW_FAIL_ORDERING,
               ContProcSet = (({rc0} \X {CONT_SEQ})) \cup (({ofc0, ofc1} \X CONTROLLER_THREAD_POOL)) 
@@ -356,7 +356,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
               \* list of subscribers of NIB
               subscribeList = [IRQueueNIB |-> {ofc0}], 
               \* used for synchronization between sequencer and workers
-              SetScheduledIRs = [y \in SW |-> {}],\* @Pooria, consider moving this variable to RC
+              SetScheduledIRs = [y \in SW |-> {}],
               \* status of OFC failover in NIB
               ofcFailoverStateNIB = [y \in {ofc0, ofc1} |-> FAILOVER_NONE]
     define
@@ -567,7 +567,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* getIRSetToReconcile(SID) == {x \in 1..MAX_NUM_IRs: /\ IR2SW[x] = SID
         \*                                                 /\ IRStatus[x] \notin {IR_DONE, IR_NONE, IR_SUSPEND}}
         getIRSetToReset(SID) == {x \in 1..MAX_NUM_IRs: /\ IR2SW[x] = SID
-                                                     /\ IRStatus[x] \notin {IR_DONE, IR_NONE}}
+                                                       /\ IRStatus[x] \notin {IR_DONE, IR_NONE}}
         \* getIRSetToSuspend(CID, SID) == {x \in SetScheduledIRs[SID]: IRStatus[x] = IR_NONE}           
                                                                              
         \*************************** Monitoring Server **********************
@@ -577,8 +577,10 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                                                                    /\ controllerSubmoduleFailStat[x] = Failed}
                                                                                                                                                                           
         (***************** SystemWide Check **********************************)        
-        isFinished == \A x \in 1..MAX_NUM_IRs: IRStatus[x] = IR_DONE
-                                                                                                                
+        isFinished(CID) == /\ \A x \in getSetIRsForSwitch(CID): IRStatus[x] = IR_DONE
+                           /\ \/ SHOULD_FAILOVER = 0
+                              \/ /\ \A x \in SW: switchControllerRoleStatus[x][ofc0] = ROLE_SLAVE
+                                 /\ \A x \in SW: switchControllerRoleStatus[x][ofc1] = ROLE_MASTER 
     end define
     
     (*******************************************************************)
@@ -861,22 +863,25 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     \* Lock system is used to reduce the unnecessary interleavings and
     \* hence reduce the verification runtime. 
     \* at each time, only the module who owns the Lock can proceed
+    \* we have 3 types of Lock; switchLock, controllerLocalLock, and 
+    \* controllerGlobalLock
     
     \* ===========Wait for Lock==========
     macro switchWaitForLock()
     begin
         \* switch can only proceed if
-        \* 1. controller does not own the Lock
-        \* 2. either no other switch has the Lock or it self has the lock        
-        await controllerLock = <<NO_LOCK, NO_LOCK>>; 
+        \* 1. control plane does not own the Lock
+        \* 2. either no other switch has the Lock or the switch itself 
+        \*    has the lock        
+        await controllerGlobalLock = <<NO_LOCK, NO_LOCK>>;
         await \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
               \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                  /\ switchLock[2] = self[2];
     end macro;
     \* =================================
     
-    \* ===========Acquire Lock==========
-    macro acquireLock()
+    \* ==== Switch Acquire Lock =======
+    macro switchAcquireLock()
     begin
         \* switch acquires the lock if switchWaitForLock conditions are 
         \* satisfied
@@ -885,9 +890,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     end macro;
     \* =================================
     
-    
     \* ====== Acquire & Change Lock =====
-    macro acquireAndChangeLock(nextLockHolder)
+    macro switchAcquireAndChangeLock(nextLockHolder)
     begin
         \* Using this macro, processes can pass lock to another process        
         switchWaitForLock();
@@ -896,21 +900,31 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     \* =================================
     
     \* ========= Release Lock ==========
-    macro releaseLock(prevLockHolder)
+    macro switchReleaseLock()
     begin
-        assert \/ switchLock[2] = prevLockHolder[2]
+        assert \/ switchLock[2] = self[2]
                \/ switchLock[2] = NO_LOCK;
         switchLock := <<NO_LOCK, NO_LOCK>>;
     end macro;
     \* =================================
     
-    \* ========= Is Lock free ==========
-    macro controllerWaitForLockFree()
+    \* ===== Is Global Lock free =======
+    macro controllerWaitForGlobalLockFree()
     begin
-        \* controller only proceeds when the following two conditions 
+        await \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+              \/ controllerGlobalLock[1] = self[1];
+        await switchLock = <<NO_LOCK, NO_LOCK>>;    
+    end macro
+    \* =================================
+        
+    \* ===== Is Local Lock free ========
+    macro controllerWaitForLocalLockFree()
+    begin
+        \* controller only proceeds when the following three conditions 
         \* are satified;
-        await controllerLock = <<NO_LOCK, NO_LOCK>>;
-        await switchLock = <<NO_LOCK, NO_LOCK>>;
+        controllerWaitForGlobalLockFree();
+        await \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+              \/ controllerLocalLock[self[1]] = self;
     end macro
     \* =================================
     
@@ -919,23 +933,37 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     begin
         await switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
     end macro
+    \* ================================
     
-    \* ===== Controller Acquire Lock ===
-    macro controllerAcquireLock(newLockHolder)
+    \* = Controller Acquire Glob Lock ==
+    macro controllerAcquireGlobalLock()
     begin
-        controllerWaitForLockFree();
-        controllerLock := newLockHolder;
+        controllerWaitForGlobalLockFree();
+        controllerGlobalLock := self;
     end macro
     \* =================================
     
-    \* ==== controller release Lock ====
-    macro controllerReleaseLock(prevLockHolder)
+    \* = Controller Acquire Local Lock =
+    macro controllerAcquireLocalLock()
+    begin
+        controllerWaitForLocalLockFree();
+        controllerLocalLock[self[1]] := self;
+    end macro
+    \* =================================
+    
+    \* = controller release Local Lock =
+    macro controllerReleaseLocalLock()
     begin
         \* only the controller process itself can release the controller lock. 
-        await \/ controllerLock = prevLockHolder
-              \/ controllerLock = <<NO_LOCK, NO_LOCK>>;
-        await switchLock = <<NO_LOCK, NO_LOCK>>;
-        controllerLock := <<NO_LOCK, NO_LOCK>>;
+        controllerWaitForLocalLockFree();
+        controllerLocalLock[self[1]] := <<NO_LOCK, NO_LOCK>>;
+    end macro
+    \* =================================
+    
+    macro controllerReleaseGlobalLock()
+    begin
+        controllerWaitForGlobalLockFree();
+        controllerGlobalLock := <<NO_LOCK, NO_LOCK>>;
     end macro
     \* =================================    
                   
@@ -1122,7 +1150,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
             \* TODO(@Pooria)
             skip; 
         end if;
-        releaseLock(self);
+        switchReleaseLock();
     end while;
     end process;
     
@@ -1149,13 +1177,13 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         ingressIR := Head(controller2Switch[self[2]]);
         assert ingressIR.type \in {ROLE_REQ, INSTALL_FLOW};
         
-        acquireLock();
+        switchAcquireLock();
         controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
         
         \* Step2: if it is an OpenFlow packet, append it to the OFA input buffer
         SwitchNicAsicInsertToOfaBuff:
             if swCanReceivePackets(self[2]) then
-                acquireAndChangeLock(<<OFA_IN, self[2]>>);
+                switchAcquireAndChangeLock(<<OFA_IN, self[2]>>);
                 NicAsic2OfaBuff[self[2]] := Append(NicAsic2OfaBuff[self[2]], ingressIR); 
             else
                 ingressIR := [type |-> 0];
@@ -1174,7 +1202,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         await swCanReceivePackets(self[2]);
         await  Len(Ofa2NicAsicBuff[self[2]]) > 0;
         egressMsg := Head(Ofa2NicAsicBuff[self[2]]);
-        acquireLock();
+        switchAcquireLock();
         assert egressMsg.type \in {INSTALLED_SUCCESSFULLY, ROLE_REPLY, BAD_REQUEST};
         Ofa2NicAsicBuff[self[2]] := Tail(Ofa2NicAsicBuff[self[2]]);
         
@@ -1182,7 +1210,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         SwitchNicAsicSendOutMsg:
             if swCanReceivePackets(self[2]) then
                 switchWaitForLock();
-                releaseLock(self);
+                switchReleaseLock();
                 switch2Controller[egressMsg.to] := Append(switch2Controller[egressMsg.to], egressMsg);
             else
                 egressMsg := [type |-> 0];
@@ -1211,7 +1239,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* Step 1: Pick the first packet from buffer, process and extract the IR
         await swOFACanProcessIRs(self[2]);
         await Len(NicAsic2OfaBuff[self[2]]) > 0;
-        acquireLock();
+        switchAcquireLock();
         ofaInMsg := Head(NicAsic2OfaBuff[self[2]]);           
         assert ofaInMsg.to = self[2];
         assert \/ /\ ofaInMsg.type = ROLE_REQ
@@ -1234,14 +1262,14 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                 if ofaInMsg.type = INSTALL_FLOW then
                     if hasModificationAccess(self[2], ofaInMsg.from) then 
                         \* 2.1. When IR from master
-                        acquireAndChangeLock(<<INSTALLER, self[2]>>);
+                        switchAcquireAndChangeLock(<<INSTALLER, self[2]>>);
                     
                         Ofa2InstallerBuff[self[2]] := Append(Ofa2InstallerBuff[self[2]], 
                                                                   [IR |-> ofaInMsg.IR, 
                                                                   from |-> ofaInMsg.from]);
                     else 
                         \* 2.2. when IR from slave
-                        acquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
+                        switchAcquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
                         sendBadReqError(ofaInMsg.from, ofaInMsg.IR);        
                     end if;
                     
@@ -1254,12 +1282,12 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                     
                     \* TODO(Pooria) skipped the ROLE_STATUS part
                     assert ofaInMsg.roletype \in {ROLE_MASTER, ROLE_SLAVE, ROLE_EQUAL};
-                    acquireLock();
+                    switchAcquireLock();
                     updateRole(ofaInMsg.from, ofaInMsg.roletype);
                         
                     SwitchSendRoleReply:
                         if swOFACanProcessIRs(self[2]) then 
-                            acquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
+                            switchAcquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
                             sendRoleReply(ofaInMsg.from, ofaInMsg.roletype);
                         else
                             ofaInMsg := [type |-> 0];
@@ -1286,7 +1314,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* Step 1: pick the first confirmation from installer
         await swOFACanProcessIRs(self[2]);
         await Installer2OfaBuff[self[2]] # <<>>;
-        acquireLock();
+        switchAcquireLock();
         ofaOutConfirmation := Head(Installer2OfaBuff[self[2]]);
         Installer2OfaBuff[self[2]] := Tail(Installer2OfaBuff[self[2]]);
         assert ofaOutConfirmation.IR \in 1..MAX_NUM_IRs;
@@ -1295,7 +1323,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* through the NIC/ASIC
         SendInstallationConfirmation:
             if swOFACanProcessIRs(self[2]) then
-                acquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
+                switchAcquireAndChangeLock(<<NIC_ASIC_OUT, self[2]>>);
                 \* Should only send back confirmation if IR is from the controller 
                 \* who is currently  the master or equal role. otherwise, should send BadRequest.
                 \* This is a simplification of Barrier in OpenFlow.
@@ -1323,7 +1351,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        \* Step 1: pick the first instruction from the input buffer      
        await swCanInstallIRs(self[2]);
        await Len(Ofa2InstallerBuff[self[2]]) > 0;
-       acquireLock();
+       switchAcquireLock();
        installerInIR := Head(Ofa2InstallerBuff[self[2]]);
        assert installerInIR.IR \in 1..MAX_NUM_IRs;
        Ofa2InstallerBuff[self[2]] := Tail(Ofa2InstallerBuff[self[2]]);
@@ -1331,7 +1359,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        \* Step 2: install the IR to the TCAM
        SwitchInstallerInsert2TCAM:
             if swCanInstallIRs(self[2]) then
-                acquireLock();
+                switchAcquireLock();
                 installToTCAM(installerInIR.from, installerInIR.IR);   
             else
                 installerInIR := [type |-> 0];
@@ -1341,7 +1369,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        \* Step 3: send the confirmation to the OFA
        SwitchInstallerSendConfirmation:
             if swCanInstallIRs(self[2]) then
-                acquireAndChangeLock(<<OFA_OUT, self[2]>>);
+                switchAcquireAndChangeLock(<<OFA_OUT, self[2]>>);
                 Installer2OfaBuff[self[2]] := Append(Installer2OfaBuff[self[2]], installerInIR);
             else
                 installerInIR := [type |-> 0];
@@ -1371,13 +1399,10 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \*    this switch should be at the head of failure ordering sequence.  
         assert statusMsg.type = 0;
         await notFailedSet # {};
-        await ~isFinished;
+        await ~isFinished(self[2]);
         await swFailedNum[self[2]] < MAX_NUM_SW_FAILURE;
-        \* TODO(@Pooria): make sure below optimization does not hurt.
-        await /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-              /\ \/ switchLock[2] = self[2];
-                 \*\/ switchLock = <<NO_LOCK, NO_LOCK>>;
-        await \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE;
+        await /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+              /\ switchLock[2] = self[2];
         await self[2] \in Head(sw_fail_ordering_var);
         removeFromSeqSet(sw_fail_ordering_var, self[2]);
         
@@ -1405,10 +1430,10 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* to all the controllers (since all of them have an OF TCP channel with the
         \* switch, failure of OFA/NIC/ASIC/CPU would cause termination of the channel
         \* and all of the controllers would be notified of this)
-        \* @TODO(Pooria): should check if above holds for Installer as well. 
+        \* @TODO(Pooria): For now we do not consider failure of Installer.
         if shouldSendFailMsgToAll(statusMsg) then
             prevLockHolder := switchLock;
-            acquireLock();
+            switchAcquireLock();
             controllerSet := {ofc0, ofc1};
             swFailureSendStatusMsg:
                 while controllerSet # {} do
@@ -1417,7 +1442,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                     swSeqChangedStatus[nxtController] := Append(swSeqChangedStatus[nxtController], statusMsg);
                 end while;
                 statusMsg := [type |-> 0];
-                acquireAndChangeLock(prevLockHolder);
+                switchAcquireAndChangeLock(prevLockHolder);
         \*elsif statusMsg.type = KEEP_ALIVE /\ statusMsg.status.installerStatus = Failed then
         \* if installer is failed, we should notify all the switches with Master/Equal.
         \* Installer 
@@ -1434,7 +1459,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         end if;
         
          
-        \* releaseLock(self);
+        \* switchReleaseLock(self);
     end while
     end process
     \* =================================
@@ -1451,8 +1476,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         assert statusResolveMsg.type = 0;
         failedSet := returnSwitchFailedElements(self[2]);
         await Cardinality(failedSet) > 0;
-        await ~isFinished;
-        await /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+        await ~isFinished(self[2]);
+        await /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
               /\ switchLock = <<NO_LOCK, NO_LOCK>>;
         with elem \in failedSet do
             recoveredElem := elem;
@@ -1468,19 +1493,19 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* if OFA or NIC/ASIC or CPU recovers, we should disseminate the StatusMsg
         \* to all the controllers (recovery of OFA/NIC/ASIC/CPU would cause initialization
         \* of OpenFlow channel with all the controllers)
-        \* @TODO(Pooria): should check if above holds for Installer as well. 
+        \* @TODO(Pooria): For now, we do not consider failure and recovery of the installer. 
         if shouldSendRecoveryMsgToAll(statusResolveMsg) then
             prevLockHolder := switchLock;
-            acquireLock();
+            switchAcquireLock();
             controllerSet := {ofc0, ofc1};
             swRecoverySendStatusMsg:
                 while controllerSet # {} do
-                    nxtController := CHOOSE x \in controllerSet: TRUE;
+                    nxtController := CHOOSE x \in controllerSet: TRUE; 
                     controllerSet := controllerSet \ {nxtController};
                     swSeqChangedStatus[nxtController] := Append(swSeqChangedStatus[nxtController], statusResolveMsg);
                 end while;
                 statusResolveMsg := [type |-> 0];
-                acquireAndChangeLock(prevLockHolder);
+                switchAcquireAndChangeLock(prevLockHolder);
         \*elsif statusMsg.type = KEEP_ALIVE /\ statusMsg.status.installerStatus = Failed then
         \* if installer is failed, we should notify all the switches with Master/Equal.
         \* Installer 
@@ -1495,7 +1520,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         elsif statusResolveMsg.type # 0 then
             assert FALSE;
         end if;
-        \*releaseLock(self);
+        \*switchReleaseLock(self);
     end while
     end process
     \* =================================
@@ -1508,10 +1533,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     begin
     asyncNetEventGenProc:
     while TRUE do
-        await ~isFinished;
         await swNumEvent[self[2]] < SW_MAX_NUM_EVENTS[self[2]];
         switchWaitForLock();
-        await \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE;
         controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;
         eventID := controlMsgCounter[self[2]];
         swNumEvent[self[2]] := swNumEvent[self[2]] + 1;
@@ -1521,7 +1544,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
             controllerSet := getNonSlaveController(self[2]);
             sendNetworkEvent:
                 while swOFACanProcessIRs(self[2]) do \* originally while swOFACanProcessIRs(self[2]) /\ controllerSet # {} do
-                    acquireLock();
+                    switchAcquireLock();
                     nxtController := CHOOSE x \in controllerSet: TRUE;
                     controllerSet := controllerSet \ {nxtController};
                     eventMsg := [type |-> ASYNC_EVENT,
@@ -1549,7 +1572,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* SW_RESOLVE_FAILURE
         await /\ switchLock # <<NO_LOCK, NO_LOCK>>
               /\ switchLock[2] = self[2]
-              /\ controllerLock = <<NO_LOCK, NO_LOCK>>;
+              /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>;
         if switchStatus[switchLock[2]].cpu = Failed /\ switchLock[1] = NIC_ASIC_OUT then
             await pc[switchLock] = "SwitchFromOFAPacket";
         else
@@ -1570,7 +1593,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                 await pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"; 
             end if;
         end if;
-        releaseLock(switchLock);
+        switchReleaseLock();
     end while
     end process
     \* =================================
@@ -1594,10 +1617,10 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* 1) Retrieving the set of valid IRs
         await controllerIsMaster(self[1]);
         await moduleIsUp(self);
-        controllerWaitForLockFree();
         toBeScheduledIRs := getSetIRsCanBeScheduledNext(self[1]);
         await toBeScheduledIRs # {};
         
+        controllerWaitForLocalLockFree();
         \* SchedulerMechanism consists of three operations; 
         \* 1) choosing one IR from the set of valid IRs
         \* 2) updating the state of DB to start scheduling
@@ -1607,7 +1630,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* (sequencer may fail between these Ops)
         SchedulerMechanism:
         while TRUE do \* while toBeScheduledIRs # {} do
-            controllerWaitForLockFree();
+            controllerWaitForLocalLockFree();
             whichStepToFail(3);
             if (stepOfFailure # 1) then
                 \* Step 1: choosing one IR from the valid set
@@ -1628,11 +1651,11 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
             end if;        
                 
             \* ScheduleTheIR consists of two operations; 
-            \* 1) Enqueueing the IR to the shared Queue
+            \* 1) Enqueueing the IR to the IRQueue in NIB
             \* 2) Clearing the state on DB 
             \* Sequencer may fail between these two Ops. 
             ScheduleTheIR: 
-                controllerWaitForLockFree();
+                controllerAcquireGlobalLock();
                 whichStepToFail(2);
                 if (stepOfFailure # 1) then
                     \* step 1: enqueue the IR 
@@ -1640,7 +1663,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                     \* Instead of NIB generating notification for change in IRQueueNIB
                     \* for simplicity, Sequencer generates the notification
                     subscriberOfcSet := subscribeList.IRQueueNIB; 
-                    sendIRQueueModNotification: \* TODO(@Pooria): Optimize here. Unnecessary labeling.
+                    sendIRQueueModNotification:
                         while subscriberOfcSet # {} do
                             ofcID := CHOOSE x \in subscriberOfcSet: TRUE;
                             subscriberOfcSet := subscriberOfcSet \ {ofcID};                            
@@ -1648,7 +1671,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                                                            to |-> IR2SW[nextIR], 
                                                            IR |-> nextIR]);
                         end while;
-                    
+                    \*controllerReleaseGlobalLock();
                     toBeScheduledIRs := toBeScheduledIRs\{nextIR};
                     if (stepOfFailure # 2) then
                         \* step 2: clear the state on NIB  
@@ -1656,7 +1679,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                     end if;
                 end if;
                 
-                sequencerApplyFailure: \* TODO(@Pooria): Optimize here. Unnecessary labeling.
+                sequencerApplyFailure:
+                    controllerReleaseGlobalLock();
                     if (stepOfFailure # 0) then    
                         controllerModuleFails();
                         goto ControllerSeqStateReconciliation; 
@@ -1679,7 +1703,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* handle the redundant rescheduling scenario.   
         await controllerIsMaster(self[1]);
         await moduleIsUp(self);
-        controllerReleaseLock(self);
+        controllerReleaseGlobalLock();
+        controllerReleaseLocalLock();
         if(controllerStateNIB[self].type = STATUS_START_SCHEDULING) then
             SetScheduledIRs[IR2SW[controllerStateNIB[self].next]] := 
                         SetScheduledIRs[IR2SW[controllerStateNIB[self].next]]\{controllerStateNIB[self].next};
@@ -1704,7 +1729,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                      /\ nibEventQueue[self[1]] # <<>>
                   \/ /\ masterState[self[1]] = ROLE_MASTER
                      /\ getSetSwitchInEqualRole(self[1]) # {};
-            controllerWaitForLockFree();
+            controllerWaitForLocalLockFree();
             \* if NIB event handler receives notification about its failover status FAILOVER_INIT
             \* it should perform necessary actions to be ready to takeover the OFC reponsibilities;
             \* 1) update its role to ROLE_EQUAL in all the switches
@@ -1719,44 +1744,47 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                 swSet := getSetSwitchInSlaveRole(self[1]);
             
                 ScheduleRoleUpdateEqual:
-                    while TRUE do
-                        controllerWaitForLockFree();
+                    while swSet # {} do
+                        \*controllerWaitForLocalLockFree();
+                        controllerAcquireLocalLock();
+                        controllerAcquireGlobalLock();
                         
                         currSW := CHOOSE x \in swSet: TRUE;
                         modifiedEnqueue(workerLocalQueue[self[1]], 
                                            [type |-> ROLE_REQ, roletype |-> ROLE_EQUAL, to |-> currSW]);
                         swSet := swSet \ {currSW};
-                        
-                        if swSet = {} then
-                            goto WaitForSwitchUpdateRoleACK;
-                        end if;
                     end while;
+               controllerReleaseLocalLock();
+               controllerReleaseGlobalLock();
+                        
                
                WaitForSwitchUpdateRoleACK: 
                     \* Step 2: (1) wait for receiving confirmation from all switches regarding 
                     \* role update. (2) subscribe to IR Queue in NIB
-                    controllerWaitForLockFree();
+                    controllerWaitForLocalLockFree();
                     
                     await allSwitchInEqualRole(self[1]); 
                     subscribeList.IRQueueNIB := subscribeList.IRQueueNIB \cup {self[1]};
                     IRQueueEntries := IRQueueNIB; 
-                    
+                    controllerAcquireLocalLock();
+                    controllerAcquireGlobalLock();
                     
                QueryIRQueueNIB:
                     \* Step 3: (1) Pull IRQueue and add to worker queue
                     \* (2) notify failover module that OFC is ready to take over
                     while IRQueueEntries # <<>> do
-                        controllerWaitForLockFree();
+                        controllerWaitForLocalLockFree();
                         entry := Head(IRQueueEntries);
                         IRQueueEntries := Tail(IRQueueEntries);
                         modifiedEnqueue(workerLocalQueue[self[1]], entry);
                     end while;
-                    controllerWaitForLockFree();
+                    controllerReleaseLocalLock();
+                    controllerReleaseGlobalLock();
                     \* Step 4: change failover status to FAILOVER_READY
                     ofcFailoverStateNIB[self[1]] := FAILOVER_READY;
                
                WaitForRoleMaster:
-                    controllerWaitForLockFree();
+                    controllerWaitForLocalLockFree();
                     await masterState[self[1]] = ROLE_MASTER; 
                
             \* if NIB event handler receives notification about failover status FAILOVER_TERMINATE
@@ -1772,16 +1800,17 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                                                                         @@ ofcModuleTerminationStatus[self[1]];
               
               WaitForWorkersTermination:
-                    controllerWaitForLockFree();
+                    controllerWaitForLocalLockFree();
                     await allWorkersTerminated(self[1]);
                     ofcModuleTerminationStatus[self[1]] := [y \in {CONT_MONITOR, CONT_EVENT} |-> TERMINATE_INIT] 
                                                                                 @@ ofcModuleTerminationStatus[self[1]];
               
               
               WaitForAllModulesTermination:
-                    controllerWaitForLockFree();
+                    controllerWaitForLocalLockFree();
                     await allModulesTerminated(self[1]);
                     ofcFailoverStateNIB[self[1]] := FAILOVER_TERMINATE_DONE;
+                    goto Done;
             
             \* NIB event handler should pass the IRs to the worker's local queue. 
             elsif nibEventQueue[self[1]] # <<>> then
@@ -1814,13 +1843,12 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     begin
     ControllerThread:
     while ~shouldWorkerTerminate(self[1], self[2]) do
-        \* await controllerIsMaster(self[1]);
         await isOfcEnabled[self[1]];
         await moduleIsUp(self);
         await workerLocalQueue # <<>>; 
         await canWorkerThreadContinue(self[1], self);
-        controllerWaitForLockFree();
-        \* Controller thread consists of 3 Ops: 
+        controllerWaitForLocalLockFree();
+        \* ControllerThread consists of 4 Ops: 
         \* 1. modified read from IRQueue in the NIB (which gives the 
         \*    next IR to install)
         \* 2. update the state of db to locking mode
@@ -1828,11 +1856,13 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \*      (Note that sequence may fail in the middle of scheduling and
         \*       may reschedule the IR wrongly)
         \* (worker may fail between these Ops)
+        \* 4. check necessary conditions on switch status and IR status,
+        \*      then, change IR_STATUS to IR_SENT (Update-before-Action)
         
         \* Step 1. modified read
         modifiedRead(workerLocalQueue[self[1]], nextToSent, entryIndex);
-        
-        whichStepToFail(2);
+        controllerReleaseGlobalLock();
+        whichStepToFail(3);
         if (stepOfFailure = 1) then
             \* Failed before Step 1
             controllerModuleFails();
@@ -1850,63 +1880,60 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
                 if idThreadWorkingOnIR[self[1]][entryIndex] = IR_UNLOCK then
                     await threadWithLowerIDGetsTheLock(self[1], self, nextToSent, workerLocalQueue[self[1]]); \* For Reducing Space
                     idThreadWorkingOnIR[self[1]][entryIndex] := self[2];
+                    
+                    if (stepOfFailure = 3) then
+                        \* Failed after Step 3
+                        controllerModuleFails();
+                        goto ControllerThreadStateReconciliation;
+                    else
+                        \* Step 4: check if the switch is not suspended and instruction is in its initial mode
+                        if (workerCanSendTheIR(self[1], nextToSent)) then
+                            \********* Step 4.1: change the status of IR to IR_SENT before actually sending (Update-before-Action)
+                            assert nextToSent.type \in {INSTALL_FLOW, ROLE_REQ};
+                        
+                            if nextToSent.type = INSTALL_FLOW then
+                                IRStatus[nextToSent.IR] := IR_SENT;
+                            elsif nextToSent.type = ROLE_REQ then
+                                roleUpdateStatus[self[1]][nextToSent.to] := IR_SENT;
+                            end if;
+                        
+                            \* ControllerThreadForwardIR consists of 2 operations;
+                            \* 1. Forwarding the IR to the switch
+                            \* 2. Updating the state on db to SENT_DONE
+                            \* Worker may fail between these operations
+                            ControllerThreadForwardIR:
+                                controllerWorkerWaitForLockFree();
+                                controllerReleaseGlobalLock();
+                                whichStepToFail(2);
+                                if (stepOfFailure # 1) then
+                                    \* Step 1: forward the IR
+                                    controllerSendIR(nextToSent);
+                                    if (stepOfFailure # 2) then
+                                        \* Step 2: save the state on NIB
+                                        controllerStateNIB[self] := [type |-> STATUS_SENT_DONE, 
+                                                                    next |-> nextToSent, 
+                                                                    index |-> entryIndex];
+                                    end if;
+                                end if;                          
+                                if (stepOfFailure # 0) then
+                                    controllerModuleFails();
+                                    goto ControllerThreadStateReconciliation;
+                                end if;
+                            
+                        end if;        
+                    end if;                    
                 else
                     ControllerThreadRemoveQueue1: 
-                        controllerWaitForLockFree();
+                        controllerWaitForLocalLockFree();
+                        controllerReleaseGlobalLock();
                         modifiedRemove(workerLocalQueue[self[1]], nextToSent);
-                        if nextToSent.type = INSTALL_FLOW then
-                            removeItem(IRQueueNIB, nextToSent);
-                        end if;
+                        \*if nextToSent.type = INSTALL_FLOW then
+                        \*    removeItem(IRQueueNIB, nextToSent);
+                        \*end if;
                         goto ControllerThread;    
                 end if;
             end if;
         end if;
-        
-        \* ControllerThreadSendIR consist of 1 operation;
-        \* 1. Check the necessary conditions on switch status and IR status,
-        \*      then, change IR_STATUS to IR_SENT (Update-before-Action)
-        ControllerThreadSendIR:
-            controllerWaitForLockFree();
-            controllerModuleFailOrNot();
-            if (controllerSubmoduleFailStat[self] = NotFailed) then
-                \* Step 1: checks if the switch is not suspended and instruction is in its initial mode
-                if workerCanSendTheIR(self[1], nextToSent) then
-                    \**** Step 1.1: change the status of the IR to IR_SENT before actually sending
-                    \**** the IR (Update-before-Action)
-                    assert nextToSent.type \in {INSTALL_FLOW, ROLE_REQ};
-                    if nextToSent.type = INSTALL_FLOW then
-                        IRStatus[nextToSent.IR] := IR_SENT;
-                    elsif nextToSent.type = ROLE_REQ then
-                        roleUpdateStatus[self[1]][nextToSent.to] := IR_SENT;
-                    end if;
-                    
-                    \* ControllerThreadForwardIR consists of 2 operations;
-                    \* 1. Forwarding the IR to the switch
-                    \* 2. Updating the state on db to SENT_DONE
-                    \* Worker may fail between these operations
-                    ControllerThreadForwardIR:
-                        \* controllerWaitForLockFree(); \* Pooria commented this to enables concurrency on the switch side
-                        controllerWorkerWaitForLockFree();
-                        whichStepToFail(2);
-                        if (stepOfFailure # 1) then
-                            \* Step 1: forward the IR
-                            controllerSendIR(nextToSent);
-                            if (stepOfFailure # 2) then
-                               \* Step 2: save the state on NIB
-                               controllerStateNIB[self] := [type |-> STATUS_SENT_DONE, 
-                                                            next |-> nextToSent, 
-                                                            index |-> entryIndex];
-                            end if;
-                        end if;                          
-                        if (stepOfFailure # 0) then
-                            controllerModuleFails();
-                            goto ControllerThreadStateReconciliation;
-                        end if;
-                end if;
-            else
-                \* Failed even before begining of this operation
-                goto ControllerThreadStateReconciliation;
-            end if;
         
         \* Operations in the next two labels are for performance reasons
         \* since we have already dedicated this worker to a IR, if the switch
@@ -1914,16 +1941,18 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \* does the fast recovery by immediately starting to send the IR
         \* TODO (@Pooria): below should be added again 
         \*WaitForIRToHaveCorrectStatus:  
-        \*    controllerWaitForLockFree();
+        \*    controllerWaitForLocalLockFree();
+        \*    controllerReleaseGlobalLock();
         \*    controllerModuleFailOrNot();
         \*    if (controllerSubmoduleFailStat[self] = NotFailed) then 
-        \*        await ~isSwitchSuspended(nextToSent.to);
+        \*        await ~isSwitchSuspended(self[1], nextToSent.to);
         \*    else
         \*        goto ControllerThreadStateReconciliation;
         \*    end if;
             
         \*ReScheduleifIRNone:
-        \*    controllerWaitForLockFree();
+        \*    controllerWaitForLocalLockFree();
+        \*    controllerReleaseGlobalLock();
         \*    controllerModuleFailOrNot();
         \*    if (controllerSubmoduleFailStat[self] = NotFailed) then
         \*        if workerShouldFastRecovery(self[1], nextToSent) then
@@ -1933,44 +1962,38 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         \*    else
         \*        goto ControllerThreadStateReconciliation;
         \*    end if;
-            
-        \* Simply unlock the IR which was locked at the begining
-        ControllerThreadUnlockSemaphore:
-            controllerWaitForLockFree();
-            controllerModuleFailOrNot();
-            if (controllerSubmoduleFailStat[self] = NotFailed) then
+        
+        \* ControllerThreadReleaseSemaphoreAndScheduledSet consists of 4 Ops;
+        \* 1. unlock the IR which was locked at the begining
+        \* 2. Remove the IR from the scheduled set since worker is done with it.
+        \* 3. Clear the state on db
+        \* 4. Remove the IR from the tagged buffer (lazy removal strategy)
+        ControllerThreadReleaseSemaphoreAndScheduledSet:
+            controllerWaitForLocalLockFree();
+            controllerReleaseGlobalLock();
+            whichStepToFail(4);
+            if (stepOfFailure # 1) then
+                \* Step 1. unlock the IR which was locked before 
                 if idThreadWorkingOnIR[self[1]][entryIndex] = self[2] then
                     idThreadWorkingOnIR[self[1]][entryIndex] := IR_UNLOCK;
                 end if;
-            else
-                goto ControllerThreadStateReconciliation;
-            end if;
-            
-        \* RemoveFromScheduledIRSet consists of three operations;
-        \* 1. Remove the IR from the scheduled set since worker is done with it. 
-        \* 2. Clear the state on db
-        \* 3. Remove the IR from the tagged buffer in NIB (Lazy removel strategy) 
-        \* Worker may fail between any of these Ops
-        RemoveFromScheduledIRSet:
-            controllerWaitForLockFree();
-            whichStepToFail(3);
-            if (stepOfFailure # 1) then 
-                \* Step 1: Remove from scheduled set
-                \* assert nextToSent \in SetScheduledIRs[IR2SW[nextIRToSent]];
-                if nextToSent.type = INSTALL_FLOW then
-                    SetScheduledIRs[nextToSent.to] := SetScheduledIRs[nextToSent.to]\{nextToSent.IR};
-                end if;
-                
-                if (stepOfFailure # 2) then  
-                    \* Step2: clear the state on NIB
-                    controllerStateNIB[self] := [type |-> NO_STATUS];
-                    if (stepOfFailure # 3) then
-                        \* Step 3: remove from IRQueue
-                        modifiedRemove(workerLocalQueue[self[1]], nextToSent);
-                        if nextToSent.type = INSTALL_FLOW then
-                            removeItem(IRQueueNIB, nextToSent);
-                        end if;
+                if (stepOfFailure # 2) then
+                    \* Step 2: Remove from scheduled set
+                    \* assert nextToSent \in SetScheduledIRs[IR2SW[nextIRToSent]];
+                    if nextToSent.type = INSTALL_FLOW then
+                        SetScheduledIRs[nextToSent.to] := SetScheduledIRs[nextToSent.to]\{nextToSent.IR};
+                    end if;
                     
+                    if (stepOfFailure # 3) then 
+                        \* Step 3: clear the state on NIB
+                        controllerStateNIB[self] := [type |-> NO_STATUS];
+                        if (stepOfFailure # 4) then
+                            \* Step 4: remove from IRQueue
+                            modifiedRemove(workerLocalQueue[self[1]], nextToSent);
+                            if nextToSent.type = INSTALL_FLOW then
+                                removeItem(IRQueueNIB, nextToSent);
+                            end if;
+                        end if;
                     end if;
                 end if;
             end if;
@@ -2002,7 +2025,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         await moduleIsUp(self);
         await IRQueueNIB # <<>>;
         await canWorkerThreadContinue(self[1], self);
-        controllerReleaseLock(self);
+        controllerReleaseGlobalLock();
+        controllerReleaseLocalLock();
         if (controllerStateNIB[self].type = STATUS_LOCKING) then
             if (controllerStateNIB[self].next.type = INSTALL_FLOW) then
                 if (IRStatus[controllerStateNIB[self].next.IR] = IR_SENT) then
@@ -2036,11 +2060,15 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
          await isOfcEnabled[self[1]];
          await moduleIsUp(self);   
          await swSeqChangedStatus[self[1]] # <<>>;
-         controllerWaitForLockFree();
-         
+         controllerWaitForLocalLockFree();
+         controllerReleaseGlobalLock();
          \* Controller event handler process consists of two operations;
          \* 1. Picking the first event from the event queue
          \* 2. Check whether the event is a switch failure or a switch recovery
+         \*     2.1 if a switch failure and current state of switch is SW_RUN
+         \*             , then suspend the switch both locally and in NIB
+         \*     2.2. if a switch recovery and current state of switch is SW_SUSPEND
+         \*             , then  
          monitoringEvent := Head(swSeqChangedStatus[self[1]]);
          
          if shouldSuspendSw(monitoringEvent) /\ ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] = SW_RUN then
@@ -2050,100 +2078,87 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
             \* Here, Due to performance reasons, we defere the task of resetting status of IRs to 
             \* the time that the switch is recovered (Lazy evaluation) because; First, it might not
             \* be necessary (for example, the switch may have installed the IR). Second, the switch
-            \* may have faced a permanent failure in which these IRs are not valid anymore.                 
-            \* only write to NIB if you are master
-            \* if masterState[self[1]] = ROLE_MASTER then
-                ControllerSuspendSW: 
-                    controllerWaitForLockFree();
-                    controllerModuleFailOrNot();
-                    if (controllerSubmoduleFailStat[self] = NotFailed) then
-                        NIBSwSuspensionStatus[monitoringEvent.swID] := SW_SUSPEND;
-                        ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] := SW_SUSPEND;        
-                    else
-                        goto ControllerEventHandlerStateReconciliation;
-                    end if;
-            \* end if;
+            \* may have faced a permanent failure in which these IRs are not valid anymore. 
+                controllerModuleFailOrNot();
+                if (controllerSubmoduleFailStat[self] = NotFailed) then
+                    NIBSwSuspensionStatus[monitoringEvent.swID] := SW_SUSPEND;
+                    ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] := SW_SUSPEND;        
+                else
+                    goto ControllerEventHandlerStateReconciliation;
+                end if;
                 
          elsif canfreeSuspendedSw(monitoringEvent) /\ ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] = SW_SUSPEND then
-            \*call suspendInSchedulingIRs(monitoringEvent.swID);
             
             \* ControllerFreeSuspendedSW consists of three operations; 
             \* 1. Save on db that it is going to reset the IRs
             \* 2. Change the SW status to SW_RUN (so all the corresponding IRs going to be scheduled immediately)
             \* (event handler may fail between any of these Ops.)
-            \* only write to NIB if you are master
-            \*if masterState[self[1]] = ROLE_MASTER then 
-                ControllerFreeSuspendedSW: 
-                    controllerWaitForLockFree();
-                    whichStepToFail(2);
-                    if (stepOfFailure # 1) then 
-                        \* Step 1: save state on NIB
-                        controllerStateNIB[self] := [type |-> START_RESET_IR, sw |-> monitoringEvent.swID]; 
-                        if (stepOfFailure # 2) then
-                            \* Step 2: change switch status to SW_RUN
-                            NIBSwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
-                            ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] := SW_RUN;  
-                        end if;
-                    end if;
-                
-                    if (stepOfFailure # 0) then
-                        controllerModuleFails();
-                        goto ControllerEventHandlerStateReconciliation;
-                    end if;
-            \*end if;
-            
-            \* ControllerCheckIfThisIsLastEvent consists of 3 operations;
-            \* 1. Check if this is the last event for the corresponding sw (if it is not, then, maybe the switch
+            \* 3. Check if this is the last event for the corresponding sw (if it is not, then, maybe the switch
             \*      has failed again and resetting the IRs is not necessary). Note that we have to process the 
             \*      event and change the status of SW anyway. Otherwise, it may result in discarding the subsequent
             \*      events (one of the failures!!!!)   
-            \* 2. GetIRsToBeChecked 
-            \* 3. ResetAllIRs
-            ControllerCheckIfThisIsLastEvent:
-                controllerWaitForLockFree();
-                controllerModuleFailOrNot();
-                if (controllerSubmoduleFailStat[self] = NotFailed) then
-                    if ~existsMonitoringEventHigherNum(monitoringEvent, self[1]) then
-                        \* call reconcileStateWithRecoveredSW(monitoringEvent.swID);
-                        
-                        \* getIRsToBeChecked retrieves all the IRs need to reset
-                        getIRsToBeChecked:
-                            controllerWaitForLockFree();
-                            controllerModuleFailOrNot();
-                            if (controllerSubmoduleFailStat[self] = NotFailed) then
-                                setIRsToReset := getIRSetToReset(monitoringEvent.swID);
-                                if (setIRsToReset = {}) then \* Do not do the operations in ResetAllIRs label if setIRsToReset is Empty *\
-                                    goto ControllerEvenHanlderRemoveEventFromQueue;
-                                end if;
-                            else
-                                goto ControllerEventHandlerStateReconciliation;
-                            end if;
-                            
-                        \* ResetAllIRs reset all the IRs in IR_SENT mode to IR_NONE one by one
-                        ResetAllIRs:
-                            while TRUE do \* Initially: while setIRsToReset # {} do
-                                controllerWaitForLockFree();
-                                controllerModuleFailOrNot();
-                                if (controllerSubmoduleFailStat[self] = NotFailed) then
-                                    resetIR := CHOOSE x \in setIRsToReset: TRUE;
-                                    setIRsToReset := setIRsToReset \ {resetIR};
-                                    
-                                    \* the following operation (if -- end if;) should be done atomically
-                                    \* using CAS operation
-                                    if IRStatus[resetIR] # IR_DONE then
-                                        IRStatus[resetIR] := IR_NONE;
-                                    end if;
-                                    
-                                    if setIRsToReset = {} then \* End of while *\
-                                        goto ControllerEvenHanlderRemoveEventFromQueue;
-                                    end if;
-                                else
-                                    goto ControllerEventHandlerStateReconciliation;
-                                end if;
-                            end while;
-                    end if;
-                else
+            \* 4. GetIRsToBeChecked 
+            \* 5. ResetAllIRs
+                whichStepToFail(3);
+                if (stepOfFailure = 1) then 
+                    controllerModuleFails();
                     goto ControllerEventHandlerStateReconciliation;
+                else
+                    \* Step 1: save state on NIB
+                    controllerStateNIB[self] := [type |-> START_RESET_IR, sw |-> monitoringEvent.swID]; 
+                    if (stepOfFailure = 2) then
+                        controllerModuleFails();
+                        goto ControllerEventHandlerStateReconciliation;
+                    else
+                        \* Step 2: change switch status to SW_RUN
+                        NIBSwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
+                        ofcSwSuspensionStatus[self[1]][monitoringEvent.swID] := SW_RUN;  
+                        if (stepOfFailure = 3) then
+                            controllerModuleFails();
+                            goto ControllerEventHandlerStateReconciliation;
+                        else
+                            \* Step 3: check if this is the last event
+                            if ~existsMonitoringEventHigherNum(monitoringEvent, self[1]) then
+                                
+                                \* getIRsToBeChecked retrieves all the IRs need to reset
+                                getIRsToBeChecked:
+                                    controllerWaitForLocalLockFree();
+                                    controllerReleaseGlobalLock();
+                                    controllerModuleFailOrNot();
+                                    if (controllerSubmoduleFailStat[self] = NotFailed) then
+                                        setIRsToReset := getIRSetToReset(monitoringEvent.swID);
+                                        if (setIRsToReset = {}) then \* Do not do the operations in ResetAllIRs label if setIRsToReset is Empty *\
+                                            goto ControllerEvenHanlderRemoveEventFromQueue;
+                                        end if;
+                                    else
+                                        goto ControllerEventHandlerStateReconciliation;
+                                    end if;
+                                \* ResetAllIRs reset all the IRs in IR_SENT mode to IR_NONE one by one
+                                ResetAllIRs:
+                                    while TRUE do \* Initially: while setIRsToReset # {} do
+                                        controllerWaitForLocalLockFree();
+                                        controllerReleaseGlobalLock();
+                                        controllerModuleFailOrNot();
+                                        if (controllerSubmoduleFailStat[self] = NotFailed) then
+                                            resetIR := CHOOSE x \in setIRsToReset: TRUE;
+                                            setIRsToReset := setIRsToReset \ {resetIR};
+                                    
+                                            \* the following operation (if -- end if;) should be done atomically
+                                            \* using CAS operation
+                                            if IRStatus[resetIR] # IR_DONE then
+                                                IRStatus[resetIR] := IR_NONE;
+                                            end if;
+                                    
+                                            if setIRsToReset = {} then \* End of while *\
+                                                goto ControllerEvenHanlderRemoveEventFromQueue;
+                                            end if;
+                                        else
+                                            goto ControllerEventHandlerStateReconciliation;
+                                        end if;
+                                    end while;
+                            end if;
+                        end if;
+                    end if;
                 end if;
          end if;
          
@@ -2152,7 +2167,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
          \* 2. Remove the event from queue (Lazy removal procedure)
          \* event handler may fail between these Ops. 
          ControllerEvenHanlderRemoveEventFromQueue:
-            controllerWaitForLockFree();
+            controllerWaitForLocalLockFree();
+            controllerReleaseGlobalLock();
             whichStepToFail(2);
             if (stepOfFailure # 1) then 
                 \* Step 1: clear state on NIB
@@ -2186,7 +2202,8 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
          await isOfcEnabled[self[1]];
          await moduleIsUp(self);   
          await swSeqChangedStatus[self[1]] # <<>>; 
-         controllerReleaseLock(self);
+         controllerReleaseLocalLock();
+         controllerReleaseGlobalLock();
          if (controllerStateNIB[self].type = START_RESET_IR) then
             NIBSwSuspensionStatus[self[1]][controllerStateNIB[self].sw] := SW_SUSPEND;
             ofcSwSuspensionStatus[self[1]][controllerStateNIB[self].sw] := SW_SUSPEND;
@@ -2198,7 +2215,7 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     \* == Monitoring Server ===== 
     \* monitroing server does not need a reconciliation phase. 
     fair process controllerMonitoringServer \in ({ofc0, ofc1} \X {CONT_MONITOR})
-    variable msg = [type |-> 0]
+    variable msg = [type |-> 0], stepOfFailure = 0;
     begin
     ControllerMonitorCheckIfMastr:
     while ~shouldMonitoringServerTerminate(self[1]) do
@@ -2213,73 +2230,43 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
         await isOfcEnabled[self[1]];
         await moduleIsUp(self);
         await switch2Controller[self[1]] # <<>>;
-        controllerReleaseLock(self);
+        controllerReleaseLocalLock();
+        controllerReleaseGlobalLock();
         msg := Head(switch2Controller[self[1]]);
         assert \/ /\ msg.type = INSTALLED_SUCCESSFULLY
                   /\ msg.from = IR2SW[msg.IR]
                \/ msg.type \in {ROLE_REPLY, BAD_REQUEST};
-                  
-               
-        \*if IRStatus[msg.IR] = IR_RECONCILE then 
-        \*    if msg.type = RECONCILIATION_RESPONSE then
-        \*        if msg.status = INSTALLED_SUCCESSFULLY then
-        \*             ControllerUpdateIR3: IRStatus[msg.IR] := IR_DONE; \* Should be done in one atomic operation 
-        \*        elsif msg.status = RECEIVED_SUCCESSFULLY then
-        \*            ControllerUpdateIR4: IRStatus[msg.IR] := IR_PENDING; \* Should be done in one atomic operation 
-        \*        elsif msg.status = STATUS_NONE then
-        \*            ControllerUpdateIR5: IRStatus[msg.IR] := IR_NONE; \* Should be done in one atomic operation 
-        \*        else assert FALSE;
-        \*        end if;
-        \*    end if;
-        \*else
-        (*    if msg.type = RECEIVED_SUCCESSFULLY then 
-                ControllerUpdateIR1: 
-                    if IRStatus[msg.IR] = IR_SENT then
-                        IRStatus[msg.IR] := IR_PENDING; \* Should be done in one atomic operation 
-                    end if; *)
-            if msg.type = INSTALLED_SUCCESSFULLY then
+        whichStepToFail(2);          
+        if msg.type = INSTALLED_SUCCESSFULLY then
                 \* If msg type is INSTALLED_SUCCESSFULLY, we have to change the IR status
                 \* to IR_DONE. 
-                ControllerUpdateIR2:
-                    controllerWaitForLockFree(); 
-                    controllerModuleFailOrNot();
-                    if (controllerSubmoduleFailStat[self] = NotFailed) then
-                        FirstInstall[msg.IR] := 1;
-                        IRStatus[msg.IR] := IR_DONE;
-                    else
-                        goto ControllerMonitorCheckIfMastr;
-                    end if;
+                if (stepOfFailure # 1) then 
+                    FirstInstall[msg.IR] := 1;
+                    IRStatus[msg.IR] := IR_DONE;
+                end if;
             
-            elsif msg.type = ROLE_REPLY then
-                
-                ControllerUpdateRole:
-                    controllerWaitForLockFree(); 
-                    controllerModuleFailOrNot();
-                    if (controllerSubmoduleFailStat[self] = NotFailed) then
-                        roleUpdateStatus[self[1]][msg.from] := IR_DONE;
-                        controllerRoleInSW[self[1]][msg.from] := msg.roletype; 
-                    else
-                        goto ControllerMonitorCheckIfMastr;
-                    end if;
-                    
-            elsif msg.type = BAD_REQUEST then
+       elsif msg.type = ROLE_REPLY then
+                if (stepOfFailure # 1) then
+                    roleUpdateStatus[self[1]][msg.from] := IR_DONE;
+                    controllerRoleInSW[self[1]][msg.from] := msg.roletype; 
+                end if;                   
+       elsif msg.type = BAD_REQUEST then
                 \* If msg type is BAD_REQUEST, it means this OFC is not the master for the switch
                 \* for now we do nothing; Todo(@Pooria)
                 skip; 
-            else assert FALSE;
-            end if;
+       else assert FALSE;
+       end if;
         
         \*end if;
         
         \* MonitoringServerRemoveFromQueue lazily removes the msg from queue. 
-        MonitoringServerRemoveFromQueue:
-            controllerWaitForLockFree();
-            controllerModuleFailOrNot();
-            if (controllerSubmoduleFailStat[self] = NotFailed) then
-                switch2Controller[self[1]] := Tail(switch2Controller[self[1]]);
-            else
-                goto ControllerMonitorCheckIfMastr;
-            end if; 
+        if (stepOfFailure # 2) then
+            switch2Controller[self[1]] := Tail(switch2Controller[self[1]]);
+        end if; 
+        
+        if (stepOfFailure # 0) then
+            goto ControllerMonitorCheckIfMastr;
+        end if;
     end while;
     
     \* Terminate
@@ -2302,15 +2289,15 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     begin
     ControllerWatchDogProc:
     while TRUE do
-        controllerWaitForLockFree();
+        controllerWaitForLocalLockFree();
         controllerFailedModules := returnControllerFailedModules(self[1]);
         await Cardinality(controllerFailedModules) > 0;
         with module \in controllerFailedModules do
             assert controllerSubmoduleFailStat[module] = Failed;
-            controllerLock := module;
+            controllerLocalLock := module;
+            controllerGlobalLock := module;
             controllerSubmoduleFailStat[module] := NotFailed;   
         end with;
-        
     end while; 
     end process
     \* ==========================
@@ -2326,12 +2313,15 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
     \* 1) TODO(@Pooria) Complete comments
     begin 
     OfcFailoverNewMasterInitialization:
+        controllerWaitForGlobalLockFree();
         await SHOULD_FAILOVER = 1;
         ofcFailoverStateNIB[ofc1] := FAILOVER_INIT;
     ofcFailoverCurrMasterTerminate:
+        controllerWaitForGlobalLockFree();
         await ofcFailoverStateNIB[ofc1] = FAILOVER_READY;
         ofcFailoverStateNIB[ofc0] := FAILOVER_TERMINATE;
     ofcFailoverChangeRoles:
+        controllerWaitForGlobalLockFree();
         await ofcFailoverStateNIB[ofc0] = FAILOVER_TERMINATE_DONE;
         masterState[ofc0] := ROLE_SLAVE || masterState[ofc1] := ROLE_MASTER;
     end process    
@@ -2339,28 +2329,29 @@ ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-3dffb77fd262836d8386585b42714038
-\* Process variable controllerSet of process swFailureProc at line 1356 col 76 changed to controllerSet_
-\* Process variable nxtController of process swFailureProc at line 1357 col 5 changed to nxtController_
-\* Process variable prevLockHolder of process swFailureProc at line 1357 col 25 changed to prevLockHolder_
-\* Process variable controllerSet of process swResolveFailure at line 1444 col 83 changed to controllerSet_s
-\* Process variable nxtController of process swResolveFailure at line 1445 col 5 changed to nxtController_s
-\* Process variable stepOfFailure of process controllerSequencer at line 1587 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1813 col 29 changed to stepOfFailure_c
-VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
-          ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
-          switch2Controller, switchStatus, installedIRs, installedBy, 
-          swFailedNum, swNumEvent, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-          Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
-          switchControllerRoleStatus, switchGeneratedEventSet, 
-          controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-          switchOrdering, dependencyGraph, IR2SW, irCounter, MAX_IR_COUNTER, 
-          idThreadWorkingOnIR, workerThreadRanking, workerLocalQueue, 
-          ofcSwSuspensionStatus, controllerRoleInSW, nibEventQueue, 
-          roleUpdateStatus, isOfcEnabled, setScheduledRoleUpdates, 
-          ofcModuleTerminationStatus, masterState, controllerStateNIB, 
-          IRStatus, NIBSwSuspensionStatus, IRQueueNIB, subscribeList, 
-          SetScheduledIRs, ofcFailoverStateNIB, pc
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-3dffb77fd262836d8386585b42714038 (chksum(pcal) = "9dcf79e8" /\ chksum(tla) = "95dea1ec") (chksum(pcal) = "9dcf79e8" /\ chksum(tla) = "95dea1ec") (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) = "9dcf79e8" /\ chksum(tla) = "95dea1ec") (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) = "3222e15c" /\ chksum(tla) = "180275ab") (chksum(pcal) = "21cbd470" /\ chksum(tla) = "c0cc7a8") (chksum(pcal) = "724d8828" /\ chksum(tla) = "6c9521e2") (chksum(pcal) = "28e9b5d1" /\ chksum(tla) = "e884fb9") (chksum(pcal) = "4a244545" /\ chksum(tla) = "f382faa2") (chksum(pcal) = "518bb467" /\ chksum(tla) = "7010b799") (chksum(pcal) = "518bb467" /\ chksum(tla) = "7010b799") (chksum(pcal) = "8fa76253" /\ chksum(tla) = "ec470895") (chksum(pcal) = "e58d914c" /\ chksum(tla) = "1c98fe65") (chksum(pcal) = "2924d278" /\ chksum(tla) = "58b6f2d6") (chksum(pcal) = "4c6b11f5" /\ chksum(tla) = "b3b47460") (chksum(pcal) = "14ce1a3b" /\ chksum(tla) = "b8f1e908") (chksum(pcal) = "e58d914c" /\ chksum(tla) = "dac05797") (chksum(pcal) = "b549029b" /\ chksum(tla) = "a873514a") (chksum(pcal) = "dab5451d" /\ chksum(tla) = "56896288") (chksum(pcal) = "dab5451d" /\ chksum(tla) = "56896288") (chksum(pcal) = "39563822" /\ chksum(tla) = "23bfeb59")
+\* Process variable controllerSet of process swFailureProc at line 1384 col 76 changed to controllerSet_
+\* Process variable nxtController of process swFailureProc at line 1385 col 5 changed to nxtController_
+\* Process variable prevLockHolder of process swFailureProc at line 1385 col 25 changed to prevLockHolder_
+\* Process variable controllerSet of process swResolveFailure at line 1469 col 83 changed to controllerSet_s
+\* Process variable nxtController of process swResolveFailure at line 1470 col 5 changed to nxtController_s
+\* Process variable stepOfFailure of process controllerSequencer at line 1610 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1842 col 29 changed to stepOfFailure_c
+\* Process variable stepOfFailure of process controllerEventHandler at line 2056 col 80 changed to stepOfFailure_co
+VARIABLES switchLock, controllerLocalLock, controllerGlobalLock, FirstInstall, 
+          sw_fail_ordering_var, ContProcSet, SwProcSet, swSeqChangedStatus, 
+          controller2Switch, switch2Controller, switchStatus, installedIRs, 
+          installedBy, swFailedNum, swNumEvent, NicAsic2OfaBuff, 
+          Ofa2NicAsicBuff, Installer2OfaBuff, Ofa2InstallerBuff, TCAM, 
+          controlMsgCounter, switchControllerRoleStatus, 
+          switchGeneratedEventSet, controllerSubmoduleFailNum, 
+          controllerSubmoduleFailStat, switchOrdering, dependencyGraph, IR2SW, 
+          irCounter, MAX_IR_COUNTER, idThreadWorkingOnIR, workerThreadRanking, 
+          workerLocalQueue, ofcSwSuspensionStatus, controllerRoleInSW, 
+          nibEventQueue, roleUpdateStatus, isOfcEnabled, 
+          setScheduledRoleUpdates, ofcModuleTerminationStatus, masterState, 
+          controllerStateNIB, IRStatus, NIBSwSuspensionStatus, IRQueueNIB, 
+          subscribeList, SetScheduledIRs, ofcFailoverStateNIB, pc
 
 (* define statement *)
 max(set) == CHOOSE x \in set: \A y \in set: x \geq y
@@ -2569,7 +2560,7 @@ canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
 
 
 getIRSetToReset(SID) == {x \in 1..MAX_NUM_IRs: /\ IR2SW[x] = SID
-                                             /\ IRStatus[x] \notin {IR_DONE, IR_NONE}}
+                                               /\ IRStatus[x] \notin {IR_DONE, IR_NONE}}
 
 
 
@@ -2579,7 +2570,10 @@ returnControllerFailedModules(cont) == {x \in ContProcSet: /\ x[1] = cont
                                                            /\ controllerSubmoduleFailStat[x] = Failed}
 
 
-isFinished == \A x \in 1..MAX_NUM_IRs: IRStatus[x] = IR_DONE
+isFinished(CID) == /\ \A x \in getSetIRsForSwitch(CID): IRStatus[x] = IR_DONE
+                   /\ \/ SHOULD_FAILOVER = 0
+                      \/ /\ \A x \in SW: switchControllerRoleStatus[x][ofc0] = ROLE_SLAVE
+                         /\ \A x \in SW: switchControllerRoleStatus[x][ofc1] = ROLE_MASTER
 
 VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, 
           installerInIR, statusMsg, notFailedSet, failedElem, controllerSet_, 
@@ -2589,13 +2583,15 @@ VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation,
           nextIR, stepOfFailure_, subscriberOfcSet, ofcID, event, swSet, 
           currSW, IRQueueEntries, entry, nextToSent, entryIndex, rowIndex, 
           rowRemove, removeRow, stepOfFailure_c, monitoringEvent, 
-          setIRsToReset, resetIR, stepOfFailure, msg, controllerFailedModules
+          setIRsToReset, resetIR, stepOfFailure_co, msg, stepOfFailure, 
+          controllerFailedModules
 
-vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
-           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
-           switch2Controller, switchStatus, installedIRs, installedBy, 
-           swFailedNum, swNumEvent, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-           Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
+vars == << switchLock, controllerLocalLock, controllerGlobalLock, 
+           FirstInstall, sw_fail_ordering_var, ContProcSet, SwProcSet, 
+           swSeqChangedStatus, controller2Switch, switch2Controller, 
+           switchStatus, installedIRs, installedBy, swFailedNum, swNumEvent, 
+           NicAsic2OfaBuff, Ofa2NicAsicBuff, Installer2OfaBuff, 
+           Ofa2InstallerBuff, TCAM, controlMsgCounter, 
            switchControllerRoleStatus, switchGeneratedEventSet, 
            controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
            switchOrdering, dependencyGraph, IR2SW, irCounter, MAX_IR_COUNTER, 
@@ -2613,13 +2609,15 @@ vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var,
            stepOfFailure_, subscriberOfcSet, ofcID, event, swSet, currSW, 
            IRQueueEntries, entry, nextToSent, entryIndex, rowIndex, rowRemove, 
            removeRow, stepOfFailure_c, monitoringEvent, setIRsToReset, 
-           resetIR, stepOfFailure, msg, controllerFailedModules >>
+           resetIR, stepOfFailure_co, msg, stepOfFailure, 
+           controllerFailedModules >>
 
 ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({ASYNC_NET_EVE_GEN} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({rc0} \X {CONT_SEQ})) \cup (({ofc0, ofc1} \X {NIB_EVENT_HANDLER})) \cup (({ofc0, ofc1} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0, ofc1} \X {CONT_EVENT})) \cup (({ofc0, ofc1} \X {CONT_MONITOR})) \cup ((({ofc0, ofc1} \cup {rc0}) \X {WATCH_DOG})) \cup (( {"proc"} \X {OFC_FAILOVER}))
 
 Init == (* Global variables *)
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
-        /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+        /\ controllerLocalLock = [x \in {ofc0, ofc1, rc0} |-> <<NO_LOCK, NO_LOCK>>]
+        /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
         /\ FirstInstall = [x \in 1..MAX_NUM_IRs |-> 0]
         /\ sw_fail_ordering_var = SW_FAIL_ORDERING
         /\ ContProcSet = ((({rc0} \X {CONT_SEQ})) \cup (({ofc0, ofc1} \X CONTROLLER_THREAD_POOL))
@@ -2726,9 +2724,10 @@ Init == (* Global variables *)
         /\ monitoringEvent = [self \in ({ofc0, ofc1} \X {CONT_EVENT}) |-> [type |-> 0]]
         /\ setIRsToReset = [self \in ({ofc0, ofc1} \X {CONT_EVENT}) |-> {}]
         /\ resetIR = [self \in ({ofc0, ofc1} \X {CONT_EVENT}) |-> 0]
-        /\ stepOfFailure = [self \in ({ofc0, ofc1} \X {CONT_EVENT}) |-> 0]
+        /\ stepOfFailure_co = [self \in ({ofc0, ofc1} \X {CONT_EVENT}) |-> 0]
         (* Process controllerMonitoringServer *)
         /\ msg = [self \in ({ofc0, ofc1} \X {CONT_MONITOR}) |-> [type |-> 0]]
+        /\ stepOfFailure = [self \in ({ofc0, ofc1} \X {CONT_MONITOR}) |-> 0]
         (* Process watchDog *)
         /\ controllerFailedModules = [self \in (({ofc0, ofc1} \cup {rc0}) \X {WATCH_DOG}) |-> {}]
         /\ pc = [self \in ProcSet |-> CASE self \in ({SW_SIMPLE_ID} \X SW) -> "SwitchSimpleProcess"
@@ -2752,14 +2751,14 @@ Init == (* Global variables *)
 SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ whichSwitchModel(self[2]) = SW_SIMPLE_MODEL
                              /\ Len(controller2Switch[self[2]]) > 0
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                              /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                 \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                    /\ switchLock[2] = self[2]
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type \in {INSTALL_FLOW, ROLE_REQ, FLOW_STAT_REQ}, 
-                                       "Failure of assertion at line 1107, column 9.")
+                                       "Failure of assertion at line 1135, column 9.")
                              /\ IF ingressPkt'[self].type = INSTALL_FLOW
                                    THEN /\ IF hasModificationAccess(self[2], ingressPkt'[self].from)
                                               THEN /\ installedIRs' = Append(installedIRs, (ingressPkt'[self].IR))
@@ -2779,7 +2778,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                         /\ UNCHANGED switchControllerRoleStatus
                                    ELSE /\ IF ingressPkt'[self].type = ROLE_REQ
                                               THEN /\ Assert(ingressPkt'[self].roletype \in {ROLE_MASTER, ROLE_SLAVE, ROLE_EQUAL}, 
-                                                             "Failure of assertion at line 1117, column 13.")
+                                                             "Failure of assertion at line 1145, column 13.")
                                                    /\ IF (ingressPkt'[self].roletype) = ROLE_MASTER
                                                          THEN /\ IF getMasterController(self[2]) # (ingressPkt'[self].from)
                                                                     THEN /\ switchControllerRoleStatus' = [switchControllerRoleStatus EXCEPT ![self[2]][getMasterController(self[2])] = ROLE_SLAVE,
@@ -2800,10 +2799,12 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                                         installedBy, TCAM >>
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 901, column 9 of macro called at line 1125, column 9.")
+                                       "Failure of assertion at line 905, column 9 of macro called at line 1153, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
-                             /\ UNCHANGED << controllerLock, FirstInstall, 
+                             /\ UNCHANGED << controllerLocalLock, 
+                                             controllerGlobalLock, 
+                                             FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
                                              switch2Controller, switchStatus, 
@@ -2847,7 +2848,8 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              entryIndex, rowIndex, rowRemove, 
                                              removeRow, stepOfFailure_c, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
+                                             resetIR, stepOfFailure_co, msg, 
+                                             stepOfFailure, 
                                              controllerFailedModules >>
 
 swProcess(self) == SwitchSimpleProcess(self)
@@ -2858,15 +2860,16 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ Len(controller2Switch[self[2]]) > 0
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(ingressIR'[self].type \in {ROLE_REQ, INSTALL_FLOW}, 
-                                   "Failure of assertion at line 1150, column 9.")
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                   "Failure of assertion at line 1178, column 9.")
+                         /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                          /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                             \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                /\ switchLock[2] = self[2]
                          /\ switchLock' = self
                          /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicInsertToOfaBuff"]
-                         /\ UNCHANGED << controllerLock, FirstInstall, 
+                         /\ UNCHANGED << controllerLocalLock, 
+                                         controllerGlobalLock, FirstInstall, 
                                          sw_fail_ordering_var, ContProcSet, 
                                          SwProcSet, swSeqChangedStatus, 
                                          switch2Controller, switchStatus, 
@@ -2908,12 +2911,13 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          entryIndex, rowIndex, rowRemove, 
                                          removeRow, stepOfFailure_c, 
                                          monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
+                                         resetIR, stepOfFailure_co, msg, 
+                                         stepOfFailure, 
                                          controllerFailedModules >>
 
 SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuff"
                                       /\ IF swCanReceivePackets(self[2])
-                                            THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                            THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                  /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                     \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                        /\ switchLock[2] = self[2]
@@ -2925,7 +2929,8 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                  /\ pc' = [pc EXCEPT ![self] = "SwitchRcvPacket"]
                                                  /\ UNCHANGED << switchLock, 
                                                                  NicAsic2OfaBuff >>
-                                      /\ UNCHANGED << controllerLock, 
+                                      /\ UNCHANGED << controllerLocalLock, 
+                                                      controllerGlobalLock, 
                                                       FirstInstall, 
                                                       sw_fail_ordering_var, 
                                                       ContProcSet, SwProcSet, 
@@ -2993,7 +2998,8 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
-                                                      stepOfFailure, msg, 
+                                                      stepOfFailure_co, msg, 
+                                                      stepOfFailure, 
                                                       controllerFailedModules >>
 
 swNicAsicProcPacketIn(self) == SwitchRcvPacket(self)
@@ -3003,16 +3009,18 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ swCanReceivePackets(self[2])
                              /\ Len(Ofa2NicAsicBuff[self[2]]) > 0
                              /\ egressMsg' = [egressMsg EXCEPT ![self] = Head(Ofa2NicAsicBuff[self[2]])]
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                              /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                 \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                    /\ switchLock[2] = self[2]
                              /\ switchLock' = self
                              /\ Assert(egressMsg'[self].type \in {INSTALLED_SUCCESSFULLY, ROLE_REPLY, BAD_REQUEST}, 
-                                       "Failure of assertion at line 1178, column 9.")
+                                       "Failure of assertion at line 1206, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
-                             /\ UNCHANGED << controllerLock, FirstInstall, 
+                             /\ UNCHANGED << controllerLocalLock, 
+                                             controllerGlobalLock, 
+                                             FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
@@ -3059,18 +3067,19 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              entryIndex, rowIndex, rowRemove, 
                                              removeRow, stepOfFailure_c, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
+                                             resetIR, stepOfFailure_co, msg, 
+                                             stepOfFailure, 
                                              controllerFailedModules >>
 
 SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                  /\ IF swCanReceivePackets(self[2])
-                                       THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                       THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                             /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                   /\ switchLock[2] = self[2]
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 901, column 9 of macro called at line 1185, column 17.")
+                                                      "Failure of assertion at line 905, column 9 of macro called at line 1213, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = [switch2Controller EXCEPT ![egressMsg[self].to] = Append(switch2Controller[egressMsg[self].to], egressMsg[self])]
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -3079,7 +3088,9 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
                                             /\ UNCHANGED << switchLock, 
                                                             switch2Controller >>
-                                 /\ UNCHANGED << controllerLock, FirstInstall, 
+                                 /\ UNCHANGED << controllerLocalLock, 
+                                                 controllerGlobalLock, 
+                                                 FirstInstall, 
                                                  sw_fail_ordering_var, 
                                                  ContProcSet, SwProcSet, 
                                                  swSeqChangedStatus, 
@@ -3137,7 +3148,8 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  removeRow, stepOfFailure_c, 
                                                  monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, msg, 
+                                                 stepOfFailure_co, msg, 
+                                                 stepOfFailure, 
                                                  controllerFailedModules >>
 
 swNicAsicProcPacketOut(self) == SwitchFromOFAPacket(self)
@@ -3146,24 +3158,25 @@ swNicAsicProcPacketOut(self) == SwitchFromOFAPacket(self)
 SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ swOFACanProcessIRs(self[2])
                          /\ Len(NicAsic2OfaBuff[self[2]]) > 0
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                         /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                          /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                             \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                /\ switchLock[2] = self[2]
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1216, column 9.")
+                                   "Failure of assertion at line 1244, column 9.")
                          /\ Assert(\/ /\ ofaInMsg'[self].type = ROLE_REQ
                                       /\ ofaInMsg'[self].roletype \in {ROLE_SLAVE, ROLE_MASTER, ROLE_EQUAL}
                                    \/ /\ ofaInMsg'[self].type = INSTALL_FLOW
                                       /\ ofaInMsg'[self].IR  \in 1..MAX_NUM_IRs, 
-                                   "Failure of assertion at line 1217, column 9.")
+                                   "Failure of assertion at line 1245, column 9.")
                          /\ Assert(ofaInMsg'[self].from \in {ofc0, ofc1}, 
-                                   "Failure of assertion at line 1221, column 9.")
+                                   "Failure of assertion at line 1249, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
-                         /\ UNCHANGED << controllerLock, FirstInstall, 
+                         /\ UNCHANGED << controllerLocalLock, 
+                                         controllerGlobalLock, FirstInstall, 
                                          sw_fail_ordering_var, ContProcSet, 
                                          SwProcSet, swSeqChangedStatus, 
                                          controller2Switch, switch2Controller, 
@@ -3205,16 +3218,17 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          entryIndex, rowIndex, rowRemove, 
                                          removeRow, stepOfFailure_c, 
                                          monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
+                                         resetIR, stepOfFailure_co, msg, 
+                                         stepOfFailure, 
                                          controllerFailedModules >>
 
 SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                 /\ IF swOFACanProcessIRs(self[2])
                                       THEN /\ Assert(ofaInMsg[self].type \in {INSTALL_FLOW, ROLE_REQ}, 
-                                                     "Failure of assertion at line 1232, column 17.")
+                                                     "Failure of assertion at line 1260, column 17.")
                                            /\ IF ofaInMsg[self].type = INSTALL_FLOW
                                                  THEN /\ IF hasModificationAccess(self[2], ofaInMsg[self].from)
-                                                            THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                            THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                                  /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                                     \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                                        /\ switchLock[2] = self[2]
@@ -3223,7 +3237,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                                                                                                             [IR |-> ofaInMsg[self].IR,
                                                                                                                                             from |-> ofaInMsg[self].from])]
                                                                  /\ UNCHANGED Ofa2NicAsicBuff
-                                                            ELSE /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                            ELSE /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                                  /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                                     \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                                        /\ switchLock[2] = self[2]
@@ -3237,8 +3251,8 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                       /\ UNCHANGED switchControllerRoleStatus
                                                  ELSE /\ IF ofaInMsg[self].type = ROLE_REQ
                                                             THEN /\ Assert(ofaInMsg[self].roletype \in {ROLE_MASTER, ROLE_SLAVE, ROLE_EQUAL}, 
-                                                                           "Failure of assertion at line 1256, column 21.")
-                                                                 /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                                           "Failure of assertion at line 1284, column 21.")
+                                                                 /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                                  /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                                     \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                                        /\ switchLock[2] = self[2]
@@ -3266,7 +3280,9 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                            Ofa2NicAsicBuff, 
                                                            Ofa2InstallerBuff, 
                                                            switchControllerRoleStatus >>
-                                /\ UNCHANGED << controllerLock, FirstInstall, 
+                                /\ UNCHANGED << controllerLocalLock, 
+                                                controllerGlobalLock, 
+                                                FirstInstall, 
                                                 sw_fail_ordering_var, 
                                                 ContProcSet, SwProcSet, 
                                                 swSeqChangedStatus, 
@@ -3317,12 +3333,13 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 rowIndex, rowRemove, removeRow, 
                                                 stepOfFailure_c, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, stepOfFailure, msg, 
+                                                resetIR, stepOfFailure_co, msg, 
+                                                stepOfFailure, 
                                                 controllerFailedModules >>
 
 SwitchSendRoleReply(self) == /\ pc[self] = "SwitchSendRoleReply"
                              /\ IF swOFACanProcessIRs(self[2])
-                                   THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                   THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                         /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                            \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                               /\ switchLock[2] = self[2]
@@ -3337,7 +3354,9 @@ SwitchSendRoleReply(self) == /\ pc[self] = "SwitchSendRoleReply"
                                         /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
                                         /\ UNCHANGED << switchLock, 
                                                         Ofa2NicAsicBuff >>
-                             /\ UNCHANGED << controllerLock, FirstInstall, 
+                             /\ UNCHANGED << controllerLocalLock, 
+                                             controllerGlobalLock, 
+                                             FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
@@ -3384,7 +3403,8 @@ SwitchSendRoleReply(self) == /\ pc[self] = "SwitchSendRoleReply"
                                              entryIndex, rowIndex, rowRemove, 
                                              removeRow, stepOfFailure_c, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
+                                             resetIR, stepOfFailure_co, msg, 
+                                             stepOfFailure, 
                                              controllerFailedModules >>
 
 ofaModuleProcPacketIn(self) == SwitchOfaProcIn(self)
@@ -3394,7 +3414,7 @@ ofaModuleProcPacketIn(self) == SwitchOfaProcIn(self)
 SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ swOFACanProcessIRs(self[2])
                           /\ Installer2OfaBuff[self[2]] # <<>>
-                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                          /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                           /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                 /\ switchLock[2] = self[2]
@@ -3402,9 +3422,10 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self].IR \in 1..MAX_NUM_IRs, 
-                                    "Failure of assertion at line 1292, column 9.")
+                                    "Failure of assertion at line 1320, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
-                          /\ UNCHANGED << controllerLock, FirstInstall, 
+                          /\ UNCHANGED << controllerLocalLock, 
+                                          controllerGlobalLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
                                           SwProcSet, swSeqChangedStatus, 
                                           controller2Switch, switch2Controller, 
@@ -3447,12 +3468,13 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           entryIndex, rowIndex, rowRemove, 
                                           removeRow, stepOfFailure_c, 
                                           monitoringEvent, setIRsToReset, 
-                                          resetIR, stepOfFailure, msg, 
+                                          resetIR, stepOfFailure_co, msg, 
+                                          stepOfFailure, 
                                           controllerFailedModules >>
 
 SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmation"
                                       /\ IF swOFACanProcessIRs(self[2])
-                                            THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                            THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                  /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                     \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                        /\ switchLock[2] = self[2]
@@ -3472,7 +3494,8 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                  /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcOut"]
                                                  /\ UNCHANGED << switchLock, 
                                                                  Ofa2NicAsicBuff >>
-                                      /\ UNCHANGED << controllerLock, 
+                                      /\ UNCHANGED << controllerLocalLock, 
+                                                      controllerGlobalLock, 
                                                       FirstInstall, 
                                                       sw_fail_ordering_var, 
                                                       ContProcSet, SwProcSet, 
@@ -3539,7 +3562,8 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
-                                                      stepOfFailure, msg, 
+                                                      stepOfFailure_co, msg, 
+                                                      stepOfFailure, 
                                                       controllerFailedModules >>
 
 ofaModuleProcPacketOut(self) == SwitchOfaProcOut(self)
@@ -3548,17 +3572,19 @@ ofaModuleProcPacketOut(self) == SwitchOfaProcOut(self)
 SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ swCanInstallIRs(self[2])
                              /\ Len(Ofa2InstallerBuff[self[2]]) > 0
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                              /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                 \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                    /\ switchLock[2] = self[2]
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self].IR \in 1..MAX_NUM_IRs, 
-                                       "Failure of assertion at line 1328, column 8.")
+                                       "Failure of assertion at line 1356, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
-                             /\ UNCHANGED << controllerLock, FirstInstall, 
+                             /\ UNCHANGED << controllerLocalLock, 
+                                             controllerGlobalLock, 
+                                             FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
                                              controller2Switch, 
@@ -3603,12 +3629,13 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              entryIndex, rowIndex, rowRemove, 
                                              removeRow, stepOfFailure_c, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
+                                             resetIR, stepOfFailure_co, msg, 
+                                             stepOfFailure, 
                                              controllerFailedModules >>
 
 SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                     /\ IF swCanInstallIRs(self[2])
-                                          THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                          THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                   \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                      /\ switchLock[2] = self[2]
@@ -3624,7 +3651,8 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                                installedIRs, 
                                                                installedBy, 
                                                                TCAM >>
-                                    /\ UNCHANGED << controllerLock, 
+                                    /\ UNCHANGED << controllerLocalLock, 
+                                                    controllerGlobalLock, 
                                                     FirstInstall, 
                                                     sw_fail_ordering_var, 
                                                     ContProcSet, SwProcSet, 
@@ -3686,12 +3714,13 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     removeRow, stepOfFailure_c, 
                                                     monitoringEvent, 
                                                     setIRsToReset, resetIR, 
-                                                    stepOfFailure, msg, 
+                                                    stepOfFailure_co, msg, 
+                                                    stepOfFailure, 
                                                     controllerFailedModules >>
 
 SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfirmation"
                                          /\ IF swCanInstallIRs(self[2])
-                                               THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                               THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                                     /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                        \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                           /\ switchLock[2] = self[2]
@@ -3703,7 +3732,8 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                     /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerProc"]
                                                     /\ UNCHANGED << switchLock, 
                                                                     Installer2OfaBuff >>
-                                         /\ UNCHANGED << controllerLock, 
+                                         /\ UNCHANGED << controllerLocalLock, 
+                                                         controllerGlobalLock, 
                                                          FirstInstall, 
                                                          sw_fail_ordering_var, 
                                                          ContProcSet, 
@@ -3780,7 +3810,8 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
-                                                         stepOfFailure, msg, 
+                                                         stepOfFailure_co, msg, 
+                                                         stepOfFailure, 
                                                          controllerFailedModules >>
 
 installerModuleProc(self) == SwitchInstallerProc(self)
@@ -3790,16 +3821,15 @@ installerModuleProc(self) == SwitchInstallerProc(self)
 SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ notFailedSet' = [notFailedSet EXCEPT ![self] = returnSwitchElementsNotFailed(self[2])]
                        /\ Assert(statusMsg[self].type = 0, 
-                                 "Failure of assertion at line 1372, column 9.")
+                                 "Failure of assertion at line 1400, column 9.")
                        /\ notFailedSet'[self] # {}
-                       /\ ~isFinished
+                       /\ ~isFinished(self[2])
                        /\ swFailedNum[self[2]] < MAX_NUM_SW_FAILURE
-                       /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                          /\ \/ switchLock[2] = self[2]
-                       /\ \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE
+                       /\ /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                          /\ switchLock[2] = self[2]
                        /\ self[2] \in Head(sw_fail_ordering_var)
                        /\ Assert((self[2]) \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 589, column 9 of macro called at line 1382, column 9.")
+                                 "Failure of assertion at line 591, column 9 of macro called at line 1407, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{(self[2])})>> \o Tail(sw_fail_ordering_var)
@@ -3808,7 +3838,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ IF failedElem'[self] = "cpu"
                              THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                   /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                            "Failure of assertion at line 668, column 9 of macro called at line 1391, column 17.")
+                                            "Failure of assertion at line 670, column 9 of macro called at line 1416, column 17.")
                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                           ![self[2]].ofa = Failed,
                                                                           ![self[2]].installer = Failed]
@@ -3829,7 +3859,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                              ELSE /\ IF failedElem'[self] = "ofa"
                                         THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                              /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                       "Failure of assertion at line 721, column 9 of macro called at line 1394, column 17.")
+                                                       "Failure of assertion at line 723, column 9 of macro called at line 1419, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                              /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                              /\ IF switchStatus'[self[2]].nicAsic = NotFailed
@@ -3844,12 +3874,12 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                         ELSE /\ IF failedElem'[self] = "installer"
                                                    THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                         /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                  "Failure of assertion at line 766, column 9 of macro called at line 1397, column 17.")
+                                                                  "Failure of assertion at line 768, column 9 of macro called at line 1422, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                         /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                               THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                             "Failure of assertion at line 770, column 13 of macro called at line 1397, column 17.")
+                                                                             "Failure of assertion at line 772, column 13 of macro called at line 1422, column 17.")
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                 swID |-> self[2],
@@ -3862,7 +3892,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                    ELSE /\ IF failedElem'[self] = "nicAsic"
                                                               THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                                    /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                             "Failure of assertion at line 613, column 9 of macro called at line 1400, column 17.")
+                                                                             "Failure of assertion at line 615, column 9 of macro called at line 1425, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                    /\ swFailedNum' = [swFailedNum EXCEPT ![self[2]] = swFailedNum[self[2]] + 1]
                                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
@@ -3871,7 +3901,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                 swID |-> self[2],
                                                                                                                 num |-> controlMsgCounter'[self[2]]]]
                                                               ELSE /\ Assert(FALSE, 
-                                                                             "Failure of assertion at line 1401, column 14.")
+                                                                             "Failure of assertion at line 1426, column 14.")
                                                                    /\ UNCHANGED << controller2Switch, 
                                                                                    switchStatus, 
                                                                                    swFailedNum, 
@@ -3883,7 +3913,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                   Ofa2InstallerBuff >>
                        /\ IF shouldSendFailMsgToAll(statusMsg'[self])
                              THEN /\ prevLockHolder_' = [prevLockHolder_ EXCEPT ![self] = switchLock]
-                                  /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                  /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                   /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                      \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                         /\ switchLock[2] = self[2]
@@ -3892,12 +3922,13 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                   /\ pc' = [pc EXCEPT ![self] = "swFailureSendStatusMsg"]
                              ELSE /\ IF statusMsg'[self].type # 0
                                         THEN /\ Assert(FALSE, 
-                                                       "Failure of assertion at line 1433, column 13.")
+                                                       "Failure of assertion at line 1458, column 13.")
                                         ELSE /\ TRUE
                                   /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
                                   /\ UNCHANGED << switchLock, controllerSet_, 
                                                   prevLockHolder_ >>
-                       /\ UNCHANGED << controllerLock, FirstInstall, 
+                       /\ UNCHANGED << controllerLocalLock, 
+                                       controllerGlobalLock, FirstInstall, 
                                        ContProcSet, SwProcSet, 
                                        swSeqChangedStatus, switch2Controller, 
                                        installedIRs, installedBy, swNumEvent, 
@@ -3931,7 +3962,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        entry, nextToSent, entryIndex, rowIndex, 
                                        rowRemove, removeRow, stepOfFailure_c, 
                                        monitoringEvent, setIRsToReset, resetIR, 
-                                       stepOfFailure, msg, 
+                                       stepOfFailure_co, msg, stepOfFailure, 
                                        controllerFailedModules >>
 
 swFailureSendStatusMsg(self) == /\ pc[self] = "swFailureSendStatusMsg"
@@ -3943,7 +3974,7 @@ swFailureSendStatusMsg(self) == /\ pc[self] = "swFailureSendStatusMsg"
                                            /\ UNCHANGED << switchLock, 
                                                            statusMsg >>
                                       ELSE /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> 0]]
-                                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                           /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                            /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                               \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                  /\ switchLock[2] = self[2]
@@ -3952,7 +3983,9 @@ swFailureSendStatusMsg(self) == /\ pc[self] = "swFailureSendStatusMsg"
                                            /\ UNCHANGED << swSeqChangedStatus, 
                                                            controllerSet_, 
                                                            nxtController_ >>
-                                /\ UNCHANGED << controllerLock, FirstInstall, 
+                                /\ UNCHANGED << controllerLocalLock, 
+                                                controllerGlobalLock, 
+                                                FirstInstall, 
                                                 sw_fail_ordering_var, 
                                                 ContProcSet, SwProcSet, 
                                                 controller2Switch, 
@@ -4004,25 +4037,26 @@ swFailureSendStatusMsg(self) == /\ pc[self] = "swFailureSendStatusMsg"
                                                 rowIndex, rowRemove, removeRow, 
                                                 stepOfFailure_c, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, stepOfFailure, msg, 
+                                                resetIR, stepOfFailure_co, msg, 
+                                                stepOfFailure, 
                                                 controllerFailedModules >>
 
 swFailureProc(self) == SwitchFailure(self) \/ swFailureSendStatusMsg(self)
 
 SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ Assert(statusResolveMsg[self].type = 0, 
-                                        "Failure of assertion at line 1451, column 9.")
+                                        "Failure of assertion at line 1476, column 9.")
                               /\ failedSet' = [failedSet EXCEPT ![self] = returnSwitchFailedElements(self[2])]
                               /\ Cardinality(failedSet'[self]) > 0
-                              /\ ~isFinished
-                              /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                              /\ ~isFinished(self[2])
+                              /\ /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ \E elem \in failedSet'[self]:
                                    recoveredElem' = [recoveredElem EXCEPT ![self] = elem]
                               /\ IF recoveredElem'[self] = "cpu"
                                     THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                          /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 696, column 9 of macro called at line 1461, column 39.")
+                                                   "Failure of assertion at line 698, column 9 of macro called at line 1486, column 39.")
                                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                  ![self[2]].ofa = NotFailed,
                                                                                  ![self[2]].installer = NotFailed]
@@ -4043,7 +4077,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                     ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                THEN /\ nicAsicStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                              "Failure of assertion at line 640, column 9 of macro called at line 1462, column 46.")
+                                                              "Failure of assertion at line 642, column 9 of macro called at line 1487, column 46.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                     /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                     /\ IF switchStatus'[self[2]].ofa = Failed
@@ -4059,7 +4093,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "ofa"
                                                           THEN /\ ofaStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                         "Failure of assertion at line 744, column 9 of macro called at line 1463, column 42.")
+                                                                         "Failure of assertion at line 746, column 9 of macro called at line 1488, column 42.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                      THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -4073,11 +4107,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "installer"
                                                                      THEN /\ installerInStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                    "Failure of assertion at line 789, column 9 of macro called at line 1464, column 48.")
+                                                                                    "Failure of assertion at line 791, column 9 of macro called at line 1489, column 48.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                 THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                               "Failure of assertion at line 792, column 13 of macro called at line 1464, column 48.")
+                                                                                               "Failure of assertion at line 794, column 13 of macro called at line 1489, column 48.")
                                                                                      /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                 swID |-> self[2],
@@ -4087,7 +4121,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                      /\ UNCHANGED << controlMsgCounter, 
                                                                                                      statusResolveMsg >>
                                                                      ELSE /\ Assert(FALSE, 
-                                                                                    "Failure of assertion at line 1465, column 14.")
+                                                                                    "Failure of assertion at line 1490, column 14.")
                                                                           /\ UNCHANGED << switchStatus, 
                                                                                           controlMsgCounter, 
                                                                                           statusResolveMsg >>
@@ -4098,7 +4132,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                          Ofa2InstallerBuff >>
                               /\ IF shouldSendRecoveryMsgToAll(statusResolveMsg'[self])
                                     THEN /\ prevLockHolder' = [prevLockHolder EXCEPT ![self] = switchLock]
-                                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                         /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                          /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                /\ switchLock[2] = self[2]
@@ -4107,13 +4141,15 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                          /\ pc' = [pc EXCEPT ![self] = "swRecoverySendStatusMsg"]
                                     ELSE /\ IF statusResolveMsg'[self].type # 0
                                                THEN /\ Assert(FALSE, 
-                                                              "Failure of assertion at line 1496, column 13.")
+                                                              "Failure of assertion at line 1521, column 13.")
                                                ELSE /\ TRUE
                                          /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
                                          /\ UNCHANGED << switchLock, 
                                                          controllerSet_s, 
                                                          prevLockHolder >>
-                              /\ UNCHANGED << controllerLock, FirstInstall, 
+                              /\ UNCHANGED << controllerLocalLock, 
+                                              controllerGlobalLock, 
+                                              FirstInstall, 
                                               sw_fail_ordering_var, 
                                               ContProcSet, SwProcSet, 
                                               swSeqChangedStatus, 
@@ -4156,7 +4192,8 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               rowRemove, removeRow, 
                                               stepOfFailure_c, monitoringEvent, 
                                               setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
+                                              stepOfFailure_co, msg, 
+                                              stepOfFailure, 
                                               controllerFailedModules >>
 
 swRecoverySendStatusMsg(self) == /\ pc[self] = "swRecoverySendStatusMsg"
@@ -4168,7 +4205,7 @@ swRecoverySendStatusMsg(self) == /\ pc[self] = "swRecoverySendStatusMsg"
                                             /\ UNCHANGED << switchLock, 
                                                             statusResolveMsg >>
                                        ELSE /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> 0]]
-                                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                            /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                             /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                                \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                                   /\ switchLock[2] = self[2]
@@ -4177,7 +4214,9 @@ swRecoverySendStatusMsg(self) == /\ pc[self] = "swRecoverySendStatusMsg"
                                             /\ UNCHANGED << swSeqChangedStatus, 
                                                             controllerSet_s, 
                                                             nxtController_s >>
-                                 /\ UNCHANGED << controllerLock, FirstInstall, 
+                                 /\ UNCHANGED << controllerLocalLock, 
+                                                 controllerGlobalLock, 
+                                                 FirstInstall, 
                                                  sw_fail_ordering_var, 
                                                  ContProcSet, SwProcSet, 
                                                  controller2Switch, 
@@ -4233,20 +4272,19 @@ swRecoverySendStatusMsg(self) == /\ pc[self] = "swRecoverySendStatusMsg"
                                                  removeRow, stepOfFailure_c, 
                                                  monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, msg, 
+                                                 stepOfFailure_co, msg, 
+                                                 stepOfFailure, 
                                                  controllerFailedModules >>
 
 swResolveFailure(self) == SwitchResolveFailure(self)
                              \/ swRecoverySendStatusMsg(self)
 
 asyncNetEventGenProc(self) == /\ pc[self] = "asyncNetEventGenProc"
-                              /\ ~isFinished
                               /\ swNumEvent[self[2]] < SW_MAX_NUM_EVENTS[self[2]]
-                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                              /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                               /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                  \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                     /\ switchLock[2] = self[2]
-                              /\ \E x \in getSetIRsForSwitch(self[2]): IRStatus[x] # IR_DONE
                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                               /\ eventID' = [eventID EXCEPT ![self] = controlMsgCounter'[self[2]]]
                               /\ swNumEvent' = [swNumEvent EXCEPT ![self[2]] = swNumEvent[self[2]] + 1]
@@ -4256,7 +4294,8 @@ asyncNetEventGenProc(self) == /\ pc[self] = "asyncNetEventGenProc"
                                          /\ pc' = [pc EXCEPT ![self] = "sendNetworkEvent"]
                                     ELSE /\ pc' = [pc EXCEPT ![self] = "asyncNetEventGenProc"]
                                          /\ UNCHANGED controllerSet
-                              /\ UNCHANGED << switchLock, controllerLock, 
+                              /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                              controllerGlobalLock, 
                                               FirstInstall, 
                                               sw_fail_ordering_var, 
                                               ContProcSet, SwProcSet, 
@@ -4304,12 +4343,13 @@ asyncNetEventGenProc(self) == /\ pc[self] = "asyncNetEventGenProc"
                                               rowIndex, rowRemove, removeRow, 
                                               stepOfFailure_c, monitoringEvent, 
                                               setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
+                                              stepOfFailure_co, msg, 
+                                              stepOfFailure, 
                                               controllerFailedModules >>
 
 sendNetworkEvent(self) == /\ pc[self] = "sendNetworkEvent"
                           /\ IF swOFACanProcessIRs(self[2])
-                                THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                THEN /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                                      /\ \/ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                         \/ /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
                                            /\ switchLock[2] = self[2]
@@ -4329,7 +4369,8 @@ sendNetworkEvent(self) == /\ pc[self] = "sendNetworkEvent"
                                                      Ofa2NicAsicBuff, eventMsg, 
                                                      controllerSet, 
                                                      nxtController >>
-                          /\ UNCHANGED << controllerLock, FirstInstall, 
+                          /\ UNCHANGED << controllerLocalLock, 
+                                          controllerGlobalLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
                                           SwProcSet, swSeqChangedStatus, 
                                           controller2Switch, switch2Controller, 
@@ -4372,7 +4413,8 @@ sendNetworkEvent(self) == /\ pc[self] = "sendNetworkEvent"
                                           entryIndex, rowIndex, rowRemove, 
                                           removeRow, stepOfFailure_c, 
                                           monitoringEvent, setIRsToReset, 
-                                          resetIR, stepOfFailure, msg, 
+                                          resetIR, stepOfFailure_co, msg, 
+                                          stepOfFailure, 
                                           controllerFailedModules >>
 
 asyncNetworkEventGenerator(self) == asyncNetEventGenProc(self)
@@ -4381,7 +4423,7 @@ asyncNetworkEventGenerator(self) == asyncNetEventGenProc(self)
 ghostProc(self) == /\ pc[self] = "ghostProc"
                    /\ /\ switchLock # <<NO_LOCK, NO_LOCK>>
                       /\ switchLock[2] = self[2]
-                      /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                      /\ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
                    /\ IF switchStatus[switchLock[2]].cpu = Failed /\ switchLock[1] = NIC_ASIC_OUT
                          THEN /\ pc[switchLock] = "SwitchFromOFAPacket"
                          ELSE /\ IF switchLock[1] \in {NIC_ASIC_IN, NIC_ASIC_OUT}
@@ -4400,14 +4442,14 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                                      ELSE /\ IF switchLock[1] \in {SW_RESOLVE_PROC}
                                                                                 THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                                                 ELSE /\ TRUE
-                   /\ Assert(\/ switchLock[2] = switchLock[2]
+                   /\ Assert(\/ switchLock[2] = self[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 901, column 9 of macro called at line 1573, column 9.")
+                             "Failure of assertion at line 905, column 9 of macro called at line 1596, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
-                   /\ UNCHANGED << controllerLock, FirstInstall, 
-                                   sw_fail_ordering_var, ContProcSet, 
-                                   SwProcSet, swSeqChangedStatus, 
+                   /\ UNCHANGED << controllerLocalLock, controllerGlobalLock, 
+                                   FirstInstall, sw_fail_ordering_var, 
+                                   ContProcSet, SwProcSet, swSeqChangedStatus, 
                                    controller2Switch, switch2Controller, 
                                    switchStatus, installedIRs, installedBy, 
                                    swFailedNum, swNumEvent, NicAsic2OfaBuff, 
@@ -4441,22 +4483,26 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    entry, nextToSent, entryIndex, rowIndex, 
                                    rowRemove, removeRow, stepOfFailure_c, 
                                    monitoringEvent, setIRsToReset, resetIR, 
-                                   stepOfFailure, msg, controllerFailedModules >>
+                                   stepOfFailure_co, msg, stepOfFailure, 
+                                   controllerFailedModules >>
 
 ghostUnlockProcess(self) == ghostProc(self)
 
 ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                            /\ controllerIsMaster(self[1])
                            /\ moduleIsUp(self)
-                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
                            /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNext(self[1])]
                            /\ toBeScheduledIRs'[self] # {}
+                           /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerGlobalLock[1] = self[1]
+                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                           /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerLocalLock[self[1]] = self
                            /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
-                           /\ UNCHANGED << switchLock, controllerLock, 
-                                           FirstInstall, sw_fail_ordering_var, 
-                                           ContProcSet, SwProcSet, 
-                                           swSeqChangedStatus, 
+                           /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                           controllerGlobalLock, FirstInstall, 
+                                           sw_fail_ordering_var, ContProcSet, 
+                                           SwProcSet, swSeqChangedStatus, 
                                            controller2Switch, 
                                            switch2Controller, switchStatus, 
                                            installedIRs, installedBy, 
@@ -4500,12 +4546,16 @@ ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                                            rowIndex, rowRemove, removeRow, 
                                            stepOfFailure_c, monitoringEvent, 
                                            setIRsToReset, resetIR, 
-                                           stepOfFailure, msg, 
+                                           stepOfFailure_co, msg, 
+                                           stepOfFailure, 
                                            controllerFailedModules >>
 
 SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                               \/ controllerGlobalLock[1] = self[1]
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                            /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                               \/ controllerLocalLock[self[1]] = self
                             /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                                   THEN /\ \E num \in 0..3:
                                             stepOfFailure_' = [stepOfFailure_ EXCEPT ![self] = num]
@@ -4531,10 +4581,10 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                   ELSE /\ pc' = [pc EXCEPT ![self] = "ScheduleTheIR"]
                                        /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                        controllerSubmoduleFailStat >>
-                            /\ UNCHANGED << switchLock, controllerLock, 
-                                            FirstInstall, sw_fail_ordering_var, 
-                                            ContProcSet, SwProcSet, 
-                                            swSeqChangedStatus, 
+                            /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                            controllerGlobalLock, FirstInstall, 
+                                            sw_fail_ordering_var, ContProcSet, 
+                                            SwProcSet, swSeqChangedStatus, 
                                             controller2Switch, 
                                             switch2Controller, switchStatus, 
                                             installedIRs, installedBy, 
@@ -4575,12 +4625,15 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             rowIndex, rowRemove, removeRow, 
                                             stepOfFailure_c, monitoringEvent, 
                                             setIRsToReset, resetIR, 
-                                            stepOfFailure, msg, 
+                                            stepOfFailure_co, msg, 
+                                            stepOfFailure, 
                                             controllerFailedModules >>
 
 ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
-                       /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                       /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                          \/ controllerGlobalLock[1] = self[1]
                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                       /\ controllerGlobalLock' = self
                        /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                              THEN /\ \E num \in 0..2:
                                        stepOfFailure_' = [stepOfFailure_ EXCEPT ![self] = num]
@@ -4591,7 +4644,7 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                   /\ pc' = [pc EXCEPT ![self] = "sendIRQueueModNotification"]
                              ELSE /\ pc' = [pc EXCEPT ![self] = "sequencerApplyFailure"]
                                   /\ UNCHANGED << IRQueueNIB, subscriberOfcSet >>
-                       /\ UNCHANGED << switchLock, controllerLock, 
+                       /\ UNCHANGED << switchLock, controllerLocalLock, 
                                        FirstInstall, sw_fail_ordering_var, 
                                        ContProcSet, SwProcSet, 
                                        swSeqChangedStatus, controller2Switch, 
@@ -4632,7 +4685,7 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                        entryIndex, rowIndex, rowRemove, 
                                        removeRow, stepOfFailure_c, 
                                        monitoringEvent, setIRsToReset, resetIR, 
-                                       stepOfFailure, msg, 
+                                       stepOfFailure_co, msg, stepOfFailure, 
                                        controllerFailedModules >>
 
 sendIRQueueModNotification(self) == /\ pc[self] = "sendIRQueueModNotification"
@@ -4654,7 +4707,9 @@ sendIRQueueModNotification(self) == /\ pc[self] = "sendIRQueueModNotification"
                                                /\ UNCHANGED << nibEventQueue, 
                                                                subscriberOfcSet, 
                                                                ofcID >>
-                                    /\ UNCHANGED << switchLock, controllerLock, 
+                                    /\ UNCHANGED << switchLock, 
+                                                    controllerLocalLock, 
+                                                    controllerGlobalLock, 
                                                     FirstInstall, 
                                                     sw_fail_ordering_var, 
                                                     ContProcSet, SwProcSet, 
@@ -4713,10 +4768,15 @@ sendIRQueueModNotification(self) == /\ pc[self] = "sendIRQueueModNotification"
                                                     removeRow, stepOfFailure_c, 
                                                     monitoringEvent, 
                                                     setIRsToReset, resetIR, 
-                                                    stepOfFailure, msg, 
+                                                    stepOfFailure_co, msg, 
+                                                    stepOfFailure, 
                                                     controllerFailedModules >>
 
 sequencerApplyFailure(self) == /\ pc[self] = "sequencerApplyFailure"
+                               /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                  \/ controllerGlobalLock[1] = self[1]
+                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                               /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                /\ IF (stepOfFailure_[self] # 0)
                                      THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
                                           /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
@@ -4726,7 +4786,7 @@ sequencerApplyFailure(self) == /\ pc[self] = "sequencerApplyFailure"
                                                 ELSE /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                                           /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                           controllerSubmoduleFailStat >>
-                               /\ UNCHANGED << switchLock, controllerLock, 
+                               /\ UNCHANGED << switchLock, controllerLocalLock, 
                                                FirstInstall, 
                                                sw_fail_ordering_var, 
                                                ContProcSet, SwProcSet, 
@@ -4778,16 +4838,23 @@ sequencerApplyFailure(self) == /\ pc[self] = "sequencerApplyFailure"
                                                rowIndex, rowRemove, removeRow, 
                                                stepOfFailure_c, 
                                                monitoringEvent, setIRsToReset, 
-                                               resetIR, stepOfFailure, msg, 
+                                               resetIR, stepOfFailure_co, msg, 
+                                               stepOfFailure, 
                                                controllerFailedModules >>
 
 ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateReconciliation"
                                           /\ controllerIsMaster(self[1])
                                           /\ moduleIsUp(self)
-                                          /\ \/ controllerLock = self
-                                             \/ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                          /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                             \/ controllerGlobalLock[1] = self[1]
                                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                          /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                          /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                          /\ \/ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                             \/ controllerGlobalLock'[1] = self[1]
+                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                          /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                             \/ controllerLocalLock[self[1]] = self
+                                          /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
                                           /\ IF (controllerStateNIB[self].type = STATUS_START_SCHEDULING)
                                                 THEN /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![IR2SW[controllerStateNIB[self].next]] = SetScheduledIRs[IR2SW[controllerStateNIB[self].next]]\{controllerStateNIB[self].next}]
                                                 ELSE /\ TRUE
@@ -4872,7 +4939,8 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           monitoringEvent, 
                                                           setIRsToReset, 
                                                           resetIR, 
-                                                          stepOfFailure, msg, 
+                                                          stepOfFailure_co, 
+                                                          msg, stepOfFailure, 
                                                           controllerFailedModules >>
 
 controllerSequencer(self) == ControllerSeqProc(self)
@@ -4888,8 +4956,11 @@ NibEventHandlerProc(self) == /\ pc[self] = "NibEventHandlerProc"
                                    /\ nibEventQueue[self[1]] # <<>>
                                 \/ /\ masterState[self[1]] = ROLE_MASTER
                                    /\ getSetSwitchInEqualRole(self[1]) # {}
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                \/ controllerGlobalLock[1] = self[1]
                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                             /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                \/ controllerLocalLock[self[1]] = self
                              /\ IF ofcFailoverStateNIB[self[1]] = FAILOVER_INIT
                                    THEN /\ isOfcEnabled' = [isOfcEnabled EXCEPT ![self[1]] = TRUE]
                                         /\ swSet' = [swSet EXCEPT ![self] = getSetSwitchInSlaveRole(self[1])]
@@ -4932,7 +5003,8 @@ NibEventHandlerProc(self) == /\ pc[self] = "NibEventHandlerProc"
                                                    /\ UNCHANGED << ofcModuleTerminationStatus, 
                                                                    subscribeList >>
                                         /\ UNCHANGED << isOfcEnabled, swSet >>
-                             /\ UNCHANGED << switchLock, controllerLock, 
+                             /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                             controllerGlobalLock, 
                                              FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, swSeqChangedStatus, 
@@ -4975,20 +5047,40 @@ NibEventHandlerProc(self) == /\ pc[self] = "NibEventHandlerProc"
                                              rowRemove, removeRow, 
                                              stepOfFailure_c, monitoringEvent, 
                                              setIRsToReset, resetIR, 
-                                             stepOfFailure, msg, 
+                                             stepOfFailure_co, msg, 
+                                             stepOfFailure, 
                                              controllerFailedModules >>
 
 ScheduleRoleUpdateEqual(self) == /\ pc[self] = "ScheduleRoleUpdateEqual"
-                                 /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                 /\ currSW' = [currSW EXCEPT ![self] = CHOOSE x \in swSet[self]: TRUE]
-                                 /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = Append((workerLocalQueue[self[1]]), [item |-> ([type |-> ROLE_REQ, roletype |-> ROLE_EQUAL, to |-> currSW'[self]]), id |-> -1, tag |-> NO_TAG])]
-                                 /\ swSet' = [swSet EXCEPT ![self] = swSet[self] \ {currSW'[self]}]
-                                 /\ IF swSet'[self] = {}
-                                       THEN /\ pc' = [pc EXCEPT ![self] = "WaitForSwitchUpdateRoleACK"]
-                                       ELSE /\ pc' = [pc EXCEPT ![self] = "ScheduleRoleUpdateEqual"]
-                                 /\ UNCHANGED << switchLock, controllerLock, 
-                                                 FirstInstall, 
+                                 /\ IF swSet[self] # {}
+                                       THEN /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerGlobalLock[1] = self[1]
+                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                            /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerLocalLock[self[1]] = self
+                                            /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = self]
+                                            /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerGlobalLock[1] = self[1]
+                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                            /\ controllerGlobalLock' = self
+                                            /\ currSW' = [currSW EXCEPT ![self] = CHOOSE x \in swSet[self]: TRUE]
+                                            /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = Append((workerLocalQueue[self[1]]), [item |-> ([type |-> ROLE_REQ, roletype |-> ROLE_EQUAL, to |-> currSW'[self]]), id |-> -1, tag |-> NO_TAG])]
+                                            /\ swSet' = [swSet EXCEPT ![self] = swSet[self] \ {currSW'[self]}]
+                                            /\ pc' = [pc EXCEPT ![self] = "ScheduleRoleUpdateEqual"]
+                                       ELSE /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerGlobalLock[1] = self[1]
+                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                            /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerLocalLock[self[1]] = self
+                                            /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
+                                            /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerGlobalLock[1] = self[1]
+                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                            /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                            /\ pc' = [pc EXCEPT ![self] = "WaitForSwitchUpdateRoleACK"]
+                                            /\ UNCHANGED << workerLocalQueue, 
+                                                            swSet, currSW >>
+                                 /\ UNCHANGED << switchLock, FirstInstall, 
                                                  sw_fail_ordering_var, 
                                                  ContProcSet, SwProcSet, 
                                                  swSeqChangedStatus, 
@@ -5046,18 +5138,31 @@ ScheduleRoleUpdateEqual(self) == /\ pc[self] = "ScheduleRoleUpdateEqual"
                                                  removeRow, stepOfFailure_c, 
                                                  monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, msg, 
+                                                 stepOfFailure_co, msg, 
+                                                 stepOfFailure, 
                                                  controllerFailedModules >>
 
 WaitForSwitchUpdateRoleACK(self) == /\ pc[self] = "WaitForSwitchUpdateRoleACK"
-                                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerLocalLock[self[1]] = self
                                     /\ allSwitchInEqualRole(self[1])
                                     /\ subscribeList' = [subscribeList EXCEPT !.IRQueueNIB = subscribeList.IRQueueNIB \cup {self[1]}]
                                     /\ IRQueueEntries' = [IRQueueEntries EXCEPT ![self] = IRQueueNIB]
+                                    /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
+                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerLocalLock[self[1]] = self
+                                    /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = self]
+                                    /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
+                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ controllerGlobalLock' = self
                                     /\ pc' = [pc EXCEPT ![self] = "QueryIRQueueNIB"]
-                                    /\ UNCHANGED << switchLock, controllerLock, 
-                                                    FirstInstall, 
+                                    /\ UNCHANGED << switchLock, FirstInstall, 
                                                     sw_fail_ordering_var, 
                                                     ContProcSet, SwProcSet, 
                                                     swSeqChangedStatus, 
@@ -5120,31 +5225,44 @@ WaitForSwitchUpdateRoleACK(self) == /\ pc[self] = "WaitForSwitchUpdateRoleACK"
                                                     stepOfFailure_c, 
                                                     monitoringEvent, 
                                                     setIRsToReset, resetIR, 
-                                                    stepOfFailure, msg, 
+                                                    stepOfFailure_co, msg, 
+                                                    stepOfFailure, 
                                                     controllerFailedModules >>
 
 QueryIRQueueNIB(self) == /\ pc[self] = "QueryIRQueueNIB"
                          /\ IF IRQueueEntries[self] # <<>>
-                               THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                               THEN /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerLocalLock[self[1]] = self
                                     /\ entry' = [entry EXCEPT ![self] = Head(IRQueueEntries[self])]
                                     /\ IRQueueEntries' = [IRQueueEntries EXCEPT ![self] = Tail(IRQueueEntries[self])]
                                     /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = Append((workerLocalQueue[self[1]]), [item |-> entry'[self], id |-> -1, tag |-> NO_TAG])]
                                     /\ pc' = [pc EXCEPT ![self] = "QueryIRQueueNIB"]
-                                    /\ UNCHANGED ofcFailoverStateNIB
-                               ELSE /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ UNCHANGED << controllerLocalLock, 
+                                                    controllerGlobalLock, 
+                                                    ofcFailoverStateNIB >>
+                               ELSE /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerLocalLock[self[1]] = self
+                                    /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
+                                    /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                       \/ controllerGlobalLock[1] = self[1]
+                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                     /\ ofcFailoverStateNIB' = [ofcFailoverStateNIB EXCEPT ![self[1]] = FAILOVER_READY]
                                     /\ pc' = [pc EXCEPT ![self] = "WaitForRoleMaster"]
                                     /\ UNCHANGED << workerLocalQueue, 
                                                     IRQueueEntries, entry >>
-                         /\ UNCHANGED << switchLock, controllerLock, 
-                                         FirstInstall, sw_fail_ordering_var, 
-                                         ContProcSet, SwProcSet, 
-                                         swSeqChangedStatus, controller2Switch, 
-                                         switch2Controller, switchStatus, 
-                                         installedIRs, installedBy, 
-                                         swFailedNum, swNumEvent, 
+                         /\ UNCHANGED << switchLock, FirstInstall, 
+                                         sw_fail_ordering_var, ContProcSet, 
+                                         SwProcSet, swSeqChangedStatus, 
+                                         controller2Switch, switch2Controller, 
+                                         switchStatus, installedIRs, 
+                                         installedBy, swFailedNum, swNumEvent, 
                                          NicAsic2OfaBuff, Ofa2NicAsicBuff, 
                                          Installer2OfaBuff, Ofa2InstallerBuff, 
                                          TCAM, controlMsgCounter, 
@@ -5180,18 +5298,22 @@ QueryIRQueueNIB(self) == /\ pc[self] = "QueryIRQueueNIB"
                                          nextToSent, entryIndex, rowIndex, 
                                          rowRemove, removeRow, stepOfFailure_c, 
                                          monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
+                                         resetIR, stepOfFailure_co, msg, 
+                                         stepOfFailure, 
                                          controllerFailedModules >>
 
 WaitForRoleMaster(self) == /\ pc[self] = "WaitForRoleMaster"
-                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                           /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerGlobalLock[1] = self[1]
                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                           /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerLocalLock[self[1]] = self
                            /\ masterState[self[1]] = ROLE_MASTER
                            /\ pc' = [pc EXCEPT ![self] = "NibEventHandlerProc"]
-                           /\ UNCHANGED << switchLock, controllerLock, 
-                                           FirstInstall, sw_fail_ordering_var, 
-                                           ContProcSet, SwProcSet, 
-                                           swSeqChangedStatus, 
+                           /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                           controllerGlobalLock, FirstInstall, 
+                                           sw_fail_ordering_var, ContProcSet, 
+                                           SwProcSet, swSeqChangedStatus, 
                                            controller2Switch, 
                                            switch2Controller, switchStatus, 
                                            installedIRs, installedBy, 
@@ -5235,17 +5357,23 @@ WaitForRoleMaster(self) == /\ pc[self] = "WaitForRoleMaster"
                                            entryIndex, rowIndex, rowRemove, 
                                            removeRow, stepOfFailure_c, 
                                            monitoringEvent, setIRsToReset, 
-                                           resetIR, stepOfFailure, msg, 
+                                           resetIR, stepOfFailure_co, msg, 
+                                           stepOfFailure, 
                                            controllerFailedModules >>
 
 WaitForWorkersTermination(self) == /\ pc[self] = "WaitForWorkersTermination"
-                                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                      \/ controllerGlobalLock[1] = self[1]
                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                   /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                      \/ controllerLocalLock[self[1]] = self
                                    /\ allWorkersTerminated(self[1])
                                    /\ ofcModuleTerminationStatus' = [ofcModuleTerminationStatus EXCEPT ![self[1]] = [y \in {CONT_MONITOR, CONT_EVENT} |-> TERMINATE_INIT]
                                                                                                                                          @@ ofcModuleTerminationStatus[self[1]]]
                                    /\ pc' = [pc EXCEPT ![self] = "WaitForAllModulesTermination"]
-                                   /\ UNCHANGED << switchLock, controllerLock, 
+                                   /\ UNCHANGED << switchLock, 
+                                                   controllerLocalLock, 
+                                                   controllerGlobalLock, 
                                                    FirstInstall, 
                                                    sw_fail_ordering_var, 
                                                    ContProcSet, SwProcSet, 
@@ -5307,17 +5435,22 @@ WaitForWorkersTermination(self) == /\ pc[self] = "WaitForWorkersTermination"
                                                    removeRow, stepOfFailure_c, 
                                                    monitoringEvent, 
                                                    setIRsToReset, resetIR, 
-                                                   stepOfFailure, msg, 
+                                                   stepOfFailure_co, msg, 
+                                                   stepOfFailure, 
                                                    controllerFailedModules >>
 
 WaitForAllModulesTermination(self) == /\ pc[self] = "WaitForAllModulesTermination"
-                                      /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                      /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                         \/ controllerGlobalLock[1] = self[1]
                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                      /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                         \/ controllerLocalLock[self[1]] = self
                                       /\ allModulesTerminated(self[1])
                                       /\ ofcFailoverStateNIB' = [ofcFailoverStateNIB EXCEPT ![self[1]] = FAILOVER_TERMINATE_DONE]
-                                      /\ pc' = [pc EXCEPT ![self] = "NibEventHandlerProc"]
+                                      /\ pc' = [pc EXCEPT ![self] = "Done"]
                                       /\ UNCHANGED << switchLock, 
-                                                      controllerLock, 
+                                                      controllerLocalLock, 
+                                                      controllerGlobalLock, 
                                                       FirstInstall, 
                                                       sw_fail_ordering_var, 
                                                       ContProcSet, SwProcSet, 
@@ -5385,7 +5518,8 @@ WaitForAllModulesTermination(self) == /\ pc[self] = "WaitForAllModulesTerminatio
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
-                                                      stepOfFailure, msg, 
+                                                      stepOfFailure_co, msg, 
+                                                      stepOfFailure, 
                                                       controllerFailedModules >>
 
 nibEventHandler(self) == NibEventHandlerProc(self)
@@ -5402,8 +5536,11 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                      /\ moduleIsUp(self)
                                      /\ workerLocalQueue # <<>>
                                      /\ canWorkerThreadContinue(self[1], self)
-                                     /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                     /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                        \/ controllerGlobalLock[1] = self[1]
                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                     /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                        \/ controllerLocalLock[self[1]] = self
                                      /\ rowIndex' = [rowIndex EXCEPT ![self] = getFirstIRIndexToRead((workerLocalQueue[self[1]]), self)]
                                      /\ nextToSent' = [nextToSent EXCEPT ![self] = (workerLocalQueue[self[1]])[rowIndex'[self]].item]
                                      /\ IF existEquivalentItemWithID((workerLocalQueue[self[1]]), nextToSent'[self])
@@ -5413,8 +5550,12 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                                 /\ entryIndex' = [entryIndex EXCEPT ![self] = irCounter']
                                      /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]][rowIndex'[self]].tag = self,
                                                                                      ![self[1]][rowIndex'[self]].id = entryIndex'[self]]
+                                     /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                        \/ controllerGlobalLock[1] = self[1]
+                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                     /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                      /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                           THEN /\ \E num \in 0..2:
+                                           THEN /\ \E num \in 0..3:
                                                      stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
                                            ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                                      /\ IF (stepOfFailure_c'[self] = 1)
@@ -5422,33 +5563,64 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                                 /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
                                                 /\ UNCHANGED << idThreadWorkingOnIR, 
-                                                                controllerStateNIB >>
+                                                                roleUpdateStatus, 
+                                                                controllerStateNIB, 
+                                                                IRStatus >>
                                            ELSE /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> STATUS_LOCKING, next |-> nextToSent'[self], index |-> entryIndex'[self]]]
                                                 /\ IF (stepOfFailure_c'[self] = 2)
                                                       THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
                                                            /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
                                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
-                                                           /\ UNCHANGED idThreadWorkingOnIR
+                                                           /\ UNCHANGED << idThreadWorkingOnIR, 
+                                                                           roleUpdateStatus, 
+                                                                           IRStatus >>
                                                       ELSE /\ IF idThreadWorkingOnIR[self[1]][entryIndex'[self]] = IR_UNLOCK
                                                                  THEN /\ threadWithLowerIDGetsTheLock(self[1], self, nextToSent'[self], workerLocalQueue'[self[1]])
                                                                       /\ idThreadWorkingOnIR' = [idThreadWorkingOnIR EXCEPT ![self[1]][entryIndex'[self]] = self[2]]
-                                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
+                                                                      /\ IF (stepOfFailure_c'[self] = 3)
+                                                                            THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                                 /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
+                                                                                 /\ UNCHANGED << roleUpdateStatus, 
+                                                                                                 IRStatus >>
+                                                                            ELSE /\ IF (workerCanSendTheIR(self[1], nextToSent'[self]))
+                                                                                       THEN /\ Assert(nextToSent'[self].type \in {INSTALL_FLOW, ROLE_REQ}, 
+                                                                                                      "Failure of assertion at line 1892, column 29.")
+                                                                                            /\ IF nextToSent'[self].type = INSTALL_FLOW
+                                                                                                  THEN /\ IRStatus' = [IRStatus EXCEPT ![nextToSent'[self].IR] = IR_SENT]
+                                                                                                       /\ UNCHANGED roleUpdateStatus
+                                                                                                  ELSE /\ IF nextToSent'[self].type = ROLE_REQ
+                                                                                                             THEN /\ roleUpdateStatus' = [roleUpdateStatus EXCEPT ![self[1]][nextToSent'[self].to] = IR_SENT]
+                                                                                                             ELSE /\ TRUE
+                                                                                                                  /\ UNCHANGED roleUpdateStatus
+                                                                                                       /\ UNCHANGED IRStatus
+                                                                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIR"]
+                                                                                       ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadReleaseSemaphoreAndScheduledSet"]
+                                                                                            /\ UNCHANGED << roleUpdateStatus, 
+                                                                                                            IRStatus >>
+                                                                                 /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                                 controllerSubmoduleFailStat >>
                                                                  ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveQueue1"]
-                                                                      /\ UNCHANGED idThreadWorkingOnIR
-                                                           /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                                           controllerSubmoduleFailStat >>
+                                                                      /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                      controllerSubmoduleFailStat, 
+                                                                                      idThreadWorkingOnIR, 
+                                                                                      roleUpdateStatus, 
+                                                                                      IRStatus >>
                                      /\ UNCHANGED ofcModuleTerminationStatus
                                 ELSE /\ ofcModuleTerminationStatus' = [ofcModuleTerminationStatus EXCEPT ![self[1]][self[2]] = TERMINATE_DONE]
                                      /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                     /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                     /\ UNCHANGED << controllerGlobalLock, 
+                                                     controllerSubmoduleFailNum, 
                                                      controllerSubmoduleFailStat, 
                                                      irCounter, 
                                                      idThreadWorkingOnIR, 
                                                      workerLocalQueue, 
+                                                     roleUpdateStatus, 
                                                      controllerStateNIB, 
-                                                     nextToSent, entryIndex, 
-                                                     rowIndex, stepOfFailure_c >>
-                          /\ UNCHANGED << switchLock, controllerLock, 
+                                                     IRStatus, nextToSent, 
+                                                     entryIndex, rowIndex, 
+                                                     stepOfFailure_c >>
+                          /\ UNCHANGED << switchLock, controllerLocalLock, 
                                           FirstInstall, sw_fail_ordering_var, 
                                           ContProcSet, SwProcSet, 
                                           swSeqChangedStatus, 
@@ -5465,15 +5637,14 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           workerThreadRanking, 
                                           ofcSwSuspensionStatus, 
                                           controllerRoleInSW, nibEventQueue, 
-                                          roleUpdateStatus, isOfcEnabled, 
+                                          isOfcEnabled, 
                                           setScheduledRoleUpdates, masterState, 
-                                          IRStatus, NIBSwSuspensionStatus, 
-                                          IRQueueNIB, subscribeList, 
-                                          SetScheduledIRs, ofcFailoverStateNIB, 
-                                          ingressPkt, ingressIR, egressMsg, 
-                                          ofaInMsg, ofaOutConfirmation, 
-                                          installerInIR, statusMsg, 
-                                          notFailedSet, failedElem, 
+                                          NIBSwSuspensionStatus, IRQueueNIB, 
+                                          subscribeList, SetScheduledIRs, 
+                                          ofcFailoverStateNIB, ingressPkt, 
+                                          ingressIR, egressMsg, ofaInMsg, 
+                                          ofaOutConfirmation, installerInIR, 
+                                          statusMsg, notFailedSet, failedElem, 
                                           controllerSet_, nxtController_, 
                                           prevLockHolder_, failedSet, 
                                           statusResolveMsg, recoveredElem, 
@@ -5486,98 +5657,255 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           IRQueueEntries, entry, rowRemove, 
                                           removeRow, monitoringEvent, 
                                           setIRsToReset, resetIR, 
-                                          stepOfFailure, msg, 
+                                          stepOfFailure_co, msg, stepOfFailure, 
                                           controllerFailedModules >>
 
-ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
-                                /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                               controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                      THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                                 /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                              \/ /\ TRUE
-                                                 /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                      ELSE /\ TRUE
-                                           /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                           controllerSubmoduleFailStat >>
-                                /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                      THEN /\ IF workerCanSendTheIR(self[1], nextToSent[self])
-                                                 THEN /\ Assert(nextToSent[self].type \in {INSTALL_FLOW, ROLE_REQ}, 
-                                                                "Failure of assertion at line 1876, column 21.")
-                                                      /\ IF nextToSent[self].type = INSTALL_FLOW
-                                                            THEN /\ IRStatus' = [IRStatus EXCEPT ![nextToSent[self].IR] = IR_SENT]
-                                                                 /\ UNCHANGED roleUpdateStatus
-                                                            ELSE /\ IF nextToSent[self].type = ROLE_REQ
-                                                                       THEN /\ roleUpdateStatus' = [roleUpdateStatus EXCEPT ![self[1]][nextToSent[self].to] = IR_SENT]
-                                                                       ELSE /\ TRUE
-                                                                            /\ UNCHANGED roleUpdateStatus
-                                                                 /\ UNCHANGED IRStatus
-                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIR"]
-                                                 ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadUnlockSemaphore"]
-                                                      /\ UNCHANGED << roleUpdateStatus, 
-                                                                      IRStatus >>
-                                      ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
-                                           /\ UNCHANGED << roleUpdateStatus, 
-                                                           IRStatus >>
-                                /\ UNCHANGED << switchLock, controllerLock, 
-                                                FirstInstall, 
-                                                sw_fail_ordering_var, 
-                                                ContProcSet, SwProcSet, 
-                                                swSeqChangedStatus, 
-                                                controller2Switch, 
-                                                switch2Controller, 
-                                                switchStatus, installedIRs, 
-                                                installedBy, swFailedNum, 
-                                                swNumEvent, NicAsic2OfaBuff, 
-                                                Ofa2NicAsicBuff, 
-                                                Installer2OfaBuff, 
-                                                Ofa2InstallerBuff, TCAM, 
-                                                controlMsgCounter, 
-                                                switchControllerRoleStatus, 
-                                                switchGeneratedEventSet, 
-                                                switchOrdering, 
-                                                dependencyGraph, IR2SW, 
-                                                irCounter, MAX_IR_COUNTER, 
-                                                idThreadWorkingOnIR, 
-                                                workerThreadRanking, 
-                                                workerLocalQueue, 
-                                                ofcSwSuspensionStatus, 
-                                                controllerRoleInSW, 
-                                                nibEventQueue, isOfcEnabled, 
-                                                setScheduledRoleUpdates, 
-                                                ofcModuleTerminationStatus, 
-                                                masterState, 
-                                                controllerStateNIB, 
-                                                NIBSwSuspensionStatus, 
-                                                IRQueueNIB, subscribeList, 
-                                                SetScheduledIRs, 
-                                                ofcFailoverStateNIB, 
-                                                ingressPkt, ingressIR, 
-                                                egressMsg, ofaInMsg, 
-                                                ofaOutConfirmation, 
-                                                installerInIR, statusMsg, 
-                                                notFailedSet, failedElem, 
-                                                controllerSet_, nxtController_, 
-                                                prevLockHolder_, failedSet, 
-                                                statusResolveMsg, 
-                                                recoveredElem, controllerSet_s, 
-                                                nxtController_s, 
-                                                prevLockHolder, eventMsg, 
-                                                controllerSet, nxtController, 
-                                                eventID, toBeScheduledIRs, 
-                                                nextIR, stepOfFailure_, 
-                                                subscriberOfcSet, ofcID, event, 
-                                                swSet, currSW, IRQueueEntries, 
-                                                entry, nextToSent, entryIndex, 
-                                                rowIndex, rowRemove, removeRow, 
-                                                stepOfFailure_c, 
-                                                monitoringEvent, setIRsToReset, 
-                                                resetIR, stepOfFailure, msg, 
-                                                controllerFailedModules >>
+ControllerThreadReleaseSemaphoreAndScheduledSet(self) == /\ pc[self] = "ControllerThreadReleaseSemaphoreAndScheduledSet"
+                                                         /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                            \/ controllerGlobalLock[1] = self[1]
+                                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                         /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                            \/ controllerLocalLock[self[1]] = self
+                                                         /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                            \/ controllerGlobalLock[1] = self[1]
+                                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                         /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                                         /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                                               THEN /\ \E num \in 0..4:
+                                                                         stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
+                                                               ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
+                                                         /\ IF (stepOfFailure_c'[self] # 1)
+                                                               THEN /\ IF idThreadWorkingOnIR[self[1]][entryIndex[self]] = self[2]
+                                                                          THEN /\ idThreadWorkingOnIR' = [idThreadWorkingOnIR EXCEPT ![self[1]][entryIndex[self]] = IR_UNLOCK]
+                                                                          ELSE /\ TRUE
+                                                                               /\ UNCHANGED idThreadWorkingOnIR
+                                                                    /\ IF (stepOfFailure_c'[self] # 2)
+                                                                          THEN /\ IF nextToSent[self].type = INSTALL_FLOW
+                                                                                     THEN /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextToSent[self].to] = SetScheduledIRs[nextToSent[self].to]\{nextToSent[self].IR}]
+                                                                                     ELSE /\ TRUE
+                                                                                          /\ UNCHANGED SetScheduledIRs
+                                                                               /\ IF (stepOfFailure_c'[self] # 3)
+                                                                                     THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> NO_STATUS]]
+                                                                                          /\ IF (stepOfFailure_c'[self] # 4)
+                                                                                                THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith((workerLocalQueue[self[1]]), nextToSent[self], self)]
+                                                                                                     /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = removeFromSeq((workerLocalQueue[self[1]]), rowRemove'[self])]
+                                                                                                     /\ IF nextToSent[self].type = INSTALL_FLOW
+                                                                                                           THEN /\ IF existsEquivalentItem(IRQueueNIB, nextToSent[self])
+                                                                                                                      THEN /\ removeRow' = [removeRow EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: isIdenticalElement(IRQueueNIB[x], nextToSent[self])]
+                                                                                                                           /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove'[self])
+                                                                                                                      ELSE /\ TRUE
+                                                                                                                           /\ UNCHANGED << IRQueueNIB, 
+                                                                                                                                           removeRow >>
+                                                                                                           ELSE /\ TRUE
+                                                                                                                /\ UNCHANGED << IRQueueNIB, 
+                                                                                                                                removeRow >>
+                                                                                                ELSE /\ TRUE
+                                                                                                     /\ UNCHANGED << workerLocalQueue, 
+                                                                                                                     IRQueueNIB, 
+                                                                                                                     rowRemove, 
+                                                                                                                     removeRow >>
+                                                                                     ELSE /\ TRUE
+                                                                                          /\ UNCHANGED << workerLocalQueue, 
+                                                                                                          controllerStateNIB, 
+                                                                                                          IRQueueNIB, 
+                                                                                                          rowRemove, 
+                                                                                                          removeRow >>
+                                                                          ELSE /\ TRUE
+                                                                               /\ UNCHANGED << workerLocalQueue, 
+                                                                                               controllerStateNIB, 
+                                                                                               IRQueueNIB, 
+                                                                                               SetScheduledIRs, 
+                                                                                               rowRemove, 
+                                                                                               removeRow >>
+                                                               ELSE /\ TRUE
+                                                                    /\ UNCHANGED << idThreadWorkingOnIR, 
+                                                                                    workerLocalQueue, 
+                                                                                    controllerStateNIB, 
+                                                                                    IRQueueNIB, 
+                                                                                    SetScheduledIRs, 
+                                                                                    rowRemove, 
+                                                                                    removeRow >>
+                                                         /\ IF (stepOfFailure_c'[self] # 0)
+                                                               THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                    /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                    /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
+                                                               ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
+                                                                    /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                    controllerSubmoduleFailStat >>
+                                                         /\ UNCHANGED << switchLock, 
+                                                                         controllerLocalLock, 
+                                                                         FirstInstall, 
+                                                                         sw_fail_ordering_var, 
+                                                                         ContProcSet, 
+                                                                         SwProcSet, 
+                                                                         swSeqChangedStatus, 
+                                                                         controller2Switch, 
+                                                                         switch2Controller, 
+                                                                         switchStatus, 
+                                                                         installedIRs, 
+                                                                         installedBy, 
+                                                                         swFailedNum, 
+                                                                         swNumEvent, 
+                                                                         NicAsic2OfaBuff, 
+                                                                         Ofa2NicAsicBuff, 
+                                                                         Installer2OfaBuff, 
+                                                                         Ofa2InstallerBuff, 
+                                                                         TCAM, 
+                                                                         controlMsgCounter, 
+                                                                         switchControllerRoleStatus, 
+                                                                         switchGeneratedEventSet, 
+                                                                         switchOrdering, 
+                                                                         dependencyGraph, 
+                                                                         IR2SW, 
+                                                                         irCounter, 
+                                                                         MAX_IR_COUNTER, 
+                                                                         workerThreadRanking, 
+                                                                         ofcSwSuspensionStatus, 
+                                                                         controllerRoleInSW, 
+                                                                         nibEventQueue, 
+                                                                         roleUpdateStatus, 
+                                                                         isOfcEnabled, 
+                                                                         setScheduledRoleUpdates, 
+                                                                         ofcModuleTerminationStatus, 
+                                                                         masterState, 
+                                                                         IRStatus, 
+                                                                         NIBSwSuspensionStatus, 
+                                                                         subscribeList, 
+                                                                         ofcFailoverStateNIB, 
+                                                                         ingressPkt, 
+                                                                         ingressIR, 
+                                                                         egressMsg, 
+                                                                         ofaInMsg, 
+                                                                         ofaOutConfirmation, 
+                                                                         installerInIR, 
+                                                                         statusMsg, 
+                                                                         notFailedSet, 
+                                                                         failedElem, 
+                                                                         controllerSet_, 
+                                                                         nxtController_, 
+                                                                         prevLockHolder_, 
+                                                                         failedSet, 
+                                                                         statusResolveMsg, 
+                                                                         recoveredElem, 
+                                                                         controllerSet_s, 
+                                                                         nxtController_s, 
+                                                                         prevLockHolder, 
+                                                                         eventMsg, 
+                                                                         controllerSet, 
+                                                                         nxtController, 
+                                                                         eventID, 
+                                                                         toBeScheduledIRs, 
+                                                                         nextIR, 
+                                                                         stepOfFailure_, 
+                                                                         subscriberOfcSet, 
+                                                                         ofcID, 
+                                                                         event, 
+                                                                         swSet, 
+                                                                         currSW, 
+                                                                         IRQueueEntries, 
+                                                                         entry, 
+                                                                         nextToSent, 
+                                                                         entryIndex, 
+                                                                         rowIndex, 
+                                                                         monitoringEvent, 
+                                                                         setIRsToReset, 
+                                                                         resetIR, 
+                                                                         stepOfFailure_co, 
+                                                                         msg, 
+                                                                         stepOfFailure, 
+                                                                         controllerFailedModules >>
+
+ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue1"
+                                      /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                         \/ controllerGlobalLock[1] = self[1]
+                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                      /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                         \/ controllerLocalLock[self[1]] = self
+                                      /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                         \/ controllerGlobalLock[1] = self[1]
+                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                      /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                      /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith((workerLocalQueue[self[1]]), nextToSent[self], self)]
+                                      /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = removeFromSeq((workerLocalQueue[self[1]]), rowRemove'[self])]
+                                      /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
+                                      /\ UNCHANGED << switchLock, 
+                                                      controllerLocalLock, 
+                                                      FirstInstall, 
+                                                      sw_fail_ordering_var, 
+                                                      ContProcSet, SwProcSet, 
+                                                      swSeqChangedStatus, 
+                                                      controller2Switch, 
+                                                      switch2Controller, 
+                                                      switchStatus, 
+                                                      installedIRs, 
+                                                      installedBy, swFailedNum, 
+                                                      swNumEvent, 
+                                                      NicAsic2OfaBuff, 
+                                                      Ofa2NicAsicBuff, 
+                                                      Installer2OfaBuff, 
+                                                      Ofa2InstallerBuff, TCAM, 
+                                                      controlMsgCounter, 
+                                                      switchControllerRoleStatus, 
+                                                      switchGeneratedEventSet, 
+                                                      controllerSubmoduleFailNum, 
+                                                      controllerSubmoduleFailStat, 
+                                                      switchOrdering, 
+                                                      dependencyGraph, IR2SW, 
+                                                      irCounter, 
+                                                      MAX_IR_COUNTER, 
+                                                      idThreadWorkingOnIR, 
+                                                      workerThreadRanking, 
+                                                      ofcSwSuspensionStatus, 
+                                                      controllerRoleInSW, 
+                                                      nibEventQueue, 
+                                                      roleUpdateStatus, 
+                                                      isOfcEnabled, 
+                                                      setScheduledRoleUpdates, 
+                                                      ofcModuleTerminationStatus, 
+                                                      masterState, 
+                                                      controllerStateNIB, 
+                                                      IRStatus, 
+                                                      NIBSwSuspensionStatus, 
+                                                      IRQueueNIB, 
+                                                      subscribeList, 
+                                                      SetScheduledIRs, 
+                                                      ofcFailoverStateNIB, 
+                                                      ingressPkt, ingressIR, 
+                                                      egressMsg, ofaInMsg, 
+                                                      ofaOutConfirmation, 
+                                                      installerInIR, statusMsg, 
+                                                      notFailedSet, failedElem, 
+                                                      controllerSet_, 
+                                                      nxtController_, 
+                                                      prevLockHolder_, 
+                                                      failedSet, 
+                                                      statusResolveMsg, 
+                                                      recoveredElem, 
+                                                      controllerSet_s, 
+                                                      nxtController_s, 
+                                                      prevLockHolder, eventMsg, 
+                                                      controllerSet, 
+                                                      nxtController, eventID, 
+                                                      toBeScheduledIRs, nextIR, 
+                                                      stepOfFailure_, 
+                                                      subscriberOfcSet, ofcID, 
+                                                      event, swSet, currSW, 
+                                                      IRQueueEntries, entry, 
+                                                      nextToSent, entryIndex, 
+                                                      rowIndex, removeRow, 
+                                                      stepOfFailure_c, 
+                                                      monitoringEvent, 
+                                                      setIRsToReset, resetIR, 
+                                                      stepOfFailure_co, msg, 
+                                                      stepOfFailure, 
+                                                      controllerFailedModules >>
 
 ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                    /\ switchLock[1] \notin {SW_FAILURE_PROC, SW_RESOLVE_PROC}
+                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                      \/ controllerGlobalLock[1] = self[1]
+                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                   /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                    /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                                          THEN /\ \E num \in 0..2:
                                                    stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
@@ -5600,8 +5928,8 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                     ELSE /\ switchLock' = <<SW_SIMPLE_ID, nextToSent[self].to>>
                                               /\ IF (stepOfFailure_c'[self] # 2)
                                                     THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> STATUS_SENT_DONE,
-                                                                                                                        next |-> nextToSent[self],
-                                                                                                                        index |-> entryIndex[self]]]
+                                                                                                                       next |-> nextToSent[self],
+                                                                                                                       index |-> entryIndex[self]]]
                                                     ELSE /\ TRUE
                                                          /\ UNCHANGED controllerStateNIB
                                          ELSE /\ TRUE
@@ -5612,10 +5940,10 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                          THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
                                               /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
                                               /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
-                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadUnlockSemaphore"]
+                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadReleaseSemaphoreAndScheduledSet"]
                                               /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                               controllerSubmoduleFailStat >>
-                                   /\ UNCHANGED << controllerLock, 
+                                   /\ UNCHANGED << controllerLocalLock, 
                                                    FirstInstall, 
                                                    sw_fail_ordering_var, 
                                                    ContProcSet, SwProcSet, 
@@ -5672,313 +6000,25 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    rowIndex, rowRemove, 
                                                    removeRow, monitoringEvent, 
                                                    setIRsToReset, resetIR, 
-                                                   stepOfFailure, msg, 
+                                                   stepOfFailure_co, msg, 
+                                                   stepOfFailure, 
                                                    controllerFailedModules >>
-
-ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSemaphore"
-                                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                         /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                                        controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                               THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                                          /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                                       \/ /\ TRUE
-                                                          /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                               ELSE /\ TRUE
-                                                    /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                                    controllerSubmoduleFailStat >>
-                                         /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                               THEN /\ IF idThreadWorkingOnIR[self[1]][entryIndex[self]] = self[2]
-                                                          THEN /\ idThreadWorkingOnIR' = [idThreadWorkingOnIR EXCEPT ![self[1]][entryIndex[self]] = IR_UNLOCK]
-                                                          ELSE /\ TRUE
-                                                               /\ UNCHANGED idThreadWorkingOnIR
-                                                    /\ pc' = [pc EXCEPT ![self] = "RemoveFromScheduledIRSet"]
-                                               ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
-                                                    /\ UNCHANGED idThreadWorkingOnIR
-                                         /\ UNCHANGED << switchLock, 
-                                                         controllerLock, 
-                                                         FirstInstall, 
-                                                         sw_fail_ordering_var, 
-                                                         ContProcSet, 
-                                                         SwProcSet, 
-                                                         swSeqChangedStatus, 
-                                                         controller2Switch, 
-                                                         switch2Controller, 
-                                                         switchStatus, 
-                                                         installedIRs, 
-                                                         installedBy, 
-                                                         swFailedNum, 
-                                                         swNumEvent, 
-                                                         NicAsic2OfaBuff, 
-                                                         Ofa2NicAsicBuff, 
-                                                         Installer2OfaBuff, 
-                                                         Ofa2InstallerBuff, 
-                                                         TCAM, 
-                                                         controlMsgCounter, 
-                                                         switchControllerRoleStatus, 
-                                                         switchGeneratedEventSet, 
-                                                         switchOrdering, 
-                                                         dependencyGraph, 
-                                                         IR2SW, irCounter, 
-                                                         MAX_IR_COUNTER, 
-                                                         workerThreadRanking, 
-                                                         workerLocalQueue, 
-                                                         ofcSwSuspensionStatus, 
-                                                         controllerRoleInSW, 
-                                                         nibEventQueue, 
-                                                         roleUpdateStatus, 
-                                                         isOfcEnabled, 
-                                                         setScheduledRoleUpdates, 
-                                                         ofcModuleTerminationStatus, 
-                                                         masterState, 
-                                                         controllerStateNIB, 
-                                                         IRStatus, 
-                                                         NIBSwSuspensionStatus, 
-                                                         IRQueueNIB, 
-                                                         subscribeList, 
-                                                         SetScheduledIRs, 
-                                                         ofcFailoverStateNIB, 
-                                                         ingressPkt, ingressIR, 
-                                                         egressMsg, ofaInMsg, 
-                                                         ofaOutConfirmation, 
-                                                         installerInIR, 
-                                                         statusMsg, 
-                                                         notFailedSet, 
-                                                         failedElem, 
-                                                         controllerSet_, 
-                                                         nxtController_, 
-                                                         prevLockHolder_, 
-                                                         failedSet, 
-                                                         statusResolveMsg, 
-                                                         recoveredElem, 
-                                                         controllerSet_s, 
-                                                         nxtController_s, 
-                                                         prevLockHolder, 
-                                                         eventMsg, 
-                                                         controllerSet, 
-                                                         nxtController, 
-                                                         eventID, 
-                                                         toBeScheduledIRs, 
-                                                         nextIR, 
-                                                         stepOfFailure_, 
-                                                         subscriberOfcSet, 
-                                                         ofcID, event, swSet, 
-                                                         currSW, 
-                                                         IRQueueEntries, entry, 
-                                                         nextToSent, 
-                                                         entryIndex, rowIndex, 
-                                                         rowRemove, removeRow, 
-                                                         stepOfFailure_c, 
-                                                         monitoringEvent, 
-                                                         setIRsToReset, 
-                                                         resetIR, 
-                                                         stepOfFailure, msg, 
-                                                         controllerFailedModules >>
-
-RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
-                                  /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                  /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                        THEN /\ \E num \in 0..3:
-                                                  stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
-                                        ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
-                                  /\ IF (stepOfFailure_c'[self] # 1)
-                                        THEN /\ IF nextToSent[self].type = INSTALL_FLOW
-                                                   THEN /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextToSent[self].to] = SetScheduledIRs[nextToSent[self].to]\{nextToSent[self].IR}]
-                                                   ELSE /\ TRUE
-                                                        /\ UNCHANGED SetScheduledIRs
-                                             /\ IF (stepOfFailure_c'[self] # 2)
-                                                   THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> NO_STATUS]]
-                                                        /\ IF (stepOfFailure_c'[self] # 3)
-                                                              THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith((workerLocalQueue[self[1]]), nextToSent[self], self)]
-                                                                   /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = removeFromSeq((workerLocalQueue[self[1]]), rowRemove'[self])]
-                                                                   /\ IF nextToSent[self].type = INSTALL_FLOW
-                                                                         THEN /\ IF existsEquivalentItem(IRQueueNIB, nextToSent[self])
-                                                                                    THEN /\ removeRow' = [removeRow EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: isIdenticalElement(IRQueueNIB[x], nextToSent[self])]
-                                                                                         /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove'[self])
-                                                                                    ELSE /\ TRUE
-                                                                                         /\ UNCHANGED << IRQueueNIB, 
-                                                                                                         removeRow >>
-                                                                         ELSE /\ TRUE
-                                                                              /\ UNCHANGED << IRQueueNIB, 
-                                                                                              removeRow >>
-                                                              ELSE /\ TRUE
-                                                                   /\ UNCHANGED << workerLocalQueue, 
-                                                                                   IRQueueNIB, 
-                                                                                   rowRemove, 
-                                                                                   removeRow >>
-                                                   ELSE /\ TRUE
-                                                        /\ UNCHANGED << workerLocalQueue, 
-                                                                        controllerStateNIB, 
-                                                                        IRQueueNIB, 
-                                                                        rowRemove, 
-                                                                        removeRow >>
-                                        ELSE /\ TRUE
-                                             /\ UNCHANGED << workerLocalQueue, 
-                                                             controllerStateNIB, 
-                                                             IRQueueNIB, 
-                                                             SetScheduledIRs, 
-                                                             rowRemove, 
-                                                             removeRow >>
-                                  /\ IF (stepOfFailure_c'[self] # 0)
-                                        THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                             /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                             /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
-                                        ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
-                                             /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                             controllerSubmoduleFailStat >>
-                                  /\ UNCHANGED << switchLock, controllerLock, 
-                                                  FirstInstall, 
-                                                  sw_fail_ordering_var, 
-                                                  ContProcSet, SwProcSet, 
-                                                  swSeqChangedStatus, 
-                                                  controller2Switch, 
-                                                  switch2Controller, 
-                                                  switchStatus, installedIRs, 
-                                                  installedBy, swFailedNum, 
-                                                  swNumEvent, NicAsic2OfaBuff, 
-                                                  Ofa2NicAsicBuff, 
-                                                  Installer2OfaBuff, 
-                                                  Ofa2InstallerBuff, TCAM, 
-                                                  controlMsgCounter, 
-                                                  switchControllerRoleStatus, 
-                                                  switchGeneratedEventSet, 
-                                                  switchOrdering, 
-                                                  dependencyGraph, IR2SW, 
-                                                  irCounter, MAX_IR_COUNTER, 
-                                                  idThreadWorkingOnIR, 
-                                                  workerThreadRanking, 
-                                                  ofcSwSuspensionStatus, 
-                                                  controllerRoleInSW, 
-                                                  nibEventQueue, 
-                                                  roleUpdateStatus, 
-                                                  isOfcEnabled, 
-                                                  setScheduledRoleUpdates, 
-                                                  ofcModuleTerminationStatus, 
-                                                  masterState, IRStatus, 
-                                                  NIBSwSuspensionStatus, 
-                                                  subscribeList, 
-                                                  ofcFailoverStateNIB, 
-                                                  ingressPkt, ingressIR, 
-                                                  egressMsg, ofaInMsg, 
-                                                  ofaOutConfirmation, 
-                                                  installerInIR, statusMsg, 
-                                                  notFailedSet, failedElem, 
-                                                  controllerSet_, 
-                                                  nxtController_, 
-                                                  prevLockHolder_, failedSet, 
-                                                  statusResolveMsg, 
-                                                  recoveredElem, 
-                                                  controllerSet_s, 
-                                                  nxtController_s, 
-                                                  prevLockHolder, eventMsg, 
-                                                  controllerSet, nxtController, 
-                                                  eventID, toBeScheduledIRs, 
-                                                  nextIR, stepOfFailure_, 
-                                                  subscriberOfcSet, ofcID, 
-                                                  event, swSet, currSW, 
-                                                  IRQueueEntries, entry, 
-                                                  nextToSent, entryIndex, 
-                                                  rowIndex, monitoringEvent, 
-                                                  setIRsToReset, resetIR, 
-                                                  stepOfFailure, msg, 
-                                                  controllerFailedModules >>
-
-ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue1"
-                                      /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                      /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith((workerLocalQueue[self[1]]), nextToSent[self], self)]
-                                      /\ workerLocalQueue' = [workerLocalQueue EXCEPT ![self[1]] = removeFromSeq((workerLocalQueue[self[1]]), rowRemove'[self])]
-                                      /\ IF nextToSent[self].type = INSTALL_FLOW
-                                            THEN /\ IF existsEquivalentItem(IRQueueNIB, nextToSent[self])
-                                                       THEN /\ removeRow' = [removeRow EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: isIdenticalElement(IRQueueNIB[x], nextToSent[self])]
-                                                            /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove'[self])
-                                                       ELSE /\ TRUE
-                                                            /\ UNCHANGED << IRQueueNIB, 
-                                                                            removeRow >>
-                                            ELSE /\ TRUE
-                                                 /\ UNCHANGED << IRQueueNIB, 
-                                                                 removeRow >>
-                                      /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
-                                      /\ UNCHANGED << switchLock, 
-                                                      controllerLock, 
-                                                      FirstInstall, 
-                                                      sw_fail_ordering_var, 
-                                                      ContProcSet, SwProcSet, 
-                                                      swSeqChangedStatus, 
-                                                      controller2Switch, 
-                                                      switch2Controller, 
-                                                      switchStatus, 
-                                                      installedIRs, 
-                                                      installedBy, swFailedNum, 
-                                                      swNumEvent, 
-                                                      NicAsic2OfaBuff, 
-                                                      Ofa2NicAsicBuff, 
-                                                      Installer2OfaBuff, 
-                                                      Ofa2InstallerBuff, TCAM, 
-                                                      controlMsgCounter, 
-                                                      switchControllerRoleStatus, 
-                                                      switchGeneratedEventSet, 
-                                                      controllerSubmoduleFailNum, 
-                                                      controllerSubmoduleFailStat, 
-                                                      switchOrdering, 
-                                                      dependencyGraph, IR2SW, 
-                                                      irCounter, 
-                                                      MAX_IR_COUNTER, 
-                                                      idThreadWorkingOnIR, 
-                                                      workerThreadRanking, 
-                                                      ofcSwSuspensionStatus, 
-                                                      controllerRoleInSW, 
-                                                      nibEventQueue, 
-                                                      roleUpdateStatus, 
-                                                      isOfcEnabled, 
-                                                      setScheduledRoleUpdates, 
-                                                      ofcModuleTerminationStatus, 
-                                                      masterState, 
-                                                      controllerStateNIB, 
-                                                      IRStatus, 
-                                                      NIBSwSuspensionStatus, 
-                                                      subscribeList, 
-                                                      SetScheduledIRs, 
-                                                      ofcFailoverStateNIB, 
-                                                      ingressPkt, ingressIR, 
-                                                      egressMsg, ofaInMsg, 
-                                                      ofaOutConfirmation, 
-                                                      installerInIR, statusMsg, 
-                                                      notFailedSet, failedElem, 
-                                                      controllerSet_, 
-                                                      nxtController_, 
-                                                      prevLockHolder_, 
-                                                      failedSet, 
-                                                      statusResolveMsg, 
-                                                      recoveredElem, 
-                                                      controllerSet_s, 
-                                                      nxtController_s, 
-                                                      prevLockHolder, eventMsg, 
-                                                      controllerSet, 
-                                                      nxtController, eventID, 
-                                                      toBeScheduledIRs, nextIR, 
-                                                      stepOfFailure_, 
-                                                      subscriberOfcSet, ofcID, 
-                                                      event, swSet, currSW, 
-                                                      IRQueueEntries, entry, 
-                                                      nextToSent, entryIndex, 
-                                                      rowIndex, 
-                                                      stepOfFailure_c, 
-                                                      monitoringEvent, 
-                                                      setIRsToReset, resetIR, 
-                                                      stepOfFailure, msg, 
-                                                      controllerFailedModules >>
 
 ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStateReconciliation"
                                              /\ isOfcEnabled[self[1]]
                                              /\ moduleIsUp(self)
                                              /\ IRQueueNIB # <<>>
                                              /\ canWorkerThreadContinue(self[1], self)
-                                             /\ \/ controllerLock = self
-                                                \/ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                             /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                \/ controllerGlobalLock[1] = self[1]
                                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                             /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                             /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                             /\ \/ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
+                                                \/ controllerGlobalLock'[1] = self[1]
+                                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                             /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                \/ controllerLocalLock[self[1]] = self
+                                             /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
                                              /\ IF (controllerStateNIB[self].type = STATUS_LOCKING)
                                                    THEN /\ IF (controllerStateNIB[self].next.type = INSTALL_FLOW)
                                                               THEN /\ IF (IRStatus[controllerStateNIB[self].next.IR] = IR_SENT)
@@ -6090,16 +6130,15 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              monitoringEvent, 
                                                              setIRsToReset, 
                                                              resetIR, 
-                                                             stepOfFailure, 
+                                                             stepOfFailure_co, 
                                                              msg, 
+                                                             stepOfFailure, 
                                                              controllerFailedModules >>
 
 controllerWorkerThreads(self) == ControllerThread(self)
-                                    \/ ControllerThreadSendIR(self)
-                                    \/ ControllerThreadForwardIR(self)
-                                    \/ ControllerThreadUnlockSemaphore(self)
-                                    \/ RemoveFromScheduledIRSet(self)
+                                    \/ ControllerThreadReleaseSemaphoreAndScheduledSet(self)
                                     \/ ControllerThreadRemoveQueue1(self)
+                                    \/ ControllerThreadForwardIR(self)
                                     \/ ControllerThreadStateReconciliation(self)
 
 ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
@@ -6107,19 +6146,85 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                           THEN /\ isOfcEnabled[self[1]]
                                                /\ moduleIsUp(self)
                                                /\ swSeqChangedStatus[self[1]] # <<>>
-                                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                               /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                  \/ controllerGlobalLock[1] = self[1]
                                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                               /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                  \/ controllerLocalLock[self[1]] = self
+                                               /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                  \/ controllerGlobalLock[1] = self[1]
+                                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                               /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                                /\ monitoringEvent' = [monitoringEvent EXCEPT ![self] = Head(swSeqChangedStatus[self[1]])]
                                                /\ IF shouldSuspendSw(monitoringEvent'[self]) /\ ofcSwSuspensionStatus[self[1]][monitoringEvent'[self].swID] = SW_RUN
-                                                     THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSuspendSW"]
+                                                     THEN /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
+                                                                         controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                                                THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                           /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                        \/ /\ TRUE
+                                                                           /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
+                                                                ELSE /\ TRUE
+                                                                     /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                     controllerSubmoduleFailStat >>
+                                                          /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
+                                                                THEN /\ NIBSwSuspensionStatus' = [NIBSwSuspensionStatus EXCEPT ![monitoringEvent'[self].swID] = SW_SUSPEND]
+                                                                     /\ ofcSwSuspensionStatus' = [ofcSwSuspensionStatus EXCEPT ![self[1]][monitoringEvent'[self].swID] = SW_SUSPEND]
+                                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
+                                                                ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
+                                                                     /\ UNCHANGED << ofcSwSuspensionStatus, 
+                                                                                     NIBSwSuspensionStatus >>
+                                                          /\ UNCHANGED << controllerStateNIB, 
+                                                                          stepOfFailure_co >>
                                                      ELSE /\ IF canfreeSuspendedSw(monitoringEvent'[self]) /\ ofcSwSuspensionStatus[self[1]][monitoringEvent'[self].swID] = SW_SUSPEND
-                                                                THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
+                                                                THEN /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                                                           THEN /\ \E num \in 0..3:
+                                                                                     stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = num]
+                                                                           ELSE /\ stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = 0]
+                                                                     /\ IF (stepOfFailure_co'[self] = 1)
+                                                                           THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                                /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                                /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
+                                                                                /\ UNCHANGED << ofcSwSuspensionStatus, 
+                                                                                                controllerStateNIB, 
+                                                                                                NIBSwSuspensionStatus >>
+                                                                           ELSE /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> START_RESET_IR, sw |-> monitoringEvent'[self].swID]]
+                                                                                /\ IF (stepOfFailure_co'[self] = 2)
+                                                                                      THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                                           /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                                           /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
+                                                                                           /\ UNCHANGED << ofcSwSuspensionStatus, 
+                                                                                                           NIBSwSuspensionStatus >>
+                                                                                      ELSE /\ NIBSwSuspensionStatus' = [NIBSwSuspensionStatus EXCEPT ![monitoringEvent'[self].swID] = SW_RUN]
+                                                                                           /\ ofcSwSuspensionStatus' = [ofcSwSuspensionStatus EXCEPT ![self[1]][monitoringEvent'[self].swID] = SW_RUN]
+                                                                                           /\ IF (stepOfFailure_co'[self] = 3)
+                                                                                                 THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                                                                      /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
+                                                                                                 ELSE /\ IF ~existsMonitoringEventHigherNum(monitoringEvent'[self], self[1])
+                                                                                                            THEN /\ pc' = [pc EXCEPT ![self] = "getIRsToBeChecked"]
+                                                                                                            ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
+                                                                                                      /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                                                      controllerSubmoduleFailStat >>
                                                                 ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
+                                                                     /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                                     controllerSubmoduleFailStat, 
+                                                                                     ofcSwSuspensionStatus, 
+                                                                                     controllerStateNIB, 
+                                                                                     NIBSwSuspensionStatus, 
+                                                                                     stepOfFailure_co >>
                                                /\ UNCHANGED ofcModuleTerminationStatus
                                           ELSE /\ ofcModuleTerminationStatus' = [ofcModuleTerminationStatus EXCEPT ![self[1]][self[2]] = TERMINATE_DONE]
                                                /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                               /\ UNCHANGED monitoringEvent
-                                    /\ UNCHANGED << switchLock, controllerLock, 
+                                               /\ UNCHANGED << controllerGlobalLock, 
+                                                               controllerSubmoduleFailNum, 
+                                                               controllerSubmoduleFailStat, 
+                                                               ofcSwSuspensionStatus, 
+                                                               controllerStateNIB, 
+                                                               NIBSwSuspensionStatus, 
+                                                               monitoringEvent, 
+                                                               stepOfFailure_co >>
+                                    /\ UNCHANGED << switchLock, 
+                                                    controllerLocalLock, 
                                                     FirstInstall, 
                                                     sw_fail_ordering_var, 
                                                     ContProcSet, SwProcSet, 
@@ -6136,24 +6241,18 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     controlMsgCounter, 
                                                     switchControllerRoleStatus, 
                                                     switchGeneratedEventSet, 
-                                                    controllerSubmoduleFailNum, 
-                                                    controllerSubmoduleFailStat, 
                                                     switchOrdering, 
                                                     dependencyGraph, IR2SW, 
                                                     irCounter, MAX_IR_COUNTER, 
                                                     idThreadWorkingOnIR, 
                                                     workerThreadRanking, 
                                                     workerLocalQueue, 
-                                                    ofcSwSuspensionStatus, 
                                                     controllerRoleInSW, 
                                                     nibEventQueue, 
                                                     roleUpdateStatus, 
                                                     isOfcEnabled, 
                                                     setScheduledRoleUpdates, 
-                                                    masterState, 
-                                                    controllerStateNIB, 
-                                                    IRStatus, 
-                                                    NIBSwSuspensionStatus, 
+                                                    masterState, IRStatus, 
                                                     IRQueueNIB, subscribeList, 
                                                     SetScheduledIRs, 
                                                     ofcFailoverStateNIB, 
@@ -6181,26 +6280,33 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     rowIndex, rowRemove, 
                                                     removeRow, stepOfFailure_c, 
                                                     setIRsToReset, resetIR, 
-                                                    stepOfFailure, msg, 
+                                                    msg, stepOfFailure, 
                                                     controllerFailedModules >>
 
 ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEvenHanlderRemoveEventFromQueue"
-                                                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerGlobalLock[1] = self[1]
                                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerLocalLock[self[1]] = self
+                                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerGlobalLock[1] = self[1]
+                                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                                    /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                                                          THEN /\ \E num \in 0..2:
-                                                                   stepOfFailure' = [stepOfFailure EXCEPT ![self] = num]
-                                                         ELSE /\ stepOfFailure' = [stepOfFailure EXCEPT ![self] = 0]
-                                                   /\ IF (stepOfFailure'[self] # 1)
+                                                                   stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = num]
+                                                         ELSE /\ stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = 0]
+                                                   /\ IF (stepOfFailure_co'[self] # 1)
                                                          THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> NO_STATUS]]
-                                                              /\ IF (stepOfFailure'[self] # 2)
+                                                              /\ IF (stepOfFailure_co'[self] # 2)
                                                                     THEN /\ swSeqChangedStatus' = [swSeqChangedStatus EXCEPT ![self[1]] = Tail(swSeqChangedStatus[self[1]])]
                                                                     ELSE /\ TRUE
                                                                          /\ UNCHANGED swSeqChangedStatus
                                                          ELSE /\ TRUE
                                                               /\ UNCHANGED << swSeqChangedStatus, 
                                                                               controllerStateNIB >>
-                                                   /\ IF (stepOfFailure'[self] # 0)
+                                                   /\ IF (stepOfFailure_co'[self] # 0)
                                                          THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
                                                               /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
                                                               /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
@@ -6208,7 +6314,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                               /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                                               controllerSubmoduleFailStat >>
                                                    /\ UNCHANGED << switchLock, 
-                                                                   controllerLock, 
+                                                                   controllerLocalLock, 
                                                                    FirstInstall, 
                                                                    sw_fail_ordering_var, 
                                                                    ContProcSet, 
@@ -6292,261 +6398,19 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    setIRsToReset, 
                                                                    resetIR, 
                                                                    msg, 
+                                                                   stepOfFailure, 
                                                                    controllerFailedModules >>
 
-ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                             /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                            controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                   THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                           \/ /\ TRUE
-                                              /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                   ELSE /\ TRUE
-                                        /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                        controllerSubmoduleFailStat >>
-                             /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                   THEN /\ NIBSwSuspensionStatus' = [NIBSwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_SUSPEND]
-                                        /\ ofcSwSuspensionStatus' = [ofcSwSuspensionStatus EXCEPT ![self[1]][monitoringEvent[self].swID] = SW_SUSPEND]
-                                        /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
-                                        /\ UNCHANGED << ofcSwSuspensionStatus, 
-                                                        NIBSwSuspensionStatus >>
-                             /\ UNCHANGED << switchLock, controllerLock, 
-                                             FirstInstall, 
-                                             sw_fail_ordering_var, ContProcSet, 
-                                             SwProcSet, swSeqChangedStatus, 
-                                             controller2Switch, 
-                                             switch2Controller, switchStatus, 
-                                             installedIRs, installedBy, 
-                                             swFailedNum, swNumEvent, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                             Installer2OfaBuff, 
-                                             Ofa2InstallerBuff, TCAM, 
-                                             controlMsgCounter, 
-                                             switchControllerRoleStatus, 
-                                             switchGeneratedEventSet, 
-                                             switchOrdering, dependencyGraph, 
-                                             IR2SW, irCounter, MAX_IR_COUNTER, 
-                                             idThreadWorkingOnIR, 
-                                             workerThreadRanking, 
-                                             workerLocalQueue, 
-                                             controllerRoleInSW, nibEventQueue, 
-                                             roleUpdateStatus, isOfcEnabled, 
-                                             setScheduledRoleUpdates, 
-                                             ofcModuleTerminationStatus, 
-                                             masterState, controllerStateNIB, 
-                                             IRStatus, IRQueueNIB, 
-                                             subscribeList, SetScheduledIRs, 
-                                             ofcFailoverStateNIB, ingressPkt, 
-                                             ingressIR, egressMsg, ofaInMsg, 
-                                             ofaOutConfirmation, installerInIR, 
-                                             statusMsg, notFailedSet, 
-                                             failedElem, controllerSet_, 
-                                             nxtController_, prevLockHolder_, 
-                                             failedSet, statusResolveMsg, 
-                                             recoveredElem, controllerSet_s, 
-                                             nxtController_s, prevLockHolder, 
-                                             eventMsg, controllerSet, 
-                                             nxtController, eventID, 
-                                             toBeScheduledIRs, nextIR, 
-                                             stepOfFailure_, subscriberOfcSet, 
-                                             ofcID, event, swSet, currSW, 
-                                             IRQueueEntries, entry, nextToSent, 
-                                             entryIndex, rowIndex, rowRemove, 
-                                             removeRow, stepOfFailure_c, 
-                                             monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
-                                             controllerFailedModules >>
-
-ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
-                                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                   /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                         THEN /\ \E num \in 0..2:
-                                                   stepOfFailure' = [stepOfFailure EXCEPT ![self] = num]
-                                         ELSE /\ stepOfFailure' = [stepOfFailure EXCEPT ![self] = 0]
-                                   /\ IF (stepOfFailure'[self] # 1)
-                                         THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> START_RESET_IR, sw |-> monitoringEvent[self].swID]]
-                                              /\ IF (stepOfFailure'[self] # 2)
-                                                    THEN /\ NIBSwSuspensionStatus' = [NIBSwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_RUN]
-                                                         /\ ofcSwSuspensionStatus' = [ofcSwSuspensionStatus EXCEPT ![self[1]][monitoringEvent[self].swID] = SW_RUN]
-                                                    ELSE /\ TRUE
-                                                         /\ UNCHANGED << ofcSwSuspensionStatus, 
-                                                                         NIBSwSuspensionStatus >>
-                                         ELSE /\ TRUE
-                                              /\ UNCHANGED << ofcSwSuspensionStatus, 
-                                                              controllerStateNIB, 
-                                                              NIBSwSuspensionStatus >>
-                                   /\ IF (stepOfFailure'[self] # 0)
-                                         THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                              /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
-                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerCheckIfThisIsLastEvent"]
-                                              /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                              controllerSubmoduleFailStat >>
-                                   /\ UNCHANGED << switchLock, controllerLock, 
-                                                   FirstInstall, 
-                                                   sw_fail_ordering_var, 
-                                                   ContProcSet, SwProcSet, 
-                                                   swSeqChangedStatus, 
-                                                   controller2Switch, 
-                                                   switch2Controller, 
-                                                   switchStatus, installedIRs, 
-                                                   installedBy, swFailedNum, 
-                                                   swNumEvent, NicAsic2OfaBuff, 
-                                                   Ofa2NicAsicBuff, 
-                                                   Installer2OfaBuff, 
-                                                   Ofa2InstallerBuff, TCAM, 
-                                                   controlMsgCounter, 
-                                                   switchControllerRoleStatus, 
-                                                   switchGeneratedEventSet, 
-                                                   switchOrdering, 
-                                                   dependencyGraph, IR2SW, 
-                                                   irCounter, MAX_IR_COUNTER, 
-                                                   idThreadWorkingOnIR, 
-                                                   workerThreadRanking, 
-                                                   workerLocalQueue, 
-                                                   controllerRoleInSW, 
-                                                   nibEventQueue, 
-                                                   roleUpdateStatus, 
-                                                   isOfcEnabled, 
-                                                   setScheduledRoleUpdates, 
-                                                   ofcModuleTerminationStatus, 
-                                                   masterState, IRStatus, 
-                                                   IRQueueNIB, subscribeList, 
-                                                   SetScheduledIRs, 
-                                                   ofcFailoverStateNIB, 
-                                                   ingressPkt, ingressIR, 
-                                                   egressMsg, ofaInMsg, 
-                                                   ofaOutConfirmation, 
-                                                   installerInIR, statusMsg, 
-                                                   notFailedSet, failedElem, 
-                                                   controllerSet_, 
-                                                   nxtController_, 
-                                                   prevLockHolder_, failedSet, 
-                                                   statusResolveMsg, 
-                                                   recoveredElem, 
-                                                   controllerSet_s, 
-                                                   nxtController_s, 
-                                                   prevLockHolder, eventMsg, 
-                                                   controllerSet, 
-                                                   nxtController, eventID, 
-                                                   toBeScheduledIRs, nextIR, 
-                                                   stepOfFailure_, 
-                                                   subscriberOfcSet, ofcID, 
-                                                   event, swSet, currSW, 
-                                                   IRQueueEntries, entry, 
-                                                   nextToSent, entryIndex, 
-                                                   rowIndex, rowRemove, 
-                                                   removeRow, stepOfFailure_c, 
-                                                   monitoringEvent, 
-                                                   setIRsToReset, resetIR, msg, 
-                                                   controllerFailedModules >>
-
-ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIsLastEvent"
-                                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                          /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                                         controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                                THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                                           /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                                        \/ /\ TRUE
-                                                           /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                                ELSE /\ TRUE
-                                                     /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                                     controllerSubmoduleFailStat >>
-                                          /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                                THEN /\ IF ~existsMonitoringEventHigherNum(monitoringEvent[self], self[1])
-                                                           THEN /\ pc' = [pc EXCEPT ![self] = "getIRsToBeChecked"]
-                                                           ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
-                                                ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
-                                          /\ UNCHANGED << switchLock, 
-                                                          controllerLock, 
-                                                          FirstInstall, 
-                                                          sw_fail_ordering_var, 
-                                                          ContProcSet, 
-                                                          SwProcSet, 
-                                                          swSeqChangedStatus, 
-                                                          controller2Switch, 
-                                                          switch2Controller, 
-                                                          switchStatus, 
-                                                          installedIRs, 
-                                                          installedBy, 
-                                                          swFailedNum, 
-                                                          swNumEvent, 
-                                                          NicAsic2OfaBuff, 
-                                                          Ofa2NicAsicBuff, 
-                                                          Installer2OfaBuff, 
-                                                          Ofa2InstallerBuff, 
-                                                          TCAM, 
-                                                          controlMsgCounter, 
-                                                          switchControllerRoleStatus, 
-                                                          switchGeneratedEventSet, 
-                                                          switchOrdering, 
-                                                          dependencyGraph, 
-                                                          IR2SW, irCounter, 
-                                                          MAX_IR_COUNTER, 
-                                                          idThreadWorkingOnIR, 
-                                                          workerThreadRanking, 
-                                                          workerLocalQueue, 
-                                                          ofcSwSuspensionStatus, 
-                                                          controllerRoleInSW, 
-                                                          nibEventQueue, 
-                                                          roleUpdateStatus, 
-                                                          isOfcEnabled, 
-                                                          setScheduledRoleUpdates, 
-                                                          ofcModuleTerminationStatus, 
-                                                          masterState, 
-                                                          controllerStateNIB, 
-                                                          IRStatus, 
-                                                          NIBSwSuspensionStatus, 
-                                                          IRQueueNIB, 
-                                                          subscribeList, 
-                                                          SetScheduledIRs, 
-                                                          ofcFailoverStateNIB, 
-                                                          ingressPkt, 
-                                                          ingressIR, egressMsg, 
-                                                          ofaInMsg, 
-                                                          ofaOutConfirmation, 
-                                                          installerInIR, 
-                                                          statusMsg, 
-                                                          notFailedSet, 
-                                                          failedElem, 
-                                                          controllerSet_, 
-                                                          nxtController_, 
-                                                          prevLockHolder_, 
-                                                          failedSet, 
-                                                          statusResolveMsg, 
-                                                          recoveredElem, 
-                                                          controllerSet_s, 
-                                                          nxtController_s, 
-                                                          prevLockHolder, 
-                                                          eventMsg, 
-                                                          controllerSet, 
-                                                          nxtController, 
-                                                          eventID, 
-                                                          toBeScheduledIRs, 
-                                                          nextIR, 
-                                                          stepOfFailure_, 
-                                                          subscriberOfcSet, 
-                                                          ofcID, event, swSet, 
-                                                          currSW, 
-                                                          IRQueueEntries, 
-                                                          entry, nextToSent, 
-                                                          entryIndex, rowIndex, 
-                                                          rowRemove, removeRow, 
-                                                          stepOfFailure_c, 
-                                                          monitoringEvent, 
-                                                          setIRsToReset, 
-                                                          resetIR, 
-                                                          stepOfFailure, msg, 
-                                                          controllerFailedModules >>
-
 getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
-                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                           /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerGlobalLock[1] = self[1]
                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                           /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerLocalLock[self[1]] = self
+                           /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                              \/ controllerGlobalLock[1] = self[1]
+                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                           /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                            /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
                                           controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                                  THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
@@ -6563,7 +6427,7 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                             ELSE /\ pc' = [pc EXCEPT ![self] = "ResetAllIRs"]
                                  ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                       /\ UNCHANGED setIRsToReset
-                           /\ UNCHANGED << switchLock, controllerLock, 
+                           /\ UNCHANGED << switchLock, controllerLocalLock, 
                                            FirstInstall, sw_fail_ordering_var, 
                                            ContProcSet, SwProcSet, 
                                            swSeqChangedStatus, 
@@ -6608,12 +6472,20 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            entryIndex, rowIndex, rowRemove, 
                                            removeRow, stepOfFailure_c, 
                                            monitoringEvent, resetIR, 
-                                           stepOfFailure, msg, 
+                                           stepOfFailure_co, msg, 
+                                           stepOfFailure, 
                                            controllerFailedModules >>
 
 ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
-                     /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                     /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                        \/ controllerGlobalLock[1] = self[1]
                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                     /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                        \/ controllerLocalLock[self[1]] = self
+                     /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                        \/ controllerGlobalLock[1] = self[1]
+                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                     /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                      /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
                                     controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                            THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
@@ -6636,12 +6508,13 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                            ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                 /\ UNCHANGED << IRStatus, setIRsToReset, 
                                                 resetIR >>
-                     /\ UNCHANGED << switchLock, controllerLock, FirstInstall, 
-                                     sw_fail_ordering_var, ContProcSet, 
-                                     SwProcSet, swSeqChangedStatus, 
-                                     controller2Switch, switch2Controller, 
-                                     switchStatus, installedIRs, installedBy, 
-                                     swFailedNum, swNumEvent, NicAsic2OfaBuff, 
+                     /\ UNCHANGED << switchLock, controllerLocalLock, 
+                                     FirstInstall, sw_fail_ordering_var, 
+                                     ContProcSet, SwProcSet, 
+                                     swSeqChangedStatus, controller2Switch, 
+                                     switch2Controller, switchStatus, 
+                                     installedIRs, installedBy, swFailedNum, 
+                                     swNumEvent, NicAsic2OfaBuff, 
                                      Ofa2NicAsicBuff, Installer2OfaBuff, 
                                      Ofa2InstallerBuff, TCAM, 
                                      controlMsgCounter, 
@@ -6671,17 +6544,23 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      currSW, IRQueueEntries, entry, nextToSent, 
                                      entryIndex, rowIndex, rowRemove, 
                                      removeRow, stepOfFailure_c, 
-                                     monitoringEvent, stepOfFailure, msg, 
-                                     controllerFailedModules >>
+                                     monitoringEvent, stepOfFailure_co, msg, 
+                                     stepOfFailure, controllerFailedModules >>
 
 ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEventHandlerStateReconciliation"
                                                    /\ isOfcEnabled[self[1]]
                                                    /\ moduleIsUp(self)
                                                    /\ swSeqChangedStatus[self[1]] # <<>>
-                                                   /\ \/ controllerLock = self
-                                                      \/ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerGlobalLock[1] = self[1]
                                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                                   /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                                   /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerLocalLock[self[1]] = self
+                                                   /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
+                                                   /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                      \/ controllerGlobalLock[1] = self[1]
+                                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                                    /\ IF (controllerStateNIB[self].type = START_RESET_IR)
                                                          THEN /\ NIBSwSuspensionStatus' = [NIBSwSuspensionStatus EXCEPT ![self[1]][controllerStateNIB[self].sw] = SW_SUSPEND]
                                                               /\ ofcSwSuspensionStatus' = [ofcSwSuspensionStatus EXCEPT ![self[1]][controllerStateNIB[self].sw] = SW_SUSPEND]
@@ -6774,15 +6653,13 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    monitoringEvent, 
                                                                    setIRsToReset, 
                                                                    resetIR, 
-                                                                   stepOfFailure, 
+                                                                   stepOfFailure_co, 
                                                                    msg, 
+                                                                   stepOfFailure, 
                                                                    controllerFailedModules >>
 
 controllerEventHandler(self) == ControllerEventHandlerProc(self)
                                    \/ ControllerEvenHanlderRemoveEventFromQueue(self)
-                                   \/ ControllerSuspendSW(self)
-                                   \/ ControllerFreeSuspendedSW(self)
-                                   \/ ControllerCheckIfThisIsLastEvent(self)
                                    \/ getIRsToBeChecked(self)
                                    \/ ResetAllIRs(self)
                                    \/ ControllerEventHandlerStateReconciliation(self)
@@ -6792,36 +6669,73 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                              THEN /\ isOfcEnabled[self[1]]
                                                   /\ moduleIsUp(self)
                                                   /\ switch2Controller[self[1]] # <<>>
-                                                  /\ \/ controllerLock = self
-                                                     \/ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                  /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                     \/ controllerGlobalLock[1] = self[1]
                                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                                  /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                                  /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                                     \/ controllerLocalLock[self[1]] = self
+                                                  /\ controllerLocalLock' = [controllerLocalLock EXCEPT ![self[1]] = <<NO_LOCK, NO_LOCK>>]
+                                                  /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                                     \/ controllerGlobalLock[1] = self[1]
+                                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                  /\ controllerGlobalLock' = <<NO_LOCK, NO_LOCK>>
                                                   /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller[self[1]])]
                                                   /\ Assert(\/ /\ msg'[self].type = INSTALLED_SUCCESSFULLY
                                                                /\ msg'[self].from = IR2SW[msg'[self].IR]
                                                             \/ msg'[self].type \in {ROLE_REPLY, BAD_REQUEST}, 
-                                                            "Failure of assertion at line 2218, column 9.")
+                                                            "Failure of assertion at line 2236, column 9.")
+                                                  /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                                        THEN /\ \E num \in 0..2:
+                                                                  stepOfFailure' = [stepOfFailure EXCEPT ![self] = num]
+                                                        ELSE /\ stepOfFailure' = [stepOfFailure EXCEPT ![self] = 0]
                                                   /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
-                                                        THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
+                                                        THEN /\ IF (stepOfFailure'[self] # 1)
+                                                                   THEN /\ FirstInstall' = [FirstInstall EXCEPT ![msg'[self].IR] = 1]
+                                                                        /\ IRStatus' = [IRStatus EXCEPT ![msg'[self].IR] = IR_DONE]
+                                                                   ELSE /\ TRUE
+                                                                        /\ UNCHANGED << FirstInstall, 
+                                                                                        IRStatus >>
+                                                             /\ UNCHANGED << controllerRoleInSW, 
+                                                                             roleUpdateStatus >>
                                                         ELSE /\ IF msg'[self].type = ROLE_REPLY
-                                                                   THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateRole"]
+                                                                   THEN /\ IF (stepOfFailure'[self] # 1)
+                                                                              THEN /\ roleUpdateStatus' = [roleUpdateStatus EXCEPT ![self[1]][msg'[self].from] = IR_DONE]
+                                                                                   /\ controllerRoleInSW' = [controllerRoleInSW EXCEPT ![self[1]][msg'[self].from] = msg'[self].roletype]
+                                                                              ELSE /\ TRUE
+                                                                                   /\ UNCHANGED << controllerRoleInSW, 
+                                                                                                   roleUpdateStatus >>
                                                                    ELSE /\ IF msg'[self].type = BAD_REQUEST
                                                                               THEN /\ TRUE
                                                                               ELSE /\ Assert(FALSE, 
-                                                                                             "Failure of assertion at line 2269, column 18.")
-                                                                        /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
+                                                                                             "Failure of assertion at line 2257, column 13.")
+                                                                        /\ UNCHANGED << controllerRoleInSW, 
+                                                                                        roleUpdateStatus >>
+                                                             /\ UNCHANGED << FirstInstall, 
+                                                                             IRStatus >>
+                                                  /\ IF (stepOfFailure'[self] # 2)
+                                                        THEN /\ switch2Controller' = [switch2Controller EXCEPT ![self[1]] = Tail(switch2Controller[self[1]])]
+                                                        ELSE /\ TRUE
+                                                             /\ UNCHANGED switch2Controller
+                                                  /\ IF (stepOfFailure'[self] # 0)
+                                                        THEN /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
+                                                        ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
                                                   /\ UNCHANGED ofcModuleTerminationStatus
                                              ELSE /\ ofcModuleTerminationStatus' = [ofcModuleTerminationStatus EXCEPT ![self[1]][self[2]] = TERMINATE_DONE]
                                                   /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                                  /\ UNCHANGED << controllerLock, 
-                                                                  msg >>
+                                                  /\ UNCHANGED << controllerLocalLock, 
+                                                                  controllerGlobalLock, 
+                                                                  FirstInstall, 
+                                                                  switch2Controller, 
+                                                                  controllerRoleInSW, 
+                                                                  roleUpdateStatus, 
+                                                                  IRStatus, 
+                                                                  msg, 
+                                                                  stepOfFailure >>
                                        /\ UNCHANGED << switchLock, 
-                                                       FirstInstall, 
                                                        sw_fail_ordering_var, 
                                                        ContProcSet, SwProcSet, 
                                                        swSeqChangedStatus, 
                                                        controller2Switch, 
-                                                       switch2Controller, 
                                                        switchStatus, 
                                                        installedIRs, 
                                                        installedBy, 
@@ -6843,14 +6757,11 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        workerThreadRanking, 
                                                        workerLocalQueue, 
                                                        ofcSwSuspensionStatus, 
-                                                       controllerRoleInSW, 
                                                        nibEventQueue, 
-                                                       roleUpdateStatus, 
                                                        isOfcEnabled, 
                                                        setScheduledRoleUpdates, 
                                                        masterState, 
                                                        controllerStateNIB, 
-                                                       IRStatus, 
                                                        NIBSwSuspensionStatus, 
                                                        IRQueueNIB, 
                                                        subscribeList, 
@@ -6884,254 +6795,24 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        stepOfFailure_c, 
                                                        monitoringEvent, 
                                                        setIRsToReset, resetIR, 
-                                                       stepOfFailure, 
+                                                       stepOfFailure_co, 
                                                        controllerFailedModules >>
 
-MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFromQueue"
-                                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                         /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                                        controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                               THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                                          /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                                       \/ /\ TRUE
-                                                          /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                               ELSE /\ TRUE
-                                                    /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                                    controllerSubmoduleFailStat >>
-                                         /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                               THEN /\ switch2Controller' = [switch2Controller EXCEPT ![self[1]] = Tail(switch2Controller[self[1]])]
-                                                    /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
-                                               ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
-                                                    /\ UNCHANGED switch2Controller
-                                         /\ UNCHANGED << switchLock, 
-                                                         controllerLock, 
-                                                         FirstInstall, 
-                                                         sw_fail_ordering_var, 
-                                                         ContProcSet, 
-                                                         SwProcSet, 
-                                                         swSeqChangedStatus, 
-                                                         controller2Switch, 
-                                                         switchStatus, 
-                                                         installedIRs, 
-                                                         installedBy, 
-                                                         swFailedNum, 
-                                                         swNumEvent, 
-                                                         NicAsic2OfaBuff, 
-                                                         Ofa2NicAsicBuff, 
-                                                         Installer2OfaBuff, 
-                                                         Ofa2InstallerBuff, 
-                                                         TCAM, 
-                                                         controlMsgCounter, 
-                                                         switchControllerRoleStatus, 
-                                                         switchGeneratedEventSet, 
-                                                         switchOrdering, 
-                                                         dependencyGraph, 
-                                                         IR2SW, irCounter, 
-                                                         MAX_IR_COUNTER, 
-                                                         idThreadWorkingOnIR, 
-                                                         workerThreadRanking, 
-                                                         workerLocalQueue, 
-                                                         ofcSwSuspensionStatus, 
-                                                         controllerRoleInSW, 
-                                                         nibEventQueue, 
-                                                         roleUpdateStatus, 
-                                                         isOfcEnabled, 
-                                                         setScheduledRoleUpdates, 
-                                                         ofcModuleTerminationStatus, 
-                                                         masterState, 
-                                                         controllerStateNIB, 
-                                                         IRStatus, 
-                                                         NIBSwSuspensionStatus, 
-                                                         IRQueueNIB, 
-                                                         subscribeList, 
-                                                         SetScheduledIRs, 
-                                                         ofcFailoverStateNIB, 
-                                                         ingressPkt, ingressIR, 
-                                                         egressMsg, ofaInMsg, 
-                                                         ofaOutConfirmation, 
-                                                         installerInIR, 
-                                                         statusMsg, 
-                                                         notFailedSet, 
-                                                         failedElem, 
-                                                         controllerSet_, 
-                                                         nxtController_, 
-                                                         prevLockHolder_, 
-                                                         failedSet, 
-                                                         statusResolveMsg, 
-                                                         recoveredElem, 
-                                                         controllerSet_s, 
-                                                         nxtController_s, 
-                                                         prevLockHolder, 
-                                                         eventMsg, 
-                                                         controllerSet, 
-                                                         nxtController, 
-                                                         eventID, 
-                                                         toBeScheduledIRs, 
-                                                         nextIR, 
-                                                         stepOfFailure_, 
-                                                         subscriberOfcSet, 
-                                                         ofcID, event, swSet, 
-                                                         currSW, 
-                                                         IRQueueEntries, entry, 
-                                                         nextToSent, 
-                                                         entryIndex, rowIndex, 
-                                                         rowRemove, removeRow, 
-                                                         stepOfFailure_c, 
-                                                         monitoringEvent, 
-                                                         setIRsToReset, 
-                                                         resetIR, 
-                                                         stepOfFailure, msg, 
-                                                         controllerFailedModules >>
-
-ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                             /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                            controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                   THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                           \/ /\ TRUE
-                                              /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                   ELSE /\ TRUE
-                                        /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                        controllerSubmoduleFailStat >>
-                             /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                   THEN /\ FirstInstall' = [FirstInstall EXCEPT ![msg[self].IR] = 1]
-                                        /\ IRStatus' = [IRStatus EXCEPT ![msg[self].IR] = IR_DONE]
-                                        /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
-                                        /\ UNCHANGED << FirstInstall, IRStatus >>
-                             /\ UNCHANGED << switchLock, controllerLock, 
-                                             sw_fail_ordering_var, ContProcSet, 
-                                             SwProcSet, swSeqChangedStatus, 
-                                             controller2Switch, 
-                                             switch2Controller, switchStatus, 
-                                             installedIRs, installedBy, 
-                                             swFailedNum, swNumEvent, 
-                                             NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                             Installer2OfaBuff, 
-                                             Ofa2InstallerBuff, TCAM, 
-                                             controlMsgCounter, 
-                                             switchControllerRoleStatus, 
-                                             switchGeneratedEventSet, 
-                                             switchOrdering, dependencyGraph, 
-                                             IR2SW, irCounter, MAX_IR_COUNTER, 
-                                             idThreadWorkingOnIR, 
-                                             workerThreadRanking, 
-                                             workerLocalQueue, 
-                                             ofcSwSuspensionStatus, 
-                                             controllerRoleInSW, nibEventQueue, 
-                                             roleUpdateStatus, isOfcEnabled, 
-                                             setScheduledRoleUpdates, 
-                                             ofcModuleTerminationStatus, 
-                                             masterState, controllerStateNIB, 
-                                             NIBSwSuspensionStatus, IRQueueNIB, 
-                                             subscribeList, SetScheduledIRs, 
-                                             ofcFailoverStateNIB, ingressPkt, 
-                                             ingressIR, egressMsg, ofaInMsg, 
-                                             ofaOutConfirmation, installerInIR, 
-                                             statusMsg, notFailedSet, 
-                                             failedElem, controllerSet_, 
-                                             nxtController_, prevLockHolder_, 
-                                             failedSet, statusResolveMsg, 
-                                             recoveredElem, controllerSet_s, 
-                                             nxtController_s, prevLockHolder, 
-                                             eventMsg, controllerSet, 
-                                             nxtController, eventID, 
-                                             toBeScheduledIRs, nextIR, 
-                                             stepOfFailure_, subscriberOfcSet, 
-                                             ofcID, event, swSet, currSW, 
-                                             IRQueueEntries, entry, nextToSent, 
-                                             entryIndex, rowIndex, rowRemove, 
-                                             removeRow, stepOfFailure_c, 
-                                             monitoringEvent, setIRsToReset, 
-                                             resetIR, stepOfFailure, msg, 
-                                             controllerFailedModules >>
-
-ControllerUpdateRole(self) == /\ pc[self] = "ControllerUpdateRole"
-                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                              /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
-                                             controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                    THEN /\ \/ /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                               /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                            \/ /\ TRUE
-                                               /\ UNCHANGED <<controllerSubmoduleFailNum, controllerSubmoduleFailStat>>
-                                    ELSE /\ TRUE
-                                         /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                         controllerSubmoduleFailStat >>
-                              /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                    THEN /\ roleUpdateStatus' = [roleUpdateStatus EXCEPT ![self[1]][msg[self].from] = IR_DONE]
-                                         /\ controllerRoleInSW' = [controllerRoleInSW EXCEPT ![self[1]][msg[self].from] = msg[self].roletype]
-                                         /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
-                                    ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
-                                         /\ UNCHANGED << controllerRoleInSW, 
-                                                         roleUpdateStatus >>
-                              /\ UNCHANGED << switchLock, controllerLock, 
-                                              FirstInstall, 
-                                              sw_fail_ordering_var, 
-                                              ContProcSet, SwProcSet, 
-                                              swSeqChangedStatus, 
-                                              controller2Switch, 
-                                              switch2Controller, switchStatus, 
-                                              installedIRs, installedBy, 
-                                              swFailedNum, swNumEvent, 
-                                              NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                              Installer2OfaBuff, 
-                                              Ofa2InstallerBuff, TCAM, 
-                                              controlMsgCounter, 
-                                              switchControllerRoleStatus, 
-                                              switchGeneratedEventSet, 
-                                              switchOrdering, dependencyGraph, 
-                                              IR2SW, irCounter, MAX_IR_COUNTER, 
-                                              idThreadWorkingOnIR, 
-                                              workerThreadRanking, 
-                                              workerLocalQueue, 
-                                              ofcSwSuspensionStatus, 
-                                              nibEventQueue, isOfcEnabled, 
-                                              setScheduledRoleUpdates, 
-                                              ofcModuleTerminationStatus, 
-                                              masterState, controllerStateNIB, 
-                                              IRStatus, NIBSwSuspensionStatus, 
-                                              IRQueueNIB, subscribeList, 
-                                              SetScheduledIRs, 
-                                              ofcFailoverStateNIB, ingressPkt, 
-                                              ingressIR, egressMsg, ofaInMsg, 
-                                              ofaOutConfirmation, 
-                                              installerInIR, statusMsg, 
-                                              notFailedSet, failedElem, 
-                                              controllerSet_, nxtController_, 
-                                              prevLockHolder_, failedSet, 
-                                              statusResolveMsg, recoveredElem, 
-                                              controllerSet_s, nxtController_s, 
-                                              prevLockHolder, eventMsg, 
-                                              controllerSet, nxtController, 
-                                              eventID, toBeScheduledIRs, 
-                                              nextIR, stepOfFailure_, 
-                                              subscriberOfcSet, ofcID, event, 
-                                              swSet, currSW, IRQueueEntries, 
-                                              entry, nextToSent, entryIndex, 
-                                              rowIndex, rowRemove, removeRow, 
-                                              stepOfFailure_c, monitoringEvent, 
-                                              setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
-                                              controllerFailedModules >>
-
 controllerMonitoringServer(self) == ControllerMonitorCheckIfMastr(self)
-                                       \/ MonitoringServerRemoveFromQueue(self)
-                                       \/ ControllerUpdateIR2(self)
-                                       \/ ControllerUpdateRole(self)
 
 ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
-                                /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                   \/ controllerGlobalLock[1] = self[1]
                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                /\ \/ controllerLocalLock[self[1]] = <<NO_LOCK, NO_LOCK>>
+                                   \/ controllerLocalLock[self[1]] = self
                                 /\ controllerFailedModules' = [controllerFailedModules EXCEPT ![self] = returnControllerFailedModules(self[1])]
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2309, column 13.")
-                                     /\ controllerLock' = module
+                                               "Failure of assertion at line 2296, column 13.")
+                                     /\ controllerLocalLock' = module
+                                     /\ controllerGlobalLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
                                 /\ UNCHANGED << switchLock, FirstInstall, 
@@ -7188,16 +6869,21 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                                 rowIndex, rowRemove, removeRow, 
                                                 stepOfFailure_c, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, stepOfFailure, msg >>
+                                                resetIR, stepOfFailure_co, msg, 
+                                                stepOfFailure >>
 
 watchDog(self) == ControllerWatchDogProc(self)
 
 OfcFailoverNewMasterInitialization(self) == /\ pc[self] = "OfcFailoverNewMasterInitialization"
+                                            /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                               \/ controllerGlobalLock[1] = self[1]
+                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                             /\ SHOULD_FAILOVER = 1
                                             /\ ofcFailoverStateNIB' = [ofcFailoverStateNIB EXCEPT ![ofc1] = FAILOVER_INIT]
                                             /\ pc' = [pc EXCEPT ![self] = "ofcFailoverCurrMasterTerminate"]
                                             /\ UNCHANGED << switchLock, 
-                                                            controllerLock, 
+                                                            controllerLocalLock, 
+                                                            controllerGlobalLock, 
                                                             FirstInstall, 
                                                             sw_fail_ordering_var, 
                                                             ContProcSet, 
@@ -7279,15 +6965,20 @@ OfcFailoverNewMasterInitialization(self) == /\ pc[self] = "OfcFailoverNewMasterI
                                                             monitoringEvent, 
                                                             setIRsToReset, 
                                                             resetIR, 
-                                                            stepOfFailure, msg, 
+                                                            stepOfFailure_co, 
+                                                            msg, stepOfFailure, 
                                                             controllerFailedModules >>
 
 ofcFailoverCurrMasterTerminate(self) == /\ pc[self] = "ofcFailoverCurrMasterTerminate"
+                                        /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                           \/ controllerGlobalLock[1] = self[1]
+                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                         /\ ofcFailoverStateNIB[ofc1] = FAILOVER_READY
                                         /\ ofcFailoverStateNIB' = [ofcFailoverStateNIB EXCEPT ![ofc0] = FAILOVER_TERMINATE]
                                         /\ pc' = [pc EXCEPT ![self] = "ofcFailoverChangeRoles"]
                                         /\ UNCHANGED << switchLock, 
-                                                        controllerLock, 
+                                                        controllerLocalLock, 
+                                                        controllerGlobalLock, 
                                                         FirstInstall, 
                                                         sw_fail_ordering_var, 
                                                         ContProcSet, SwProcSet, 
@@ -7360,15 +7051,21 @@ ofcFailoverCurrMasterTerminate(self) == /\ pc[self] = "ofcFailoverCurrMasterTerm
                                                         stepOfFailure_c, 
                                                         monitoringEvent, 
                                                         setIRsToReset, resetIR, 
-                                                        stepOfFailure, msg, 
+                                                        stepOfFailure_co, msg, 
+                                                        stepOfFailure, 
                                                         controllerFailedModules >>
 
 ofcFailoverChangeRoles(self) == /\ pc[self] = "ofcFailoverChangeRoles"
+                                /\ \/ controllerGlobalLock = <<NO_LOCK, NO_LOCK>>
+                                   \/ controllerGlobalLock[1] = self[1]
+                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                 /\ ofcFailoverStateNIB[ofc0] = FAILOVER_TERMINATE_DONE
                                 /\ masterState' = [masterState EXCEPT ![ofc0] = ROLE_SLAVE,
                                                                       ![ofc1] = ROLE_MASTER]
                                 /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                /\ UNCHANGED << switchLock, controllerLock, 
+                                /\ UNCHANGED << switchLock, 
+                                                controllerLocalLock, 
+                                                controllerGlobalLock, 
                                                 FirstInstall, 
                                                 sw_fail_ordering_var, 
                                                 ContProcSet, SwProcSet, 
@@ -7423,7 +7120,8 @@ ofcFailoverChangeRoles(self) == /\ pc[self] = "ofcFailoverChangeRoles"
                                                 rowIndex, rowRemove, removeRow, 
                                                 stepOfFailure_c, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, stepOfFailure, msg, 
+                                                resetIR, stepOfFailure_co, msg, 
+                                                stepOfFailure, 
                                                 controllerFailedModules >>
 
 failoverProc(self) == OfcFailoverNewMasterInitialization(self)
@@ -7492,7 +7190,7 @@ OperationsRanking == <<"ControllerSeqProc",
                       "ControllerThreadSaveToDB2",
                       "WaitForIRToHaveCorrectStatus",
                       "ReScheduleifIRNone",
-                      "ControllerThreadUnlockSemaphore",
+                      "ControllerThreadReleaseSemaphoreAndScheduledSet",
                       "RemoveFromScheduledIRSet",
                       "ControllerThreadClearDB",
                       "ControllerThreadRemoveQueue2",
@@ -7516,51 +7214,53 @@ OperationIndex(name) == CHOOSE x \in 1..Len(OperationsRanking): OperationsRankin
                       
 OperationsVariableSet == [ControllerSeqProc |-> {"IRStatus", 
                                                  "SwSuspensionStatus", 
-                                                 "SetScheduledIRs", 
-                                                 "idThreadWorkingOnIR"}, 
-                           SchedulerMechanism |-> {},
-                           SeqUpdateDBState1 |-> {},
-                           AddToScheduleIRSet |-> {"SetScheduledIRs"},
-                           ScheduleTheIR |-> {"controllerThreadPoolIRQueue"},
-                           SeqClearDBState |-> {},
+                                                 "SetScheduledIRs"}, 
+                           SchedulerMechanism |-> {"SetScheduledIRs"},
+                           ScheduleTheIR |-> {"IRQueueNIB"}, 
+                           sendIRQueueModNotification |-> {"nibEventQueue"}, 
+                           sequencerApplyFailure |-> {}, \* locked the above three into a sequence of back-to-back Ops
                            ControllerSeqStateReconciliation |-> {"SetScheduledIRs"},
                            \*************************************************************************
-                           ControllerThread |-> {"controllerThreadPoolIRQueue"},
-                           ControllerThreadSaveToDB1 |-> {},
-                           ControllerThreadLockTheIRUsingSemaphore |-> {"idThreadWorkingOnIR"},
-                           ControllerThreadRemoveQueue1 |-> {"controllerThreadPoolIRQueue"},
-                           ControllerThreadSendIR |-> {"SwSuspensionStatus",
-                                                      "IRStatus"},
+                           NibEventHandlerProc |-> {"ofcFailoverStateNIB",
+                                                    "masterState",
+                                                    "nibEventQueue",
+                                                    "controllerRoleInSW"},
+                           ScheduleRoleUpdateEqual |-> {"workerLocalQueue"},
+                           WaitForSwitchUpdateRoleAck |-> {"subscribeList",
+                                                           "IRQueueNIB",
+                                                           "controllerRoleInSW"},
+                           QueryIRQueueNIB |-> {"workerLocalQueue",
+                                                "ofcFailoverStateNIB"},
+                           WaitForRoleMaster |-> {"masterState"},
+                           WaitForWorkersTermination |-> {"ofcModuleTerminationStatus"},
+                           WaitForAllModulesTermination |-> {"ofcModuleTerminationStatus"},
+                           \*************************************************************************
+                           ControllerThread |-> {"SwSuspensionStatus",
+                                                  "IRStatus"},
+                           ControllerThreadRemoveQueue1 |-> {"IRQueueNIB"},
                            ControllerThreadForwardIR |-> {"controller2Switch"},
-                           ControllerThreadSaveToDB2 |-> {},
                            WaitForIRToHaveCorrectStatus |-> {"SwSuspensionStatus"},
                            ReScheduleifIRNone |-> {"IRStatus"},
-                           ControllerThreadUnlockSemaphore |-> {"idThreadWorkingOnIR"},
-                           RemoveFromScheduledIRSet |-> {"SetScheduledIRs"},
-                           ControllerThreadClearDB |-> {},
-                           ControllerThreadRemoveQueue2 |-> {"controllerThreadPoolIRQueue"},
+                           ControllerThreadReleaseSemaphoreAndScheduledSet |-> {"idThreadWorkingOnIR",
+                                                                                "SetScheduledIRs"},
                            ControllerThreadStateReconciliation |-> {"IRStatus",
                                                                     "idThreadWorkingOnIR",
                                                                     "SetScheduledIRs"},
                            \*************************************************************************
                            ControllerEventHandlerProc |-> {"SwSuspensionStatus",
                                                            "swSeqChangedStatus"},
-                           ControllerSuspendSW |-> {"SwSuspensionStatus"},
-                           ControllerEventHandlerSaveToDB1 |-> {},
-                           ControllerFreeSuspendedSW |-> {"SwSuspensionStatus"},
-                           ControllerCheckIfThisIsLastEvent |-> {"swSeqChangedStatus"},
                            getIRsToBeChecked |-> {"IRStatus"},
-                           ResetAllIRs |-> {},
-                           ControllerResetIRStatAfterRecovery |-> {"IRStatus"},
-                           ControllerEventHandlerClearDB |-> {},
+                           ResetAllIRs |-> {"IRStatus"},
                            ControllerEvenHanlderRemoveEventFromQueue |-> {"swSeqChangedStatus"},
                            ControllerEventHandlerStateReconciliation |-> {"SwSuspensionStatus"},
                            \*************************************************************************
-                           ControllerMonitorCheckIfMastr |-> {"switch2Controller"},
-                           ControllerUpdateIR2 |-> {"IRStatus"},
-                           MonitoringServerRemoveFromQueue |-> {"switch2Controller"},
-                           ControllerWatchDogProc |-> {"controllerStatus",
-                                                       "controllerLock"}]
+                           ControllerMonitorCheckIfMastr |-> {"switch2Controller",
+                                                              "IRStatus",
+                                                              "roleUpdateStatus",
+                                                              "controllerRoleInSw",
+                                                              "switch2Controller"},
+                           \*************************************************************************
+                           ControllerWatchDogProc |-> {}]
 
 \* Liveness Properties
 AllInstalled == (\A x \in 1..MAX_NUM_IRs: \E y \in DOMAIN installedIRs: installedIRs[y] = x)
@@ -7608,6 +7308,6 @@ EachSwitchAtMostOneMasterINV == \A x \in SW: ~\E y, z \in DOMAIN switchControlle
                                                                                                 /\ switchControllerRoleStatus[x][z] = ROLE_MASTER
 =============================================================================
 \* Modification History
-\* Last modified Tue Feb 02 03:07:21 PST 2021 by root
+\* Last modified Sat Feb 20 19:36:43 PST 2021 by root
 \* Created Thu Dec 03 11:41:24 PST 2020 by root
 
