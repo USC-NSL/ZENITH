@@ -1,0 +1,230 @@
+@!@!@STARTMSG 2262:0 @!@!@
+TLC2 Version 2.15 of Day Month 20?? (rev: eb3ff99)
+@!@!@ENDMSG 2262 @!@!@
+@!@!@STARTMSG 2187:0 @!@!@
+Running breadth-first search Model-Checking with fp 3 and seed -3046703142974433833 with 8 workers on 4 cores with 802MB heap and 1801MB offheap memory [pid: 82281] (Mac OS X 10.14.4 x86_64, AdoptOpenJDK 14.0.1 x86_64, OffHeapDiskFPSet, DiskStateQueue).
+@!@!@ENDMSG 2187 @!@!@
+@!@!@STARTMSG 2220:0 @!@!@
+Starting SANY...
+@!@!@ENDMSG 2220 @!@!@
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/fullNIB/bothTransientFailuresNIB/ScenarioIII.toolbox/Model_SnapShot_1613371972005/MC.tla
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/fullNIB/bothTransientFailuresNIB/ScenarioIII.toolbox/Model_SnapShot_1613371972005/ScenarioIII.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202004251858/tla2sany/StandardModules/TLC.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202004251858/tla2sany/StandardModules/Integers.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202004251858/tla2sany/StandardModules/Sequences.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202004251858/tla2sany/StandardModules/FiniteSets.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202004251858/tla2sany/StandardModules/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module ScenarioIII
+Semantic processing of module MC
+@!@!@STARTMSG 2219:0 @!@!@
+SANY finished.
+@!@!@ENDMSG 2219 @!@!@
+@!@!@STARTMSG 2185:0 @!@!@
+Starting... (2021-02-21 23:04:09)
+@!@!@ENDMSG 2185 @!@!@
+@!@!@STARTMSG 2212:0 @!@!@
+Implied-temporal checking--satisfiability problem has 1 branches.
+@!@!@ENDMSG 2212 @!@!@
+@!@!@STARTMSG 2189:0 @!@!@
+Computing initial states...
+@!@!@ENDMSG 2189 @!@!@
+@!@!@STARTMSG 2190:0 @!@!@
+Finished computing initial states: 1 distinct state generated at 2021-02-21 23:04:12.
+@!@!@ENDMSG 2190 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 355 total distinct states at (2021-02-21 23:04:15)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 00s at 2021-02-21 23:04:15
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(21) at 2021-02-21 23:04:15: 1,035 states generated (1,035 s/min), 445 distinct states found (445 ds/min), 88 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 58612 total distinct states at (2021-02-21 23:05:15)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 01s at 2021-02-21 23:05:17
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(61) at 2021-02-21 23:05:17: 200,607 states generated (199,572 s/min), 62,685 distinct states found (62,240 ds/min), 4,072 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 124361 total distinct states at (2021-02-21 23:06:17)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 02s at 2021-02-21 23:06:20
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(74) at 2021-02-21 23:06:20: 430,252 states generated (229,645 s/min), 130,982 distinct states found (68,297 ds/min), 6,619 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 187483 total distinct states at (2021-02-21 23:07:20)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 05s at 2021-02-21 23:07:25
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(82) at 2021-02-21 23:07:25: 650,934 states generated (220,682 s/min), 196,017 distinct states found (65,035 ds/min), 8,531 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 246433 total distinct states at (2021-02-21 23:08:25)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 07s at 2021-02-21 23:08:33
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(89) at 2021-02-21 23:08:33: 857,478 states generated (206,544 s/min), 256,676 distinct states found (60,659 ds/min), 10,241 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 298305 total distinct states at (2021-02-21 23:09:33)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 09s at 2021-02-21 23:09:42
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(94) at 2021-02-21 23:09:42: 1,039,195 states generated (181,717 s/min), 309,788 distinct states found (53,112 ds/min), 11,430 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 348331 total distinct states at (2021-02-21 23:10:42)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 10s at 2021-02-21 23:10:53
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(98) at 2021-02-21 23:10:53: 1,214,746 states generated (175,551 s/min), 361,184 distinct states found (51,396 ds/min), 12,760 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 396983 total distinct states at (2021-02-21 23:11:53)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 10s at 2021-02-21 23:12:04
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(102) at 2021-02-21 23:12:04: 1,384,679 states generated (169,933 s/min), 410,747 distinct states found (49,563 ds/min), 13,756 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 445326 total distinct states at (2021-02-21 23:13:04)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 15s at 2021-02-21 23:13:19
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(105) at 2021-02-21 23:13:19: 1,554,092 states generated (169,413 s/min), 460,216 distinct states found (49,469 ds/min), 14,887 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 497101 total distinct states at (2021-02-21 23:14:19)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 13s at 2021-02-21 23:14:32
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(108) at 2021-02-21 23:14:32: 1,735,303 states generated (181,211 s/min), 513,053 distinct states found (52,837 ds/min), 15,949 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 561651 total distinct states at (2021-02-21 23:15:32)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 16s at 2021-02-21 23:15:49
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(112) at 2021-02-21 23:15:49: 1,961,116 states generated (225,813 s/min), 578,958 distinct states found (65,905 ds/min), 17,305 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 626872 total distinct states at (2021-02-21 23:16:49)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 17s at 2021-02-21 23:17:06
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(116) at 2021-02-21 23:17:06: 2,189,823 states generated (228,707 s/min), 645,410 distinct states found (66,452 ds/min), 18,535 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 691235 total distinct states at (2021-02-21 23:18:06)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 19s at 2021-02-21 23:18:26
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(119) at 2021-02-21 23:18:26: 2,415,461 states generated (225,638 s/min), 710,932 distinct states found (65,522 ds/min), 19,694 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(123) at 2021-02-21 23:19:26: 2,642,647 states generated (227,186 s/min), 777,130 distinct states found (66,198 ds/min), 20,935 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 819688 total distinct states at (2021-02-21 23:20:26)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 22s at 2021-02-21 23:20:48
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(126) at 2021-02-21 23:20:48: 2,865,003 states generated (222,356 s/min), 841,706 distinct states found (64,576 ds/min), 22,015 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(129) at 2021-02-21 23:21:48: 3,089,878 states generated (224,875 s/min), 907,011 distinct states found (65,305 ds/min), 23,093 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 945215 total distinct states at (2021-02-21 23:22:48)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 27s at 2021-02-21 23:23:15
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(131) at 2021-02-21 23:23:15: 3,304,263 states generated (214,385 s/min), 969,372 distinct states found (62,361 ds/min), 24,154 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(134) at 2021-02-21 23:24:15: 3,522,952 states generated (218,689 s/min), 1,032,889 distinct states found (63,517 ds/min), 25,279 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 1070584 total distinct states at (2021-02-21 23:25:15)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 29s at 2021-02-21 23:25:44
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(136) at 2021-02-21 23:25:44: 3,743,050 states generated (220,098 s/min), 1,096,777 distinct states found (63,888 ds/min), 26,190 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(139) at 2021-02-21 23:26:44: 3,962,888 states generated (219,838 s/min), 1,160,438 distinct states found (63,661 ds/min), 27,112 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 1195267 total distinct states at (2021-02-21 23:27:45)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 35s at 2021-02-21 23:28:20
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(141) at 2021-02-21 23:28:20: 4,179,996 states generated (217,108 s/min), 1,223,515 distinct states found (63,077 ds/min), 28,248 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(143) at 2021-02-21 23:29:20: 4,399,042 states generated (219,046 s/min), 1,287,073 distinct states found (63,558 ds/min), 29,129 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 1319559 total distinct states at (2021-02-21 23:30:20)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 38s at 2021-02-21 23:30:58
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(145) at 2021-02-21 23:30:58: 4,614,676 states generated (215,634 s/min), 1,349,629 distinct states found (62,556 ds/min), 30,011 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(147) at 2021-02-21 23:31:58: 4,825,799 states generated (211,123 s/min), 1,410,861 distinct states found (61,232 ds/min), 30,919 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(149) at 2021-02-21 23:32:58: 5,044,161 states generated (218,362 s/min), 1,474,187 distinct states found (63,326 ds/min), 31,821 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 1503420 total distinct states at (2021-02-21 23:33:58)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 43s at 2021-02-21 23:34:42
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(151) at 2021-02-21 23:34:42: 5,257,900 states generated (213,739 s/min), 1,536,110 distinct states found (61,923 ds/min), 32,687 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
