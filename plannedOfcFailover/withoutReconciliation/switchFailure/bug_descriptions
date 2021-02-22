@@ -7,8 +7,34 @@ notification about sw0 failure and suspends the sw0 (both in NIB, and its local)
 role-req since its switch is suspended
 
 
-+ The problem is Failover is not finished successfully since OFC1 is waiting for all the switches to have ROLE_EQUAL. 
++ Problem: The problem is Failover is not finished successfully since OFC1 is waiting for all the switches to have 
+ROLE_EQUAL. 
 
-+ Solution: OFC1 should skip failed switches, and get back to them when they are recovered. 
-
++ Solution: OFC1 should skip failed switches, and get back to them when they are recovered. The OF event handler upon 
+recovery of a switch checks if it is the master of the switch or not. If it is not, it schedules a role update msg to 
+update its role to ROLE_MASTER.  
 ======================================================================================================================
+======================================================================================================================
+Bug#2 (permission and synchronizatoin issue): Failover module receives the failover request and sends the FAILOVER_INIT 
+signal to OFC1 → OFC1 NIB event handler receives the notification and schedules the role update request for sw0 → OFC1 
+worker forwards the role request (ROLE_EQUAL) msg to sw0 → sw0 receives the packet → sw0 CPU fails → OFC1 OpenFlow 
+event handler receives the event and suspends the switch (both in NIB and its local) → sw0 CPU recovers → OFC1 NIB 
+event handler skips role update in sw0 as it is suspended, synchronizes its local IRQueue with IRQueue in NIB and 
+changes its failover status to FAILOVER_READY → failover module receives the notification and sends FAILOVER_TERMINATE
+signal to OFC0 → OFC0 NIB event handler sends termination signal to workers, and they terminate gracefully → OFC1 
+OpenFlow event handler receives the switch recovery event → Since its role in switch is ROLE_SLAVE, OFC1 OpenFlow 
+event handler schedules a role update request msg (ROLE_MASTER) → OFC1 worker forwards the role request msg to sw0 → 
+sw0 updates the roles (OFC1 |→ ROLE_MASTER, OFC0 |→ ROLE_SLAVE) and replies with confirmation msg → OFC0 NIB event 
+handler processes the sw failure event and changes the switch status to SW_SUSPEND → OFC1 monitoring server receives 
+the role update confirmation msg and updates its role in NIB to ROLE_MASTER → OFC0 NIB event handler sends termination 
+signal to monitoring server and OF event handler, and they terminate. → OFC0 NIB event handler changes its failover 
+status in NIB to FAILOVER_TERMINATE_DONE → Failover module changes OFC roles in NIB
+
++ Problem: IR is not installed in the switch since the status of the sw is SW_SUSPEND in NIB while the switch is 
+actually working correctly. 
+
++ Solution: Only the master OFC should be able to make topology modifications and needs a way to synchronize the 
+events between different OFCs. 
+====================================================================================================================
+====================================================================================================================
+
