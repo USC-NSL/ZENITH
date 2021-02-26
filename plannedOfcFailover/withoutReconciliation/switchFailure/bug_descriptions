@@ -37,4 +37,20 @@ actually working correctly.
 events between different OFCs. 
 ====================================================================================================================
 ====================================================================================================================
+EVENT SYN -- Alg#1: slave OFC OpenFlow event handler is initially sleep, and does not process any event. During the 
+failover, and before OFC NIB event handler sends FAILOVER_READY signal to failover module, OFC NIB event handler 
+synchronizes its internal event log, internal topology with NIB’s, and wakes up the OFC OpenFlow event handler.
+
+Bug#3 (event more than once): Failover module receives the failover request and sends FAILOVER_INIT signal to OFC1 → 
+OFC1 NIB event handler receives the notification and schedules role update msg → OFC1 worker forwards the role update 
+msg (ROLE_EQUAL) → sw0 updates OFC1’s role and sends back the confirmation → sw0 CPU fails → OFC0 OF event handler 
+receives the event and suspends the switch → OFC1 monitoring server receives the ROLE_REPLY msg → OFC1 NIB event 
+handler subscribe to IRQueue and synchronizes its local IRQueue with NIB’s →OFC1 NIB event handler wakes up the OFC 
+OpenFlow → sw0 CPU recovers →  sw0 CPU recovers → OFC0 OF event handler processes the event and changes flag of sw to 
+SW_RUN (both locally and in NIB) → OFC1 OF event handler receives the recovery event and processes it.
+
++ Problem: Recovery event is processed twice. 
++ Solution: OFC1 should not start processing the events until an OFC2 is terminated.
+====================================================================================================================
+==================================================================================================================== 
 
