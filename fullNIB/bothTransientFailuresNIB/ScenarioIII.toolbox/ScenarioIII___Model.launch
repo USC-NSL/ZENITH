@@ -7,12 +7,12 @@
     <intAttribute key="dfidDepth" value="100"/>
     <booleanAttribute key="dfidMode" value="false"/>
     <intAttribute key="distributedFPSetCount" value="0"/>
-    <stringAttribute key="distributedNetworkInterface" value="10.26.74.43"/>
+    <stringAttribute key="distributedNetworkInterface" value="192.168.56.1"/>
     <intAttribute key="distributedNodesCount" value="1"/>
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="83"/>
+    <intAttribute key="fpIndex" value="0"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="33"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -21,13 +21,14 @@
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="egressMsg, nextIRToSent, IRStatus, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IR2SW, ofaOutConfirmation, SwProcSet, failedElem, IRQueueNIB, controllerSubmoduleFailStat, switchStatus, ContProcSet, controllerStateNIB, Installer2OfaBuff, setIRsToReset, swSeqChangedStatus, controlMsgCounter, switch2Controller, TCAM, masterState, sw_fail_ordering_var, resetIR, msg, stepOfFailure_, Ofa2InstallerBuff, Ofa2NicAsicBuff, dependencyGraph, failedSet, recoveredElem, SwSuspensionStatus, controllerSubmoduleFailNum, ingressIR, nextIR, pc, stepOfFailure, notFailedSet, workerThreadRanking, NicAsic2OfaBuff, stepOfFailure_c, toBeScheduledIRs, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, controllerLock, controllerFailedModules"/>
+    <stringAttribute key="modelBehaviorVars" value="transaction, egressMsg, nextIRToSent, IRStatus, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IR2SW, ofaOutConfirmation, SwProcSet, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, ContProcSet, controllerStateNIB, Installer2OfaBuff, setIRsToReset, swSeqChangedStatus, controlMsgCounter, switch2Controller, RC2NIB_len, key, TCAM, masterState, sw_fail_ordering_var, resetIR, msg, stepOfFailure_, Ofa2InstallerBuff, NIB2RC, Ofa2NicAsicBuff, dependencyGraph, failedSet, recoveredElem, OFC2NIB, SwSuspensionStatus, NIB2OFC, controllerSubmoduleFailNum, NIBMsg, ingressIR, nextIR, pc, stepOfFailure, notFailedSet, op1, op2, workerThreadRanking, NicAsic2OfaBuff, stepOfFailure_c, toBeScheduledIRs, RC2NIB, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, value, controllerLock, controllerFailedModules, SetScheduledIRsRC"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
         <listEntry value="1IRCriticalSection"/>
         <listEntry value="1RedundantInstallation"/>
         <listEntry value="1ConsistencyReq"/>
+        <listEntry value="1Debug"/>
     </listAttribute>
     <listAttribute key="modelCorrectnessProperties">
         <listEntry value="1InstallationLivenessProp"/>
@@ -88,6 +89,15 @@
         <listEntry value="NIC_ASIC_OUT;;NIC_ASIC_OUT;1;0"/>
         <listEntry value="INSTALLED_SUCCESSFULLY;;INSTALLED_SUCCESSFULLY;1;0"/>
         <listEntry value="WHICH_SWITCH_MODEL;;(s0 :&gt; SW_COMPLEX_MODEL) @@ (s1 :&gt; SW_COMPLEX_MODEL);0;0"/>
+        <listEntry value="NIBT_SET_SCHEDULED_IRS;;;0;0"/>
+        <listEntry value="nib0;;;0;0"/>
+        <listEntry value="CONT_NIB_OFC_EVENT;;;0;0"/>
+        <listEntry value="NULL;;;0;0"/>
+        <listEntry value="CONT_RC_NIB_EVENT;;;0;0"/>
+        <listEntry value="NIBT_IR_QUEUE;;;0;0"/>
+        <listEntry value="CONT_OFC_NIB_EVENT;;;0;0"/>
+        <listEntry value="NIBT_CONTROLLER_STATE;;;0;0"/>
+        <listEntry value="CONT_NIB_RC_EVENT;;;0;0"/>
     </listAttribute>
     <intAttribute key="modelVersion" value="20191005"/>
     <intAttribute key="numberOfWorkers" value="8"/>
