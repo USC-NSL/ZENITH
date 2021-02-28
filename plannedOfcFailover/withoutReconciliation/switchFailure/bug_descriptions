@@ -53,4 +53,156 @@ SW_RUN (both locally and in NIB) → OFC1 OF event handler receives the recovery
 + Solution: OFC1 should not start processing the events until an OFC2 is terminated.
 ====================================================================================================================
 ==================================================================================================================== 
+EVENT SYN -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events. 
+Bug#4 (IR by two OFCs): RCS Sequencer schedules an IR for sw0 → Failover module receives the failover request and 
+sends FAILOVER_INIT signal to OFC1 → OFC0 NIB event handler receives the IR and passed the IR to workers → OFC1 NIB 
+event handler receives the notification and schedules a ROLE_REQ msg to update switches’s role to ROLE_EQUAL → OFC0 
+worker changes the flag of IR to IR_SENT and forwards the IR to switch → sw0 installs the IR but its cpu fails before 
+sending the confirmation → sw0 CPU recovers → OFC0 OpenFlow event handler processes the failure event and suspends 
+the switch → OFC1 worker sends the role request msg → sw0 updates the role and sends back role reply msg → OFC1 
+monitoring server receives the confirmation → OFC1 NIB event handler subscribes to IRQueue and synchronizes its local 
+IRQueue with NIB’s → OFC1 sends FAILOVER_READY signal to failover module → OFC0 OpenFlow event handler processes 
+the recovery event and changes the switch status to SW_RUN → OFC0 OpenFlow event handler changes the flag of IR to 
+IR_NONE as it has not received any confirmation → OFC1 worker changes the status of IR to IR_SENT and forward the 
+IR (this is because earlier OFC1 NIB event handler synchronized the local queue of OFC with NIB’s queue, and as a 
+result, IR is inside the local IR Queue. Then, as the flag of IR is IR_NONE, the worker forwards the IR) → switch 
+receives the IR and install the IR for the second time.  
+
++ Problem: IR is installed twice by two different OFCs. 
++ Solution: OFC NIB event handler should fetch the IRs from NIB IRQueue before sending the FAILOVER_READY signal to 
+the Failover module. However, it should pass the IRs to the workers after the failover is done, and this OFC is the 
+new master OFC. 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events. 
+Bug#5 (deadlock in failover): Failover module receives the failover request and sends FAILOVER_INIT signal to OFC1 
+→ OFC1 NIB event handler receives the notification and schedule a ROLE_REQ msg to update its role to ROLE_EQUAL → 
+RCS sequencer schedules an IR → OFC0 NIB event handler receives the IR and passes the IR to workers → OFC0 worker 
+forwards the IR to the switch → sw0 CPU fails before installing the IR → OFC0 event handler processes the failure 
+event and suspends the switch → sw0 CPU recovers → OFC1 forwards the role request msg to the switch → sw0 updates 
+the role and replies with ROLE_REPLY → OFC1 monitoring server receives the role reply msg → OFC1 NIB event handler 
+subscribes to NIB IR Queue, pulls the NIB IRQueue, and sends FAILOVER_READY signal to the failover module → failover 
+module sends termination signal to OFC0 → OFC0 NIB event handler receives the notification and sends TERMINATE_INIT 
+signal to the workers → OFC0 workers terminate gracefully → OFC0 NIB event handler sends TERMINATE_INIT to monitoring 
+server and OpenFlow event handler → OFC0 OpenFlow event handler terminates gracefully → OFC0 monitoring server waits 
+to receive the ACK for IR (which has IR_SENT status), and rejects to terminate
+
++ Problem: Deadlock in failover 
++ Solution: monitoring server should terminate and not wait for the IRs with IR_SENT status corresponding to switches 
+with SW_SUSPEND flag. 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events. 
+Bug#6 (deadlock in failover): Failover module receives the failover request and sends FAILOVER_INIT signal to OFC1 →  
+OFC1 NIB event handler receives the notification and schedule ROLE_REQ msg to update its role to ROLE_EQUAL → 
+Sequencer schedules an IR → OFC0 NIB event handler receives the IR and passes to the workers → OFC1 worker forwards 
+the role request to sw0 → sw0 CPU fails before updating the role → OFC0 OpenFlow event handler processes the failure 
+event and suspends the switch → OFC0 worker does not forward the IR since the corresponding switch is suspended → sw0 
+CPU recovers → OFC0 OpenFlow event handler processes the recovery event and changes the status of switch to SW_RUN → 
+Sequencer reschedules the IR → OFC0 NIB event handler receives and passes the IR to workers → OFC0 worker forwards 
+the IR to switch → switch installs the IR and sends back the confirmation → OFC0 monitoring server receives the 
+confirmation and changes the flag of IR to IR_DONE
+
++ Problem: Deadlock in failover as OFC1 NIB event handler thinks the switch is up and waits for role reply msg. 
+However, the switch has lost the role reply msg during the failure. 
++ Solution: OFC1 NIB event handler should subscribe to the SwSuspension status before scheduling the ROLE_REQ massages. 
+As a result, it will receive every notification regarding topology change, and modifies the locally maintained 
+topology state accordingly.
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events. 
+Bug#7 (deadlock in failover): failover module receives the request and sends the FAILOVER_INIT to OFC1 → RCS 
+Sequencer schedules an IR → OFC0 NIB event handler receives and passes the IR to workers →OFC0 worker forwards the 
+IR →sw0 CPU fails before installing the IR and the IR is lost → OFC1 failover handler receives the FAILOVER_INIT 
+notification and subscribes to the NIB topology changes → sw0 CPU recovers → OFC1 failover handler schedule role req 
+msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg → sw0 updates the role and responds with ROLE_REPLY → 
+OFC1 monitoring server receives and processes the ROLE_REPLY → OFC1 NIB event handler subscribes to NIB IR Queue and 
+pulls the IRs in NIB IR Queue. It, then, sends a FAILOVER_READY signal to the failover module → Failover module sends 
+a FAILOVER_TERMINATE signal to the OFC0 → OFC0 failover module sends TERMINATE_INIT signal to the workers → OFC0 
+workers terminate gracefully → OFC0 failover module sends TERMINATE_INIT signal to the monitoring server and OF event 
+handler → OFC0 OF event handler terminates → OFC0 monitoring server reject to terminate as it is waiting for the 
+acknowledgement of the IR (has IR_SENT flag corresponding to a switch with SW_RUN state) 
+
++ Problem: Deadlock in Failover  
++ Solution: OFC failover handler should first gracefully terminate the monitoring server and then, terminate the OF 
+event handler. 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events. 
+Bug#8 (deadlock in Failover): Failover module receives the failover request and sends the FAILOVER_INIT to OFC1 → 
+Sequencer schedules an IR → OFC0 NIB event handler receives and passes the IR to workers → OFC0 worker forwards the 
+IR → sw0 receives and installs the IR, and sends back the confirmation → sw0 CPU fails → OFC0 OF event handler 
+processes the failure event and suspends the switch → OFC0 monitoring server receives the confirmation and changes 
+the flag of IR to IR_DONE → OFC1 failover handler receives the notification and subscribes to the topology changes 
+→  OFC1 failover handler schedules role req msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg → the 
+ROLE_REQ msg is lost since the switch is failed → sw0 CPU recovers → OFC0 OF event handler processes the switch 
+recovery event and changes the state of switch to SW_RUN → OFC1 NIB event handler receives the TOPO_MOD event 
+(switch status changed to SW_RUN) → OFC1 NIB event handler does not do anything because the previous state of 
+switch was SW_RUN and the event states that the switch status has to be changed to SW_RUN 
+   
++ Problem: Deadlock in failover as OFC1 Failover handler waits for the ROLE_REPLY msg forever. It is because OFC1 
+does not know about the switch failure event.
++ Solution: OFC1 failover should pull the topology state from the NIB after subscribing to the topology changes. 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events
+Bug#9 (deadlock in failover): Failover module receives the failover request and sends the FAILOVER_INIT to OFC1 → 
+OFC1 failover handler receives the signal, subscribes to and pull the topology state from NIB → OFC1 failover module 
+schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg → sw0 CPU fails before updating the 
+roles → OFC0 OF event handler processes the switch failure event and suspends the switch → sw0 CPU recovers → OFC1 
+NIB event handler receives the TOPO_MOD event (sw0 |-> suspend) and modifies the internal topology state → OFC1 
+failover module thinks the switch is failed and sends FAILOVER_READY signal to the failover module → OFC0 OF event 
+handler processes the switch recovery event and changes the state of switch to SW_RUN → NIB event handler receives 
+the topology change event (sw0 |-> run) and modifies topology state, but since its failover status is no longer in 
+FAILOVER_INIT, it does not reschedule the ROLE_REQ → OFC0 OF event handler changes the flag of IR to IR_NONE since 
+OFC has not received the confirmation for the IR → failover module sends FAILOVER_TERMINATE to OFC0 → OFC0 failover 
+handler receives the signal and sends termination signal to workers → Sequencer schedules an IR → OFC1 NIB event 
+handler passes the IR to the workers → OFC1 worker changes the flag of IR to IR_SENT in NIB and forwards the IR → 
+switch rejects the IR and replies with bad request error (OFC1’s role is ROLE_SLAVE) → OFC0 worker terminates → 
+OFC1 monitoring server receives the bad request and does not do anything → OFC0 monitoring server reject to 
+terminate as IR status in NIB is IR_SENT (set by OFC1) corresponding to a switch with status SW_RUN
++ Problem: deadlock in failover as OFC0 monitoring server rejects to terminate and waits for the confirmation of the 
+IR
++ Solution: OFC1 NIB event handler should not pass the IRs to the worker until it becomes the master OFC. 
+(Same problem happened previously where only one module was handling responsibilities of both NIB event handler and 
+Failover handler.) 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#2: slave OFC OpenFlow event handler is initially sleep, and does not process any event. After the 
+OFC role is completely transferred to the OFC, its NIB event handler wakes up the OpenFlow event handler to start 
+processing the events
+Bug#10 (reconciliation between NIB and OFC): Failover module receives the failover request and sends the FAILOVER_INIT 
+to OFC1 → OFC1 failover handler receives the signal, subscribes to and pull the topology state from NIB → OFC1 
+failover module schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg → sw0 updates the role 
+and responds with ROLE_REPLY → sw0 CPU fails → OFC1 monitoring server receives the ROLE_REPLY → OFC1 failover handler 
+subscribes to and fetches the IRs from the NIB IRQueue, and then changes its failover status to FAILOVER_READY → 
+Failover module receives the notification and sends FAILOVER_TERMINATE signal to OFC0 → sw0 CPU recovers → OFC0 
+failover handler receives the notification and sends termination signal to the workers → OFC0 worker terminates → 
+OFC0 failover handler sends termination signal to the monitoring server → OFC0 OF event handler processes the failure 
+event and suspends the switch → OFC0 monitoring server terminates → OFC0 failover handler sends termination signal to 
+the OF event handler → OFC0 OF event handler terminates → OFC0 failover handler changes its status to 
+FAILOVER_TERMINATE_DONE → Failover module receives the termination signal and changes the roles (OFC0 |-> slave, 
+OFC1 |-> master) → OFC1 failover handler initializes and wakes up the OF event handler → OFC1 failover handler 
+schedules ROLE_REQ (to ROLE_MASTER) → OFC1 NIB event handler processes the TOPO_MOD event (sw0 -> suspend) and suspends 
+the switch locally) → OFC1 worker forwards the ROLE_REQ msg to the switch → sw0 updates the role and sends back 
+ROLE_REPLY → OFC1 monitoring server receives the ROLE_REPLY msg
++ Problem: Sequencer does not schedule any IR since the state of the switch in NIB is SW_SUSPENDED while the switch 
+is actually working fine. 
++ Solution: we should have an event log inside a NIB as a descriptor of how the current state of NIB is constructed. 
+Then, when initializing the OFC1’s OF event handler, instead of discarding all the events, OFC1 failover handler should 
+reconcile the internally received events with the NIB’s event log. 
+====================================================================================================================
+====================================================================================================================
 
