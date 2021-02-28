@@ -1506,7 +1506,10 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         NIBMsg := Head(NIB2RC);
         NIB2RC := Tail(NIB2RC);
         toBeScheduledIRs := NIBMsg.value;
-        await toBeScheduledIRs # {};
+        if toBeScheduledIRs = {} then
+            goto RCSendReadTransaction;
+        end if;
+\*        await toBeScheduledIRs # {};
         
         \* SchedulerMechanism consists of three operations; 
         \* 1) choosing one IR from the set of valid IRs
@@ -2063,7 +2066,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
 *)
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-9127619cdc4f88afed7c37e8130af8cd
 \* Process variable stepOfFailure of process controllerSequencer at line 1488 col 71 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1625 col 64 changed to stepOfFailure_c
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1628 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
           switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
@@ -3416,8 +3419,9 @@ RCWaitReadResult(self) == /\ pc[self] = "RCWaitReadResult"
                           /\ NIBMsg' = [NIBMsg EXCEPT ![self] = Head(NIB2RC)]
                           /\ NIB2RC' = Tail(NIB2RC)
                           /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = NIBMsg'[self].value]
-                          /\ toBeScheduledIRs'[self] # {}
-                          /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
+                          /\ IF toBeScheduledIRs'[self] = {}
+                                THEN /\ pc' = [pc EXCEPT ![self] = "RCSendReadTransaction"]
+                                ELSE /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                           /\ UNCHANGED << switchLock, controllerLock, 
                                           FirstInstall, sw_fail_ordering_var, 
                                           ContProcSet, SwProcSet, 
@@ -3646,20 +3650,20 @@ NIBRCEventHandling(self) == /\ pc[self] = "NIBRCEventHandling"
                             /\ nextTrans' = [nextTrans EXCEPT ![self] = Head(RC2NIB)]
                             /\ IF (nextTrans'[self].name = "PrepareIR")
                                   THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                 "Failure of assertion at line 874, column 9 of macro called at line 1605, column 13.")
+                                                 "Failure of assertion at line 874, column 9 of macro called at line 1608, column 13.")
                                        /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                        /\ Assert(nextTrans'[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                 "Failure of assertion at line 876, column 9 of macro called at line 1605, column 13.")
+                                                 "Failure of assertion at line 876, column 9 of macro called at line 1608, column 13.")
                                        /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans'[self].ops[2].key] = nextTrans'[self].ops[2].value]
                                        /\ RC2NIB' = Tail(RC2NIB)
                                        /\ pc' = [pc EXCEPT ![self] = "NIBRCEventHandling"]
                                        /\ UNCHANGED << IRQueueNIB, value >>
                                   ELSE /\ IF (nextTrans'[self].name = "ScheduleIR")
                                              THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                            "Failure of assertion at line 882, column 9 of macro called at line 1608, column 13.")
+                                                            "Failure of assertion at line 882, column 9 of macro called at line 1611, column 13.")
                                                   /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans'[self].ops[1].value)
                                                   /\ Assert(nextTrans'[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                            "Failure of assertion at line 884, column 9 of macro called at line 1608, column 13.")
+                                                            "Failure of assertion at line 884, column 9 of macro called at line 1611, column 13.")
                                                   /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans'[self].ops[2].key] = nextTrans'[self].ops[2].value]
                                                   /\ RC2NIB' = Tail(RC2NIB)
                                                   /\ pc' = [pc EXCEPT ![self] = "NIBRCEventHandling"]
@@ -4874,13 +4878,13 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                        /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                 "Failure of assertion at line 1985, column 9.")
+                                                 "Failure of assertion at line 1988, column 9.")
                                        /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                 "Failure of assertion at line 1986, column 9.")
+                                                 "Failure of assertion at line 1989, column 9.")
                                        /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                              ELSE /\ Assert(FALSE, 
-                                                            "Failure of assertion at line 2016, column 18.")
+                                                            "Failure of assertion at line 2019, column 18.")
                                                   /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED << switchLock, 
                                                        FirstInstall, 
@@ -5065,7 +5069,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2053, column 13.")
+                                               "Failure of assertion at line 2056, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -5257,6 +5261,6 @@ Debug == (Len(RC2NIB) < 10)
 
 =============================================================================
 \* Modification History
-\* Last modified Sat Feb 27 19:01:58 PST 2021 by zmy
+\* Last modified Sat Feb 27 21:54:18 PST 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
