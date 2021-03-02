@@ -12,35 +12,35 @@ t0
 ----
 
 \* MV CONSTANT definitions SW
-const_161449196361956000 == 
+const_1614568425903119000 == 
 {s0, s1}
 ----
 
 \* MV CONSTANT definitions CONTROLLER_THREAD_POOL
-const_161449196361957000 == 
+const_1614568425903120000 == 
 {t0}
 ----
 
 \* CONSTANT definitions @modelParameterConstants:18SW_FAIL_ORDERING
-const_161449196361958000 == 
+const_1614568425903121000 == 
 <<>>
 ----
 
 \* CONSTANT definitions @modelParameterConstants:28MaxNumIRs
-const_161449196361959000 == 
+const_1614568425903122000 == 
 2
 ----
 
 \* CONSTANT definitions @modelParameterConstants:40MAX_NUM_CONTROLLER_SUB_FAILURE
-const_161449196361960000 == 
+const_1614568425903123000 == 
 [ofc0 |-> 0, rc0 |-> 0]
 ----
 
 \* CONSTANT definitions @modelParameterConstants:52WHICH_SWITCH_MODEL
-const_161449196361961000 == 
+const_1614568425903124000 == 
 (s0 :> SW_SIMPLE_MODEL) @@ (s1 :> SW_SIMPLE_MODEL)
 ----
 
 =============================================================================
 \* Modification History
-\* Created Sat Feb 27 21:59:23 PST 2021 by zmy
+\* Created Sun Feb 28 19:13:45 PST 2021 by zmy
