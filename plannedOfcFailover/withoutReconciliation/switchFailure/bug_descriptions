@@ -205,4 +205,288 @@ Then, when initializing the OFC1’s OF event handler, instead of discarding all
 reconcile the internally received events with the NIB’s event log. 
 ====================================================================================================================
 ====================================================================================================================
+EVENT SYNC -- Alg#3: 
+-- (Slave Part) Slave OFC OpenFlow event handler initially does not process any events (only adds them to the local 
+event log. After the OFC role is completely transferred to the OFC, its NIB event handler synchronizes the internal 
+event log with NIB’s event log. Then, it wakes up the OF event handler. 
+-- (Master Part) Master OFC adds the events to the NIB event log after completely processing an IR. Only the master 
+OFC has write access to NIB event log. 
+RECONCIL NIB & LOCAL EVENT LOG -- Alg#1: Sequentially go through the event logs and find the events in local event 
+logs that are not inside the NIB log file. For every switch, two cases might happen, either NIB event log is a head 
+of local event log or vice versa. If the former happens, the OF event handler should discard some of the events that 
+it is going to receive. In the latter case, the OF event handler should process those events and update the NIB. 
+Finally, empty the OF event handler’s queue and fill it with these unprocessed events.
 
+Bug#11 (OF event handler exception): OFC1 OF event handler read an event from its event queue. However, before OFC1 
+OF event handler removes the event from the head of queue, OFC1 failover handler reconciles the event logs, and empties 
+the OF event handler’s queue. Therefore, the event handler encounters an exception. 
++ Solution: failover handler should make sure OF event handler is not in the middle of processing an event, and 
+prohibits OF event handler from starting to process an event. 
+====================================================================================================================
+====================================================================================================================
+Bug#12 (Wrong event insertion to NIB event log): 
+Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler 
+schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 CPU fails before 
+updating the roles → sw0 CPU recovers → OFC0 OF event handler processes the failure event and suspends the switch → 
+OFC1 NIB event handler receives the TOPO_MOD notif and suspends the switch in local directory → OFC1 failover handler 
+subscribes to NIB IRQueue, fetches the IRs from the NIB’s IRQueue and changes its failover state to FAILOVER_READY 
+(sw0 is suspended so jump from it) → OFC0 OF event handler adds the failure event to the local event log and NIB 
+event log →failover module receives FAILOVER_READY from OFC1 and sends FAILOVER_TERMINATE to OFC0 → OFC0 failover 
+handler sends termination signal to the workers → OFC0 workers terminate → OFC0 failover handler sends termination 
+signal to the monitoring server → OFC0 monitoring server terminates → OFC0 failover handler sends termination signal 
+to the OF event handler → OFC0 OF event handler terminates → OFC0 failover handler changes its failover status to 
+FAILOVER_TERMINATE_DONE and self terminates → failover module changes the role of OFC0 to slave and OFC1 to master 
+→ OFC1 OF event handler adds the failure event to both the local and NIB event log (OFC1 is the master and has write 
+access to NIB event log) → OFC1 OF event handler adds the recovery event to both the local and the NIB event log → 
+OFC1 failover handler receives the notification of becoming the master and passes the fetched IRs to the workers 
+(None in this case)
+
++ Problem: Wrong event log in NIB
+NIB event log = [sw0 -> failed, sw0 -> failed, sw0 -> suspended]
+NIBSwSuspensionStatus = [sw -> SW_SUSPEND]
+The seconds and third event added to the NIB event log are added without being processed by OFC1 and before failover 
+module performing the event reconciliation. 
++ Solution: OFC1 should not add the unprocessed events to the NIB event log. 
+====================================================================================================================
+====================================================================================================================
+Bug#13 (emptying event queue error): 
+Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler receives 
+the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler schedules 
+ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 updates the role and responds 
+with ROLE_REPLY → sw0 CPU fails → OFC0 OF event handler processes the failure event and suspends the switch (both in 
+NIB and locally) → sw0 CPU recovers → OFC0 OF event handler adds the failure event to NIB event log and local event log 
+→ OFC1 monitoring server receives the ROLE_REPLY →  OFC1 failover handler subscribes to NIB IRQueue, fetches the IRs from 
+the NIB’s IRQueue and changes its failover state to FAILOVER_READY → failover module receives FAILOVER_READY from OFC1 
+and sends FAILOVER_TERMINATE to OFC0 → OFC0 failover handler sends termination signal to the workers → OFC0 workers 
+terminate → OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring server terminates 
+→ OFC0 failover handler sends termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 
+failover handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates → failover module changes 
+the role of OFC0 to slave and OFC1 to master → OFC1 failover handler receives the notification of becoming the master 
+and passes the fetched IRs to the workers (None in this case) → OFC1 failover handler pulls the NIB event log → Curr 
+state of NIB event log is [sw0 -> fail] and curr state of local event log is empty [], therefore, OFC1 failover handler 
+adds the sw0 failure event to skip list. As a result, OFC1 OF event handler would skip if it receives such a event →  
+OFC1 failover handler empties the OF handler’s queue and adds the to-be-processed events to it (empty list) → OFC1 
+NIB event handler receives the TOPO_MOD and suspends the switch internally
+
++ Problem: RCS does not schedule an IR as the switch is suspended in NIB while it is actually working fine. It is 
+because the switch recovery event is neither reflected in NIB event log nor in local event log by the time OFC1 is 
+performing event reconciliation. Finally, when OFC1 failover handler empties OF event handler’s queue, the recovery 
+event is lost. 
++ Solution: OFC1 failover handler should empty the queue. It should only append the reconciled events to the 
+beginning of the queue. 
+====================================================================================================================
+====================================================================================================================
+Bug#14 (event processed by two OFCs): Failover module receives the failover request and sends FAILOVER_INIT to OFC1 
+→ OFC1 failover handler receives the notification, subscribes to the topology, and pulls the topology state from NIB 
+→ OFC1 failover handler schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch 
+→ sw0 CPU fails before updating the roles → sw0 CPU recovers → OFC0 OF event handler processes the failure event and 
+suspends the switch → OFC1 NIB event handler receives the TOPO_MOD notif and suspends the switch in local directory 
+→ OFC1 failover handler subscribes to NIB IRQueue, fetches the IRs from the NIB’s IRQueue and changes its failover 
+state to FAILOVER_READY (sw0 is suspended so jump from it) → OFC0 OF event handler adds the failure event to the local 
+event log and NIB event log → OFC0 OF event handler processes the switch recovery event and changes the status of sw 
+to SW_RUN → OFC1 NIB event handler receives the TOPO_MOD event and changes internal topology → OFC1 OF event handler 
+adds the recovery event to the local event log and NIB event log → failover module receives FAILOVER_READY from OFC1 
+and sends FAILOVER_TERMINATE to OFC0 → OFC0 failover handler sends termination signal to the workers → OFC0 workers 
+terminate → OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring server terminates 
+→ OFC0 failover handler sends termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 
+failover handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates → failover module changes 
+the role of OFC0 to slave and OFC1 to master → OFC1 failover handler receives the notification of becoming the master 
+and passes the fetched IRs to the workers (None in this case) →  OFC1 failover handler pulls the NIB event log and local 
+event log → OFC1 OF event handler adds the failure event to the local event log → Curr state of NIB event log is 
+[sw0 -> fail, sw0 -> recovers] and curr state of local event log is empty [], therefore, OFC1 failover handler adds the 
+sw0’s failure and recovery event to the skip list. As a result, the OFC1 OF event handler would skip if it receives such 
+an event. → OFC1 failover handler changes the flag of OF event handler to INIT_PROCESS so it can start processing the 
+events → OFC1 failover handler processes the recovery event. 
+
++ Problem: Minor problem in how OFC OF event handler manages the list of skipped events. if the head of skippedList is 
+the same as the head of the queue, the OF event handler skips the event. Otherwise, it processes it. In this case, the 
+event at the head of the queue is the same as the second event in the skipped list.
++ Solution: Algorithm on OF event handler side:
+1: if (skippedList not empty) {
+2:	If (currEvent equivalent to Head (skippedList)){
+3:		currEvent ← next event in the event queue
+4:	}
+5:	Remove the head of the skippedList
+6:	Goto line 1.
+7: }
+====================================================================================================================
+====================================================================================================================
+Bug#15: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler receives 
+the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler schedules 
+ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 updates the role and responds 
+with ROLE_REPLY → sw0 CPU fails and recovers → OFC1 monitoring server receives the ROLE_REPLY → OFC0 OF event handler 
+processes the failure event and suspends the switch → OFC0 OF event handler adds the event to NIB event log → OFC1 
+failover handler changes its status to FAILOVER_READY → failover module receives FAILOVER_READY from OFC1 and sends 
+FAILOVER_TERMINATE to OFC0 → OFC0 failover handler sends termination signal to the workers → OFC0 workers terminate 
+→ OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring server terminates → OFC0 
+failover handler sends termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 failover 
+handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates → failover module changes the role 
+of OFC0 to slave and OFC1 to master →  OFC1 failover handler receives the notification of becoming the master and passes 
+the fetched IRs to the workers (None in this case) → OFC1 failover handler pulls the NIB event log and local event log → 
+Curr state of NIB event log is [sw0 -> fail] and curr state of local event log is empty [], therefore, OFC1 failover handler 
+adds the sw0’s failure event to the skip list. As a result, the OFC1 OF event handler would skip if it receives such an 
+event. → OFC1 failover handler changes the flag of OF event handler to INIT_PROCESS so it can start processing the events 
+→ OFC1 failover handler schedules ROLE_REQ msg (to ROLE_MASTER) → OFC1 worker forwards the role req → sw0 updates the role 
+and replies with ROLE_REPLY → OFC1 monitoring server receives the ROLE_REPLY → OFC1 OF event handler skips the switch 
+failure event → OFC1 OF event handler processes the recovery event. However, the current locally maintained state of sw0 
+is SW_RUN, and this is a switch recovery event. Therefore, OFC1 does not change anything either in NIB or locally 
+
++ Problem: RC Seq does not schedule any IR as it thinks the switch is in the failure mode while the switch is working 
+fine.
++ Solution: OpenFlow OF event handler while skipping the events should change the topology internal state as well. 
+Also, the OFC1 NIB event handler should discard any prior events received due to TOPO_MOD. 
+====================================================================================================================
+====================================================================================================================
+Bug#16: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler 
+schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 updates the role 
+and responds with ROLE_REPLY → sw0 CPU fails → sw0 CPU recovers → OFC1 OF event handler adds the switch failure event 
+to local event log → OFC1 monitoring server receives the ROLE_REPLY → OFC1 failover handler changes its failover 
+status to FAILOVER_READY (sw0 is suspended) → failover module receives FAILOVER_READY from OFC1 and sends 
+FAILOVER_TERMINATE to OFC0 → OFC0 failover handler sends termination signal to the workers → OFC0 workers terminate 
+→ OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring server terminates → OFC0 
+failover handler sends termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 failover 
+handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates → failover module changes the role 
+of OFC0 to slave and OFC1 to master →  OFC1 failover handler receives the notification of becoming the master and 
+passes the fetched IRs to the workers (None in this case) → OFC1 failover handler pulls the NIB event log and local 
+event log, and prohibits OFC1 OF event handler from processing any other events → OFC1 OF event handler adds the 
+recovery event to local event log → Curr state of NIB event log is [] and curr state of local event log is [sw0 -> fail], 
+therefore, OFC1 failover handler adds the sw0’s failure event to the OF handler’s event queue. As a result, the OFC1 OF 
+event handler would completely process this event. → OFC1 failover handler changes the flag of OF event handler to 
+INIT_PROCESS so it can start processing the events → OFC1 failover handler schedules ROLE_REQ msg (to ROLE_MASTER) 
+→ OFC1 OF event handler processes the switch failure event and suspends the switch (both locally and in NIB)
+
++ Problem: Switch recovery event is lost and not processed because after the failover handler pulls the NIB event 
+log and local event, OF event handler removes the recovery event from its event queue and adds it to the event log. 
+As a result, the recovery event is not considered during reconciliation, and it is not in the event queue.  
++ Solution: Failover handler should first make sure the OF event handler is not in the middle of processing an 
+event (by awaiting the OF event handler to be in its init line and setting the state of the OF event handler to 
+INIT_NONE). Then, the failover handler should pull the NIB log and local event log. 
+====================================================================================================================
+====================================================================================================================
+Bug#17: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler 
+schedules ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 updates the role 
+and responds with ROLE_REPLY → sw0 CPU fails → OFC0 OF event handler processes the failure event and suspends the 
+switch both locally and in NIB → OFC1 monitoring server receives the ROLE_REPLY →  OFC1 failover handler subscribes 
+the NIB IRQueue, fetches the IRs and changes its failover status to FAILOVER_READY → Failover module  receives the 
+notification and sends FAILOVER_TERMINATE to OFC0 → OFC0 OF event handler adds the failure event to local and NIB 
+event logs → OFC0 failover handler receives the FAILOVER_TERMINATE notification and sends termination signal to 
+workers → OFC0 OF event handler adds the failure event to the local event log → OFC0 workers terminate → OFC0 
+failover handler sends termination signal to the monitoring server → OFC0 monitoring server terminates → OFC0 
+failover handler sends termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 failover 
+handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates →  failover module changes the 
+role of OFC0 to slave and OFC1 to master → OFC1 failover handler receives the notification of becoming the master 
+and passes the fetched IRs to the workers (None in this case) → OFC1 NIB event handler discards the TOPO_MOD event 
+as OFC1 is the master now → OFC1 failover handler pulls the NIB event log and local event log → Curr state of NIB 
+event log is [sw0 → Fail] and curr state of local event log is [sw0 → fail], therefore, no need for reconciliation 
+→  OFC1 failover handler changes the flag of OF event handler to INIT_PROCESS so it can start processing the events 
+→ OFC1 failover handler schedule ROLE_REQ (to ROLE_MASTER) → sw0 updates the role and responds with ROLE_REPLY → 
+OFC1 OF event handler starts processing the recovery event. However, as its internal sw state is SW_RUN, it discards 
+the event. 
+
++ Problem: RC Seq does not schedule the IR as it thinks the sw is failed while it is working fine.
++ Solution: OFC1 NIB should not subscribe to the topology, and it should not try to extract the topology from NIB. 
+Instead, OFC1 should always rely on the ground truth which is inside the dataplane. 
+====================================================================================================================
+====================================================================================================================
+EVENT SYNC -- Alg#4: 
+-- (Slave Part) Slave OFC OpenFlow processes the events, and adds them to the local event log. After the OFC role is 
+completely transferred to the OFC, its failover handler stops the OF event handler, reconciles the internal event log 
+with NIB’s event log, adds the necessary events to OF event handler’s queue, and wakes up the OF event handler. 
+-- (Master Part) Master OFC adds the events to the NIB event log after completely processing an IR. Only the master 
+OFC has write access to NIB event log.
+
+RECONCIL NIB & LOCAL EVENT LOG -- Alg#2: Sequentially go through the event logs and find the events in local event 
+logs that are not inside the NIB log file. For every switch, two cases might happen, either NIB event log is a head 
+of local event log or vice versa. If the former happens, the OF event handler should discard some of the events that 
+it is going to receive. In the latter case, the OF event handler should process those events and update the NIB.
+ 
+Bug#18: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler receives 
+the notification, subscribes to the topology, and pulls the topology state from NIB → OFC1 failover handler schedules 
+ROLE_REQ msg (to ROLE_EQUAL) → OFC1 worker forwards the role req msg to the switch → sw0 updates the role and responds 
+with ROLE_REPLY → sw0 CPU fails → OFC0 OF event handler processes the failure event and suspends the switch both locally 
+and in NIB → OFC1 monitoring server receives the ROLE_REPLY →  OFC1 failover handler subscribes the NIB IRQueue, fetches 
+the IRs and changes its failover status to FAILOVER_READY → Failover module  receives the notification and sends 
+FAILOVER_TERMINATE to OFC0 → OFC0 OF event handler adds the failure event to local and NIB event logs → OFC0 failover 
+handler receives the FAILOVER_TERMINATE notification and sends termination signal to workers → OFC0 OF event handler 
+adds the failure event to the local event log → OFC0 workers terminate → OFC0 failover handler sends termination signal 
+to the monitoring server → OFC0 monitoring server terminates → OFC0 failover handler sends termination signal to the OF 
+event handler → OFC0 OF event handler terminates → OFC0 failover handler changes its failover status to 
+FAILOVER_TERMINATE_DONE and self terminates →  failover module changes the role of OFC0 to slave and OFC1 to master → 
+OFC1 OF event handler processes the failure event and applies it to NIB
+
++ Problem: failure event is applied to NIB twice.
++ Solution: Three flags for OF event handler;
+INIT_NONE: does not start processing any event
+INIT_PROCESS: process the events but does not apply changes to NIB.
+INIT_MASTER: process the events and apply them to NIB. 
+====================================================================================================================
+====================================================================================================================
+Bug#19: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 →Sequencer schedules an IR → 
+OFC0 NIB event handler receives the IR and passes the IR to workers → OFC1 failover handler schedules ROLE_REQ 
+(to ROLE_EQUAL) → OFC0 worker forwards the IR → sw0 installs the IR and sends back the confirmation → sw0 CPU fails 
+→ sw0 CPU recovers → OFC0 monitoring server receives the confirmation and changes the flag of IR to IR_DONE → OFC0 
+OF event handler processes the switch failure event and suspends the switch (both locally and in NIB) → OFC0 OF event 
+handler adds the event to NIB event log and local event log → OFC0 OF event handler processes the switch recovery 
+event and changes the status of sw to SW_RUN → OFC1 OF event handler processes the switch failure event and suspends 
+the switch locally → OFC0 OF event handler adds the switch recovery event to NIB event log and local event log → OFC1 
+OF event handler adds the switch failure to local event log → OFC1 worker does not sends the ROLE_REQ msg as the sw 
+is suspended → OFC1 OF event handler processes the switch recovery event and changes the state of switch to SW_RUN 
+locally → OFC1 failover handler waits for the ROLE_REPLY as it does not know the switch is failed
+
++ Problem: deadlock in failover. setRecoveredSw which was used to notify the failover handler about switch failure 
+and recovery was previously filled by the NIB event handler. Now, as the NIB event handler no longer subscribes to 
+the topology in NIB, no one fills it. 
++ Solution: OFC OF event handler should fill the setRecoveredSw.
+====================================================================================================================
+====================================================================================================================
+Bug#20: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+schedules ROLE_REQ (to ROLE_EQUAL) → OFC1 worker forwards the ROLE_REQ msg → switch CPU fails before updating the 
+role → OFC0 OF event handler processes the event and suspends the switch both internally and in NIB → OFC0 OF event 
+handler adds the event to NIB event log and local event log → OFC1 OF event handler processes the failure event and 
+suspends the switch internally → OFC1 OF event handler adds the event to local event log →  OFC1 failover handler 
+subscribes the NIB IRQueue, fetches the IRs and changes its failover status to FAILOVER_READY → OFC1 OF event handler 
+processes the switch recovery event and changes the status of sw to SW_RUN internally → Failover module receives the 
+notification and sends FAILOVER_TERMINATE to OFC0 → OFC1 OF event handler adds the switch recovery event to local 
+event log → OFC0 failover handler receives the FAILOVER_TERMINATE notification and sends termination signal to workers 
+→ OFC0 workers terminate → OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring 
+server terminates → OFC0 failover handler sends termination signal to the OF event handler → OFC0 OF event handler 
+terminates → OFC0 failover handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates →  
+failover module changes the role of OFC0 to slave and OFC1 to master → OFC1 failover handler receives the notification 
+of becoming the master and passes the fetched IRs to the workers (None in this case) → OFC1 failover handler pulls the 
+NIB event log and local event log → Curr state of NIB event log is [sw0 → Fail] and curr state of local event log is 
+[sw0 → fail, sw0 → recovery], therefore, OFC1 failover handler adds the recovery events to OF event handler’s event 
+queue. So, it is going to be processed again and applied to NIB →  OFC1 failover handler changes the flag of OF event 
+handler to INIT_MASTER so it can start processing the events → OFC1 failover handler does not apply the recovery event 
+to NIB because based on its internal status the current state of NIB is SW_RUN, therefore, it does not need to be changed.
+ 
++ Problem:  RCS sequencer does not schedule any IR as the status of switch in NIB is SW_SUSPEND while the switch is 
+working fine.
++ Solution: During the event log reconciliation, if the local event log is ahead of NIB event log for a switch, 
+pull the switch state from NIB into the local state. 
+====================================================================================================================
+====================================================================================================================
+Bug#21: Sequencer schedules an IR → Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → 
+OFC0 NIB event handler receives the IR and passes the IR to workers → OFC1 failover handler schedules ROLE_REQ 
+(to ROLE_EQUAL) → OFC0 worker forwards the IR → sw0 installs the IR but its CPU fails before sending the confirmation 
+(confirmation is lost) → sw0 CPU recovers → OFC1 worker forwards the ROLE_REQ → sw0 updates the role and replies with 
+ROLE_REPLY → OFC0 OF event handler processes the failure event and suspends the switch → OFC0 OF event handler adds 
+the failure event to NIB and local event log → OFC0 OF event handler processes the recover event and changes flag of 
+switch to SW_RUN → OFC0 OF event handler changes flag of IR from IR_SENT to IR_NONE (as it thinks the IR is not 
+installed to the switch) → OFC0 OF event handler adds the recovery event to both NIB and local event log → OFC1 
+monitoring server receives the ROLE_REPLY → OFC1 failover handler subscribes the NIB IRQueue, fetches the IRs and 
+changes its failover status to FAILOVER_READY → Failover module receives the notification and sends FAILOVER_TERMINATE 
+to OFC0 → OFC0 failover handler receives the FAILOVER_TERMINATE notification and sends termination signal to workers 
+→ OFC0 workers terminate → OFC0 failover handler sends termination signal to the monitoring server → OFC0 monitoring 
+server terminates → OFC0 failover handler sends termination signal to the OF event handler → OFC0 OF event handler 
+terminates → OFC0 failover handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates →  
+failover module changes the role of OFC0 to slave and OFC1 to master → OFC1 failover handler receives the notification 
+of becoming the master and passes the fetched IRs to the workers (IR1 INSTALL_FLOW to sw0) → OFC1 worker forwards the 
+IR → sw0 installs the IR again
+
++ Problem: IR is installed by two OFCs.
++ Solution: 
+====================================================================================================================
+====================================================================================================================
