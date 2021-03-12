@@ -487,6 +487,102 @@ of becoming the master and passes the fetched IRs to the workers (IR1 INSTALL_FL
 IR → sw0 installs the IR again
 
 + Problem: IR is installed by two OFCs.
-+ Solution: 
++ Solution: Instead of resetting the flag of all IRs (with IR_SENT flag) corresponding to the recovered switch to 
+IR_NONE, the OFC OF event handler should send FLOW_STAT_REQ and pull all the IRs from TCAM of the switch. It should 
+then reconcile the state of NIB.
+====================================================================================================================
+====================================================================================================================
+Bug #22: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification and schedules ROLE_REQ msg → OFC worker forwards the ROLE_REQ msg → sw0 CPU fails and the 
+msg is lost → sw0 CPU recovers → OFC1 OF event handler process the switch failure event and suspends the switch → 
+OFC1 OF event handler adds the failure event to local event log → OFC1 failover handler subscribes to the NIB’s 
+IRQueue, pulls the NIB’s IR Queue and changes its failover status to FAILOVER_READY (it neglects sw0 since sw0’s 
+local status is SW_SUSPEND)→ OFC0 OF event handler processes the failure event and suspends the switch both locally 
+and in NIB → OFC0 OF event handler adds the failure event to the NIB’s event log and local event log → OFC0 OF event 
+handler processes the switch recovery event and changes the state of switch to SW_RUN (both locally and in NIB) → 
+Failover module receives the FAILOVER_READY from OFC1 and sends FAILOVER_TERMINATE to OFC0 → OFC0 failover handler 
+receives the FAILOVER_TERMINATE and sends termination signal to OFC0 workers → Since the switch recovery event is 
+the last event for sw0, OFC0 OF event handler changes the flag of sw0 to SW_RECONCILE and schedules a FLOW_STAT_REQ 
+→ OFC0 OF event handler adds the switch recovery event to NIB’s and local event log → OFC0 workers gracefully 
+terminate → After the workers terminated, OFC0 sends termination signal to the monitoring server → OFC0 monitoring 
+server terminates → After the monitoring server termination, OFC0 sends termination signal to the OF event handler 
+→ OFC0 OF event handler terminates → OFC0 failover handler changes its failover status to FAILOVER_TERMINATE_DONE 
+and self terminates → Failover module changes the roles of OFCs (OFC0 |-> slave, OFC1 |-> master)  → OFC1 failover 
+handler receives the notification of becoming the master and passes the fetched IRs to the workers (None in this case) 
+→ OFC1 failover handler changes the flag of OF event handler to INIT_NONE → OFC1 failover handler pulls the event log 
+from NIB and makes a copy from local event log →  Curr state of NIB event log is [sw0 → fail, sw0 → recovery] and curr 
+state of local event log is [sw0 → fail], therefore, OFC1 failover handler adds the recovery events to the skipped list 
+→  OFC1 failover handler changes the flag of OF event handler to INIT_MASTER so it can start processing the events →
+ OFC1 failover handler skips the recovery event and only changes the internal state of sw to SW_RUN
+
++ Problem: sw0’s state in NIB remains SW_RECONCILE forever. As a result, the RCS sequencer does not schedule any IR 
+for the switch. 
++ Solution: OFC1 OF event handler should send FLOW_STAT_REQ during event reconciliation when 
+(1) switch status is SW_SUSPEND locally. 
+(2) switch status is SW_RECONCILE in NIB. 
+(3) it is skipping some recovery event for that switch. 
+(4) the recovery event is the last event for the switch in the queue. 
+====================================================================================================================
+====================================================================================================================
+Bug#23: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification and schedules ROLE_REQ msg → OFC worker forwards the ROLE_REQ msg → sw0 CPU fails and 
+the msg is lost → OFC1 OF event handler process the switch failure event and suspends the switch locally → OFC1 OF 
+event handler adds the failure event to local event log → OFC0 OF event handler processes the failure event and 
+suspends the switch both locally and in NIB →  OFC0 OF event handler adds the failure event to the NIB’s event log 
+and local event log → OFC1 failover handler subscribes to the NIB’s IRQueue, pulls the NIB’s IR Queue and changes 
+its failover status to FAILOVER_READY (it neglects sw0 since sw0’s local status is SW_SUSPEND) → sw0 CPU recovers 
+→ OFC1 OF event handler processes the switch recovery event and changes the state of sw0 to SW_RUN locally → OFC0 
+OF event handler processes the switch recovery event and changes the state of sw0 to SW_RUN (both locally and in NIB) 
+→ Failover module receives the FAILOVER_READY from OFC1 and sends FAILOVER_TERMINATE to OFC0 → Since the switch 
+recovery event is the last event for sw0, OFC0 OF event handler changes the flag of sw0 to SW_RECONCILE and 
+schedules a FLOW_STAT_REQ → OFC0 OF event handler adds the switch recovery event to local event log and NIB’s 
+event log → OFC0 failover handler receives the FAILOVER_TERMINATE and sends termination signal to OFC0 workers 
+→ OFC1 OF event handler adds the switch recovery event to local event log → OFC0 workers gracefully terminate → 
+After the workers terminated, OFC0 sends termination signal to the monitoring server → OFC0 monitoring server 
+terminates → After the monitoring server termination, OFC0 sends termination signal to the OF event handler → 
+OFC0 OF event handler terminates → OFC0 failover handler changes its failover status to FAILOVER_TERMINATE_DONE 
+and self terminates → Failover module changes the roles of OFCs (OFC0 |-> slave, OFC1 |-> master)  → OFC1 failover 
+handler receives the notification of becoming the master and passes the fetched IRs to the workers (None in this case) 
+→  OFC1 failover handler changes the flag of OF event handler to INIT_NONE → OFC1 failover handler pulls the event 
+log from NIB and makes a copy from local event log → Curr state of NIB event log is [sw0 → fail, sw0 → recovery] 
+and curr state of local event log is [sw0 → fail, sw1 → recovery], therefore, OFC1 failover handler does not do 
+anything. 
+
++ Problem: The state of switch remains SW_RECONCILE at NIB waiting for the state to be reconciled. However, neither 
+OFC0 nor OFC1 has sent the FLOW_STAT_REQ. As a result, RC sequencers do not schedule any IR for the switch.
++ Solution: + Solution: During event reconciliation, if the status of the switch in NIB is SW_RECONCILE while both 
+OFCs have processed all the events, the OFC1 OF event handler should add the latest recovery event to both 
+skippList and head of the event queue.
+====================================================================================================================
+====================================================================================================================
+Bug#24: Failover module receives the failover request and sends FAILOVER_INIT to OFC1 → OFC1 failover handler 
+receives the notification and schedules ROLE_REQ msg → OFC worker forwards the ROLE_REQ msg → sw0 CPU fails and the 
+msg is lost → OFC1 OF event handler process the switch failure event and suspends the switch locally → OFC1 failover 
+handler subscribes to the NIB’s IRQueue, pulls the NIB’s IR Queue and changes its failover status to FAILOVER_READY 
+(it neglects sw0 since sw0’s local status is SW_SUSPEND) → sw0 CPU recovers → Failover module receives the 
+FAILOVER_READY from OFC1 and sends FAILOVER_TERMINATE to OFC0 → OFC1 OF event handler adds the failure event to 
+local event log → OFC0 OF event handler processes the switch failure event and suspends the switch (locally and in 
+NIB) → OFC0 failover handler receives the FAILOVER_TERMINATE and sends termination signal to OFC0 workers → OFC0 
+workers terminate gracefully → OFC1 OF event handler processes the switch recovery event and changes the state of 
+switch to SW_RUN locally → After the workers terminated, OFC0 sends termination signal to the monitoring server → 
+OFC0 OF event handler adds the failure event to local and NIB’s event log → OFC1 OF event handler adds the failure 
+event to local event log → OFC0 monitoring server terminates gracefully → OFC0 OF event handler processes the switch 
+recovery event and changes the state of sw0 to SW_RUN (both locally and in NIB) → Since the switch recovery event 
+is the last event for sw0, OFC0 OF event handler changes the flag of sw0 to SW_RECONCILE and schedules a FLOW_STAT_REQ 
+→ After the monitoring server termination, OFC0 sends termination signal to the OF event handler → OFC0 OF event handler 
+adds the recovery event to both NIB and local event log → OFC0 OF event handler terminates → OFC0 failover handler 
+changes its failover status to FAILOVER_TERMINATE_DONE and self terminates → Failover module changes the roles of 
+OFCs (OFC0 |-> slave, OFC1 |-> master)  → OFC1 failover handler receives the notification of becoming the master and 
+passes the fetched IRs to the workers (None in this case) →  OFC1 failover handler changes the flag of OF event handler 
+to INIT_NONE → OFC1 failover handler pulls the event log from NIB and makes a copy from local event log → Curr state of 
+NIB event log is [sw0 → fail, sw0 → recovery] and curr state of local event log is [sw0 → fail, sw1 → recovery]. 
+However, as the state of switch in NIB is SW_RECONCILE, OFC1 failover handler adds the recovery event to both 
+skipplist and the head of event queue → OFC1 OF event handler skips the recovery event and does not schedule the 
+FLOW_STAT_REQ
+
++ Problem: The switch has SW_RECONCILE state and RCS sequencer does not schedule any IR for that. The previous 
+state of switch before skipping the recovery event by OFC1 is SW_RUN. Therefore, the OFC1 OF event handler skips 
+the event by default without doing anything.
++ Solution: OFC1 failover handler should change the state of switch to SW_SUSPEND during event reconciliation. 
 ====================================================================================================================
 ====================================================================================================================
