@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="45"/>
+    <intAttribute key="fpIndex" value="68"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="59"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -101,7 +101,7 @@
         <listEntry value="NIBT_CONTROLLER_STATE;;NIBT_CONTROLLER_STATE;1;0"/>
         <listEntry value="NIBT_IR_STATUS;;NIBT_IR_STATUS;1;0"/>
         <listEntry value="NIBT_FIRST_INSTALL;;NIBT_FIRST_INSTALL;1;0"/>
-        <listEntry value="InReconciliation;;InReconciliation;0;0"/>
+        <listEntry value="InReconciliation;;InReconciliation;1;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
