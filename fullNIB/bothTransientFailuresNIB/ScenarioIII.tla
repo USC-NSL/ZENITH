@@ -873,7 +873,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     \* =================================
     
     \* ===== Copy NIB states =========
-    macro copyEntireNIB2OFC()
+    macro updateIRQueueAtOFC()
     begin
 \*        controllerStateOFC := NIBMsg.value.controllerStateNIB;
         IRQueueOFC := NIBMsg.value.IRQueueNIB;
@@ -1576,7 +1576,8 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             NIB2OFC := Tail(NIB2OFC);
             debug := IRQueueOFC # NIBMsg.value.IRQueueNIB;
             if IRQueueOFC # NIBMsg.value.IRQueueNIB then
-                copyEntireNIB2OFC();
+                \* enqueue new IRs to be scheduled
+                IRQueueOFC := SelectSeq(NIBMsg.value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE);
                 NIBUpdateForOFC := TRUE;
             end if
         end while;    
@@ -1765,6 +1766,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         \* Worker may fail between any of these Ops
         OFCRemoveIRFromIRQueueOFC:
             controllerWaitForLockFree();
+            if \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent then
             whichStepToFail(1);
             if (stepOfFailure # 1) then 
                  rowRemove := getFirstIndexWith(nextIRToSent, self, IRQueueOFC);
@@ -1779,6 +1781,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 controllerModuleFails();
                 goto ControllerThreadStateReconciliation;
             end if;  
+            end if;
     end while;
     
     ControllerThreadStateReconciliation:
@@ -2079,9 +2082,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
 \* Process variable transaction of process controllerSequencer at line 1429 col 39 changed to transaction_
 \* Process variable stepOfFailure of process controllerSequencer at line 1430 col 29 changed to stepOfFailure_c
 \* Process variable NIBMsg of process OFCNIBEventHandler at line 1570 col 15 changed to NIBMsg_O
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1588 col 64 changed to stepOfFailure_co
-\* Process variable transaction of process controllerWorkerThreads at line 1589 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1590 col 53 changed to op_ir_status_change_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1589 col 64 changed to stepOfFailure_co
+\* Process variable transaction of process controllerWorkerThreads at line 1590 col 15 changed to transaction_c
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1591 col 53 changed to op_ir_status_change_
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
           switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
@@ -4741,7 +4744,7 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                /\ NIB2OFC' = Tail(NIB2OFC)
                                /\ debug' = [debug EXCEPT ![self] = IRQueueOFC # NIBMsg_O'[self].value.IRQueueNIB]
                                /\ IF IRQueueOFC # NIBMsg_O'[self].value.IRQueueNIB
-                                     THEN /\ IRQueueOFC' = NIBMsg_O'[self].value.IRQueueNIB
+                                     THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE)
                                           /\ NIBUpdateForOFC' = TRUE
                                      ELSE /\ TRUE
                                           /\ UNCHANGED << IRQueueOFC, 
@@ -5510,33 +5513,43 @@ ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSe
 OFCRemoveIRFromIRQueueOFC(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC"
                                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                   /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                         THEN /\ \E num \in 0..1:
-                                                   stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = num]
-                                         ELSE /\ stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = 0]
-                                   /\ IF (stepOfFailure_co'[self] # 1)
-                                         THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
-                                              /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
-                                              /\ IF isNIBUp(NIBThreadID)
-                                                    THEN /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
-                                                         /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
-                                                         /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
+                                   /\ IF \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent[self]
+                                         THEN /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                                    THEN /\ \E num \in 0..1:
+                                                              stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = num]
+                                                    ELSE /\ stepOfFailure_co' = [stepOfFailure_co EXCEPT ![self] = 0]
+                                              /\ IF (stepOfFailure_co'[self] # 1)
+                                                    THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
+                                                         /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
+                                                         /\ IF isNIBUp(NIBThreadID)
+                                                               THEN /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
+                                                                    /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
+                                                                    /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
+                                                               ELSE /\ TRUE
+                                                                    /\ UNCHANGED << X2NIB, 
+                                                                                    transaction_c, 
+                                                                                    op1 >>
                                                     ELSE /\ TRUE
-                                                         /\ UNCHANGED << X2NIB, 
+                                                         /\ UNCHANGED << IRQueueOFC, 
+                                                                         X2NIB, 
+                                                                         rowRemove, 
                                                                          transaction_c, 
                                                                          op1 >>
-                                         ELSE /\ TRUE
-                                              /\ UNCHANGED << IRQueueOFC, 
-                                                              X2NIB, rowRemove, 
-                                                              transaction_c, 
-                                                              op1 >>
-                                   /\ IF (stepOfFailure_co'[self] = 1)
-                                         THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                              /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
+                                              /\ IF (stepOfFailure_co'[self] = 1)
+                                                    THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                                         /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                                         /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
+                                                    ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
+                                                         /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                                         controllerSubmoduleFailStat >>
                                          ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                               /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                              controllerSubmoduleFailStat >>
+                                                              controllerSubmoduleFailStat, 
+                                                              IRQueueOFC, 
+                                                              X2NIB, rowRemove, 
+                                                              stepOfFailure_co, 
+                                                              transaction_c, 
+                                                              op1 >>
                                    /\ UNCHANGED << switchLock, controllerLock, 
                                                    FirstInstall, 
                                                    sw_fail_ordering_var, 
@@ -6421,13 +6434,13 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                 /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                 /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                 /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                          "Failure of assertion at line 2022, column 9.")
+                                          "Failure of assertion at line 2006, column 9.")
                                 /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                          "Failure of assertion at line 2023, column 9.")
+                                          "Failure of assertion at line 2007, column 9.")
                                 /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                       THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                       ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 2044, column 13.")
+                                                     "Failure of assertion at line 2028, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                 /\ UNCHANGED << switchLock, FirstInstall, 
                                                 sw_fail_ordering_var, 
@@ -6664,7 +6677,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2081, column 13.")
+                                               "Failure of assertion at line 2065, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -6877,6 +6890,6 @@ Debug == (Len(X2NIB) < 10)
 
 =============================================================================
 \* Modification History
-\* Last modified Sun Mar 14 20:55:24 PDT 2021 by zmy
+\* Last modified Mon Mar 15 12:23:49 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
