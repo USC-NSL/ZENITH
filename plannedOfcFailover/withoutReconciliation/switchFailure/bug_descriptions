@@ -513,7 +513,7 @@ handler receives the notification of becoming the master and passes the fetched 
 from NIB and makes a copy from local event log →  Curr state of NIB event log is [sw0 → fail, sw0 → recovery] and curr 
 state of local event log is [sw0 → fail], therefore, OFC1 failover handler adds the recovery events to the skipped list 
 →  OFC1 failover handler changes the flag of OF event handler to INIT_MASTER so it can start processing the events →
- OFC1 failover handler skips the recovery event and only changes the internal state of sw to SW_RUN
+ OFC1 OF event handler skips the recovery event and only changes the internal state of sw to SW_RUN
 
 + Problem: sw0’s state in NIB remains SW_RECONCILE forever. As a result, the RCS sequencer does not schedule any IR 
 for the switch. 
@@ -586,3 +586,30 @@ the event by default without doing anything.
 + Solution: OFC1 failover handler should change the state of switch to SW_SUSPEND during event reconciliation. 
 ====================================================================================================================
 ====================================================================================================================
+Bug#25: Sequencer schedules an IR {IR1} → Failover module receives the failover request and sends FAILOVER_INIT to 
+OFC1 → OFC1 failover handler receives the notification and schedules ROLE_REQ msg → OFC worker forwards the ROLE_REQ 
+msg → sw0 updates the role (OFC1 |-> ROLE_EQUAL) and responds with ROLE_REPLY → sw0 CPU fails → sw0 CPU recovers → 
+OFC0 OF event handler processes the failure event and suspends the switch (both locally and in NIB) → OFC0 OF event 
+handler adds the failure event to NIB’s and local event log → OFC0 OF event handler process the recovery event and 
+changes the state of sw0 to SW_RUN → Since the switch recovery event is the last event for sw0, OFC0 OF event handler 
+changes the flag of sw0 to SW_RECONCILE and schedules a FLOW_STAT_REQ → OFC0 NIB event handler receives the 
+notification for IR and adds the IR to the workers’ queue → OFC0 worker forwards the FLOW_STAT_REQ → sw0 replies with 
+FLOW_STAT_REPLY (TCAM empty) → OFC0 OF event handler adds the recovery event to NIB’s and local event log → OFC0 
+worker forwards the IR → sw0 installs the IR and responds with a confirmation → OFC1 monitoring server receives the 
+ROLE_REPLY → OFC1 failover handler subscribes to the NIB’s IRQueue, pulls the NIB’s IR Queue [IR1] and changes its 
+failover status to FAILOVER_READY → OFC0 monitoring server receives the FLOW_STAT_REPLY and changes flag of sw0 to 
+SW_RUN (both locally and in NIB). Since the body of FLOW_STAT_REPLY is empty, OFC0 monitoring server changes the flag 
+of IR from IR_SENT to IR_NONE → Failover module gets the notification of FAILOVER_READY from OFC1 and sends 
+FAILOVER_TERMINATE to OFC0 → OFC0 failover handler receives FAILOVER_TERMINATE and sends termination signal to the 
+workers → OFC0 workers gracefully terminate → After the workers terminated, OFC0 sends termination signal to the 
+monitoring server → OFC0 monitoring server terminates → After the monitoring server termination, OFC0 sends 
+termination signal to the OF event handler → OFC0 OF event handler terminates → OFC0 failover handler changes 
+its failover status to FAILOVER_TERMINATE_DONE and self terminates → Failover module changes the roles of OFCs 
+(OFC0 |-> slave, OFC1 |-> master)  → OFC1 failover handler receives the notification of becoming the master 
+and passes the fetched IRs {IR1} to the workers → OFC1 worker forwards the IR {IR1}
+
++ Problem: IR is installed by two OFCs as a result of a combination of failover + switch transient failure + 
+reconciliation algorithm. This happens because OFC0 monitoring server is terminated before receiving the 
+confirmation of the installed IR. As a result of reconciliation, the IR has IR_NONE status instead of IR_SENT. 
+Therefore, the monitoring server assumes the IR is lost due to the failure.
++ Solution: OFC worker should not forward an IR corresponding to a switch with SW_RECONCILE status. 
