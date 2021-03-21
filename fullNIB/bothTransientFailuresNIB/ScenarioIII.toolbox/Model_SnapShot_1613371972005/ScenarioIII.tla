@@ -452,8 +452,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                                                                            \/ /\ NoEntryTaggedWith(threadID, IRQueue)
                                                                               /\ FirstUntaggedEntry(x, IRQueue)
                                                                               /\ IRQueue[x].tag = NO_TAG
-        getFirstIndexWith(RID, threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: /\ IRQueue[x].tag = threadID
-                                                                            /\ IRQueue[x].IR = RID
+\*        getFirstIndexWith(RID, threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: /\ IRQueue[x].tag = threadID
+\*                                                                            /\ IRQueue[x].IR = RID
+        getFirstIndexWith(RID, threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: IRQueue[x].IR = RID                                                                    
         getFirstIndexWithNIB(RID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: IRQueue[x].IR = RID
         isNIBUp(threadID) == controllerSubmoduleFailStat[threadID] = NotFailed                                                                   
                                                                    
@@ -887,7 +888,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     begin
         \* Since RC is the authority for SetScheduledIRs, RC should not need to query
         \* SetScheduledIRs from NIB (only during reconciliation).
-        controllerStateRC := NIBMsg.value.controllerStateNIB;
+\*        controllerStateRC := NIBMsg.value.controllerStateNIB;
         IRStatusRC := NIBMsg.value.IRStatusNIB;
         IRQueueRC := NIBMsg.value.IRQueueNIB;
         SwSuspensionStatusRC := NIBMsg.value.SwSuspensionStatusNIB;
@@ -900,6 +901,14 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                                             ELSE {ir \in SetScheduledIRsRC[sw]: 
                                                     IRStatusRC[ir] # IR_DONE}];
     end macro;
+\*    macro RCRemoveDoneIRFromIRQueue()
+\*    begin
+\*        IRQueue := []
+\*        SetScheduledIRsRC := [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
+\*                                            THEN SetScheduledIRsRC[sw]
+\*                                            ELSE {ir \in SetScheduledIRsRC[sw]: 
+\*                                                    IRStatusRC[ir] # IR_DONE}];
+\*    end macro;
     (*******************************************************************)
     (*                     NIB   (Macros)                              *)
     (*******************************************************************)
@@ -918,8 +927,12 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     
     macro NIBStateCopy()
     begin
-        value := [controllerStateNIB |-> controllerStateNIB, 
-                        IRStatusNIB |-> IRStatus, 
+\*        value := [controllerStateNIB |-> controllerStateNIB, 
+\*                        IRStatusNIB |-> IRStatus, 
+\*                        IRQueueNIB |->IRQueueNIB,
+\*                        SetScheduledIRsNIB |-> SetScheduledIRs, 
+\*                        SwSuspensionStatusNIB |-> SwSuspensionStatus];
+        value := [IRStatusNIB |-> IRStatus, 
                         IRQueueNIB |->IRQueueNIB,
                         SetScheduledIRsNIB |-> SetScheduledIRs, 
                         SwSuspensionStatusNIB |-> SwSuspensionStatus];
@@ -969,8 +982,11 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         elsif (nextTrans.name = "RemoveIR") then \* OFC sent this transaction
                 assert nextTrans.ops[1].table = NIBT_IR_QUEUE;
                 IR2Remove := nextTrans.ops[1].key;
-                rowRemove := getFirstIndexWithNIB(IR2Remove, IRQueueNIB);
-                IRQueueNIB := removeFromSeq(IRQueueNIB, rowRemove);
+                \* it is possible that IR has been deleted by RC during NIB reconciliation
+                if \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove then
+                    rowRemove := getFirstIndexWithNIB(IR2Remove, IRQueueNIB);
+                    IRQueueNIB := removeFromSeq(IRQueueNIB, rowRemove);
+                end if;
         elsif (nextTrans.name = "OFCChangeIRStatus2Sent") then \* submitted by the worker in OFC
                 assert nextTrans.ops[1].table = NIBT_IR_STATUS;
                 assert Len(nextTrans.ops) = 1;
@@ -1335,7 +1351,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     fair process NIBRCEventHandler \in ({nib0} \X {CONT_NIB_RC_EVENT})
     variables nextTrans = [type |-> 0], value = 0,rowRemove=0,
               IR2Remove = 0, send_NIB_back = "", stepOfFailure = 0,
-              IRIndex = -1;
+              IRIndex = -1, reconcile = FALSE;
     begin
     NIBEventHandling:
     while TRUE do
@@ -1360,12 +1376,12 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             if send_NIB_back = "NIB2RC" then
                 if moduleIsUp(RCThreadID) then
                     NIB2RC := Append(NIB2RC, [value |-> value]);
-                end if;
+                end if;    
             elsif send_NIB_back = "NIB2OFC" then
             \* TODO(@pooria): how to tell if OFC is up or not to send back the message?
 \*                if moduleIsUp(OFCThreadID) then
                     NIB2OFC := Append(NIB2OFC, [value |-> value]);
-\*                end if;
+\*                end if;    
             end if;
             send_NIB_back := "";
     end while;
@@ -1376,11 +1392,12 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         \* which means that it is not ready to accept/process any message transactions
         controllerSubmoduleFailStat[self] := InReconciliation;
         \* Contact OFC to get data plane states
-        \* ?: how to get controllerState (depending on the semantics, ping Pooria to understand)?
         IRStatus := IRStatusOFC;
         SwSuspensionStatus := SwSuspensionStatusOFC;
         IRQueueNIB := IRQueueRC;
         SetScheduledIRs := SetScheduledIRsRC; 
+        NIB2RC := <<>>;
+        NIB2OFC := <<>>;
         
         ChangeNIBStatusToNormal:
            controllerSubmoduleFailStat[self] := NotFailed;
@@ -1389,7 +1406,8 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 NIB2RC := Append(NIB2RC, [value |-> value]);
            end if;  
            NIB2OFC := Append(NIB2OFC, [value |-> value]);
-        goto NIBEventHandling;      
+           reconcile := TRUE;
+           goto NIBEventHandling;      
     end process
     
     (*******************************************************************)
@@ -1412,9 +1430,16 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             \* If local and remote tables are different
             elsif IRStatusRC # NIBMsg.value.IRStatusNIB 
                 \/ SwSuspensionStatusRC # NIBMsg.value.SwSuspensionStatusNIB then
-                copyEntireNIB2RC();
-                \* remove IR from SetScheduledIRsRC if IR status is IR_DONE
-                RCRemoveIRFromScheduledSet();
+                \* update RC locally
+                IRStatusRC := NIBMsg.value.IRStatusNIB;
+                SwSuspensionStatusRC := NIBMsg.value.SwSuspensionStatusNIB;
+                \* remove DONE IR from SetScheduledIRsRC
+                SetScheduledIRsRC := [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
+                                            THEN SetScheduledIRsRC[sw]
+                                            ELSE {ir \in SetScheduledIRsRC[sw]: 
+                                                    IRStatusRC[ir] # IR_DONE}];
+                \* remove DONE IR from IRQueueRC
+                IRQueueRC := SelectSeq(IRQueueRC, LAMBDA i: IRStatusRC[i.IR] # IR_DONE);
                 NIBUpdateForRC := TRUE;
             end if
         end while;    
@@ -1483,12 +1508,11 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             RCSendPrepareIR2NIB:
             whichStepToFail(1);
             if (stepOfFailure # 1) then
-                if isNIBUp(NIBThreadID) then
-                    op1 := [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> STATUS_START_SCHEDULING, next |-> nextIR]];
-                    op2 := [table |-> NIBT_SET_SCHEDULED_IRS, key |-> IR2SW[nextIR], value |-> SetScheduledIRsRC[IR2SW[nextIR]] \cup {nextIR}];
-                    transaction := [name |-> "PrepareIR", ops |-> <<op1, op2>>];
-                    X2NIB := X2NIB \o <<transaction>>;
-                end if;
+                await isNIBUp(NIBThreadID);
+                op1 := [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> STATUS_START_SCHEDULING, next |-> nextIR]];
+                op2 := [table |-> NIBT_SET_SCHEDULED_IRS, key |-> IR2SW[nextIR], value |-> SetScheduledIRsRC[IR2SW[nextIR]] \cup {nextIR}];
+                transaction := [name |-> "PrepareIR", ops |-> <<op1, op2>>];
+                X2NIB := X2NIB \o <<transaction>>;                
             end if;
             if (stepOfFailure # 0) then    
                 controllerModuleFails();
@@ -1520,12 +1544,12 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             RCSendScheduleIR2NIB:
                 whichStepToFail(1);
                 if (stepOfFailure # 1) then
-                    if isNIBUp(NIBThreadID) then
+                    await isNIBUp(NIBThreadID);
                         op1 := [table |-> NIBT_IR_QUEUE, key |-> NULL, value |-> [IR |-> nextIR, tag |-> NO_TAG]];
                         op2 := [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> NO_STATUS]];   
                         transaction := [name |-> "ScheduleIR", ops |-> <<op1, op2>>];
                         X2NIB := X2NIB \o <<transaction>>;
-                    end if;
+                    
                 end if;
                 if (stepOfFailure # 0) then    
                     controllerModuleFails();
@@ -1567,19 +1591,25 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     
     \* ============ OFC NIB Event Handler ==========
     fair process OFCNIBEventHandler \in ({ofc0} \X {CONT_OFC_NIB_EVENT})
-    variables NIBMsg = [value |-> [x |-> <<>>]], isBootStrap = TRUE, debug = "";
+    variables NIBMsg = [value |-> [x |-> <<>>]], isBootStrap = TRUE, debug = "",
+              localIRSet = {}, NIBIRSet = {};
     begin
     OFCNIBEventHanderProc:
         while TRUE do
             await NIB2OFC # <<>>;
             NIBMsg := Head(NIB2OFC);
             NIB2OFC := Tail(NIB2OFC);
-            debug := IRQueueOFC # NIBMsg.value.IRQueueNIB;
-            if IRQueueOFC # NIBMsg.value.IRQueueNIB then
+\*            debug := IRQueueOFC # NIBMsg.value.IRQueueNIB;
+            localIRSet := {IRQueueOFC[i].IR: i \in DOMAIN IRQueueOFC};
+            NIBIRSet := {NIBMsg.value.IRQueueNIB[i].IR: i \in DOMAIN NIBMsg.value.IRQueueNIB};
+            if localIRSet # NIBIRSet then
                 \* enqueue new IRs to be scheduled
                 IRQueueOFC := SelectSeq(NIBMsg.value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE);
-                NIBUpdateForOFC := TRUE;
-            end if
+                assert Len(IRQueueOFC) < 3;
+                if IRQueueOFC # <<>> then
+                    NIBUpdateForOFC := TRUE;
+                end if;
+            end if;
         end while;    
     end process
     
@@ -1588,8 +1618,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     fair process controllerWorkerThreads \in ({ofc0} \X CONTROLLER_THREAD_POOL)
     variables nextIRToSent = 0, rowIndex = -1, rowRemove = -1, stepOfFailure = 0,
               transaction = <<>>, NIBMsg = [value |-> [x |-> <<>>]], 
-              op1 = [table |-> ""], IRQueue = <<>>, op_ir_status_change = [table |-> ""],
-              debug_ofc = ""; 
+              op1 = [table |-> ""], IRQueue = <<>>, op_ir_status_change = [table |-> ""]; 
     begin
     ControllerThread:
     while TRUE do
@@ -1616,7 +1645,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             IRQueueOFC[rowIndex].tag := self;
             NIBUpdateForOFC := FALSE;
         
+        
         OFCUpdateIRQueueIRTag:
+            await isNIBUp(NIBThreadID);
             op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent, value |-> self];
             transaction := [name |-> "UpdateIRTag", ops |-> <<op1>>];
             X2NIB := X2NIB \o <<transaction>>;
@@ -1656,11 +1687,11 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                             IRQueueOFC := removeFromSeq(IRQueueOFC, rowRemove);
                         
                             \* NIB change
-                            if isNIBUp(NIBThreadID) then
+                            await isNIBUp(NIBThreadID);
                                 op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent];
                                 transaction := [name |-> "RemoveIR", ops |-> <<op1>>];
                                 X2NIB := X2NIB \o <<transaction>>;
-                            end if;
+                            
                             goto ControllerThread;    
                     end if;
                 end if;
@@ -1683,11 +1714,11 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                     \* local change
                     IRStatusOFC[nextIRToSent] := IR_SENT;
                     \* NIB change
-                    if isNIBUp(NIBThreadID) then
-                        op_ir_status_change := [table |-> NIBT_IR_STATUS, key |-> nextIRToSent, value |-> IR_SENT];
-                        transaction := [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change>>];
-                        X2NIB := X2NIB \o <<transaction>>;
-                    end if;
+                    await isNIBUp(NIBThreadID);
+                    op_ir_status_change := [table |-> NIBT_IR_STATUS, key |-> nextIRToSent, value |-> IR_SENT];
+                    transaction := [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change>>];
+                    X2NIB := X2NIB \o <<transaction>>;
+                    
                     
                     \* ControllerThreadForwardIR consists of 2 operations;
                     \* 1. Forwarding the IR to the switch
@@ -1771,11 +1802,11 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             if (stepOfFailure # 1) then 
                  rowRemove := getFirstIndexWith(nextIRToSent, self, IRQueueOFC);
                  IRQueueOFC := removeFromSeq(IRQueueOFC, rowRemove);
-                 if isNIBUp(NIBThreadID) then
-                     op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent];
-                     transaction := [name |-> "RemoveIR", ops |-> <<op1>>];
-                     X2NIB := X2NIB \o <<transaction>>;
-                 end if;
+                 await isNIBUp(NIBThreadID);
+                 op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent];
+                 transaction := [name |-> "RemoveIR", ops |-> <<op1>>];
+                 X2NIB := X2NIB \o <<transaction>>;
+                 
             end if;
             if (stepOfFailure = 1) then
                 controllerModuleFails();
@@ -2074,17 +2105,17 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     end algorithm
 *)
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-9127619cdc4f88afed7c37e8130af8cd (chksum(pcal) = "cb8e9368" /\ chksum(tla) = "9d4abbb1")
-\* Process variable rowRemove of process NIBRCEventHandler at line 1336 col 51 changed to rowRemove_
-\* Process variable stepOfFailure of process NIBRCEventHandler at line 1337 col 50 changed to stepOfFailure_
-\* Process variable NIBMsg of process RCNIBEventHandler at line 1401 col 15 changed to NIBMsg_
-\* Process variable isBootStrap of process RCNIBEventHandler at line 1401 col 50 changed to isBootStrap_
-\* Process variable op1 of process controllerSequencer at line 1428 col 48 changed to op1_
-\* Process variable transaction of process controllerSequencer at line 1429 col 39 changed to transaction_
-\* Process variable stepOfFailure of process controllerSequencer at line 1430 col 29 changed to stepOfFailure_c
-\* Process variable NIBMsg of process OFCNIBEventHandler at line 1570 col 15 changed to NIBMsg_O
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1589 col 64 changed to stepOfFailure_co
-\* Process variable transaction of process controllerWorkerThreads at line 1590 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1591 col 53 changed to op_ir_status_change_
+\* Process variable rowRemove of process NIBRCEventHandler at line 1352 col 51 changed to rowRemove_
+\* Process variable stepOfFailure of process NIBRCEventHandler at line 1353 col 50 changed to stepOfFailure_
+\* Process variable NIBMsg of process RCNIBEventHandler at line 1419 col 15 changed to NIBMsg_
+\* Process variable isBootStrap of process RCNIBEventHandler at line 1419 col 50 changed to isBootStrap_
+\* Process variable op1 of process controllerSequencer at line 1453 col 48 changed to op1_
+\* Process variable transaction of process controllerSequencer at line 1454 col 39 changed to transaction_
+\* Process variable stepOfFailure of process controllerSequencer at line 1455 col 29 changed to stepOfFailure_c
+\* Process variable NIBMsg of process OFCNIBEventHandler at line 1594 col 15 changed to NIBMsg_O
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1619 col 64 changed to stepOfFailure_co
+\* Process variable transaction of process controllerWorkerThreads at line 1620 col 15 changed to transaction_c
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1621 col 53 changed to op_ir_status_change_
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
           switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
@@ -2220,8 +2251,9 @@ getFirstIRIndexToRead(threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: \/ IRQu
                                                                    \/ /\ NoEntryTaggedWith(threadID, IRQueue)
                                                                       /\ FirstUntaggedEntry(x, IRQueue)
                                                                       /\ IRQueue[x].tag = NO_TAG
-getFirstIndexWith(RID, threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: /\ IRQueue[x].tag = threadID
-                                                                    /\ IRQueue[x].IR = RID
+
+
+getFirstIndexWith(RID, threadID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: IRQueue[x].IR = RID
 getFirstIndexWithNIB(RID, IRQueue) == CHOOSE x \in DOMAIN IRQueue: IRQueue[x].IR = RID
 isNIBUp(threadID) == controllerSubmoduleFailStat[threadID] = NotFailed
 
@@ -2294,13 +2326,14 @@ isFinished == \A x \in 1..MaxNumIRs: IRStatus[x] = IR_DONE
 VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, 
           installerInIR, statusMsg, notFailedSet, failedElem, failedSet, 
           statusResolveMsg, recoveredElem, nextTrans, value, rowRemove_, 
-          IR2Remove, send_NIB_back, stepOfFailure_, IRIndex, NIBMsg_, 
-          isBootStrap_, toBeScheduledIRs, key, op1_, op2, transaction_, 
-          nextIR, stepOfFailure_c, NIBMsg_O, isBootStrap, debug, nextIRToSent, 
-          rowIndex, rowRemove, stepOfFailure_co, transaction_c, NIBMsg, op1, 
-          IRQueue, op_ir_status_change_, debug_ofc, monitoringEvent, 
-          setIRsToReset, resetIR, stepOfFailure, msg, op_ir_status_change, 
-          op_first_install, transaction, controllerFailedModules
+          IR2Remove, send_NIB_back, stepOfFailure_, IRIndex, reconcile, 
+          NIBMsg_, isBootStrap_, toBeScheduledIRs, key, op1_, op2, 
+          transaction_, nextIR, stepOfFailure_c, NIBMsg_O, isBootStrap, debug, 
+          localIRSet, NIBIRSet, nextIRToSent, rowIndex, rowRemove, 
+          stepOfFailure_co, transaction_c, NIBMsg, op1, IRQueue, 
+          op_ir_status_change_, monitoringEvent, setIRsToReset, resetIR, 
+          stepOfFailure, msg, op_ir_status_change, op_first_install, 
+          transaction, controllerFailedModules
 
 vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
            ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
@@ -2318,13 +2351,14 @@ vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var,
            ofaInMsg, ofaOutConfirmation, installerInIR, statusMsg, 
            notFailedSet, failedElem, failedSet, statusResolveMsg, 
            recoveredElem, nextTrans, value, rowRemove_, IR2Remove, 
-           send_NIB_back, stepOfFailure_, IRIndex, NIBMsg_, isBootStrap_, 
-           toBeScheduledIRs, key, op1_, op2, transaction_, nextIR, 
-           stepOfFailure_c, NIBMsg_O, isBootStrap, debug, nextIRToSent, 
-           rowIndex, rowRemove, stepOfFailure_co, transaction_c, NIBMsg, op1, 
-           IRQueue, op_ir_status_change_, debug_ofc, monitoringEvent, 
-           setIRsToReset, resetIR, stepOfFailure, msg, op_ir_status_change, 
-           op_first_install, transaction, controllerFailedModules >>
+           send_NIB_back, stepOfFailure_, IRIndex, reconcile, NIBMsg_, 
+           isBootStrap_, toBeScheduledIRs, key, op1_, op2, transaction_, 
+           nextIR, stepOfFailure_c, NIBMsg_O, isBootStrap, debug, localIRSet, 
+           NIBIRSet, nextIRToSent, rowIndex, rowRemove, stepOfFailure_co, 
+           transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, 
+           monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
+           op_ir_status_change, op_first_install, transaction, 
+           controllerFailedModules >>
 
 ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR})) \cup (({ofc0, rc0} \X {WATCH_DOG}))
 
@@ -2412,6 +2446,7 @@ Init == (* Global variables *)
         /\ send_NIB_back = [self \in ({nib0} \X {CONT_NIB_RC_EVENT}) |-> ""]
         /\ stepOfFailure_ = [self \in ({nib0} \X {CONT_NIB_RC_EVENT}) |-> 0]
         /\ IRIndex = [self \in ({nib0} \X {CONT_NIB_RC_EVENT}) |-> -1]
+        /\ reconcile = [self \in ({nib0} \X {CONT_NIB_RC_EVENT}) |-> FALSE]
         (* Process RCNIBEventHandler *)
         /\ NIBMsg_ = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> [value |-> [x |-> <<>>]]]
         /\ isBootStrap_ = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> TRUE]
@@ -2427,6 +2462,8 @@ Init == (* Global variables *)
         /\ NIBMsg_O = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> [value |-> [x |-> <<>>]]]
         /\ isBootStrap = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> TRUE]
         /\ debug = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> ""]
+        /\ localIRSet = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> {}]
+        /\ NIBIRSet = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> {}]
         (* Process controllerWorkerThreads *)
         /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
@@ -2437,7 +2474,6 @@ Init == (* Global variables *)
         /\ op1 = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [table |-> ""]]
         /\ IRQueue = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> <<>>]
         /\ op_ir_status_change_ = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [table |-> ""]]
-        /\ debug_ofc = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> ""]
         (* Process controllerEventHandler *)
         /\ monitoringEvent = [self \in ({ofc0} \X {CONT_EVENT}) |-> [type |-> 0]]
         /\ setIRsToReset = [self \in ({ofc0} \X {CONT_EVENT}) |-> {}]
@@ -2475,7 +2511,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type = INSTALL_FLOW, 
-                                       "Failure of assertion at line 1027, column 9.")
+                                       "Failure of assertion at line 1043, column 9.")
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ installedIRs' = Append(installedIRs, ingressPkt'[self].IR)
                              /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], ingressPkt'[self].IR)]
@@ -2484,7 +2520,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                                                                 IR |-> ingressPkt'[self].IR])
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 779, column 9 of macro called at line 1034, column 9.")
+                                       "Failure of assertion at line 780, column 9 of macro called at line 1050, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2520,15 +2556,16 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, op1_, op2, transaction_, 
-                                             nextIR, stepOfFailure_c, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
-                                             stepOfFailure_co, transaction_c, 
-                                             NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, NIBMsg_O, 
+                                             isBootStrap, debug, localIRSet, 
+                                             NIBIRSet, nextIRToSent, rowIndex, 
+                                             rowRemove, stepOfFailure_co, 
+                                             transaction_c, NIBMsg, op1, 
+                                             IRQueue, op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              op_ir_status_change, 
@@ -2544,7 +2581,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
                                    \/ ingressIR'[self].type = INSTALL_FLOW, 
-                                   "Failure of assertion at line 1059, column 9.")
+                                   "Failure of assertion at line 1075, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -2581,18 +2618,19 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          failedSet, statusResolveMsg, 
                                          recoveredElem, nextTrans, value, 
                                          rowRemove_, IR2Remove, send_NIB_back, 
-                                         stepOfFailure_, IRIndex, NIBMsg_, 
-                                         isBootStrap_, toBeScheduledIRs, key, 
-                                         op1_, op2, transaction_, nextIR, 
-                                         stepOfFailure_c, NIBMsg_O, 
-                                         isBootStrap, debug, nextIRToSent, 
+                                         stepOfFailure_, IRIndex, reconcile, 
+                                         NIBMsg_, isBootStrap_, 
+                                         toBeScheduledIRs, key, op1_, op2, 
+                                         transaction_, nextIR, stepOfFailure_c, 
+                                         NIBMsg_O, isBootStrap, debug, 
+                                         localIRSet, NIBIRSet, nextIRToSent, 
                                          rowIndex, rowRemove, stepOfFailure_co, 
                                          transaction_c, NIBMsg, op1, IRQueue, 
-                                         op_ir_status_change_, debug_ofc, 
-                                         monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
-                                         op_ir_status_change, op_first_install, 
-                                         transaction, controllerFailedModules >>
+                                         op_ir_status_change_, monitoringEvent, 
+                                         setIRsToReset, resetIR, stepOfFailure, 
+                                         msg, op_ir_status_change, 
+                                         op_first_install, transaction, 
+                                         controllerFailedModules >>
 
 SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuff"
                                       /\ IF swCanReceivePackets(self[2])
@@ -2654,18 +2692,19 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       value, rowRemove_, 
                                                       IR2Remove, send_NIB_back, 
                                                       stepOfFailure_, IRIndex, 
-                                                      NIBMsg_, isBootStrap_, 
+                                                      reconcile, NIBMsg_, 
+                                                      isBootStrap_, 
                                                       toBeScheduledIRs, key, 
                                                       op1_, op2, transaction_, 
                                                       nextIR, stepOfFailure_c, 
                                                       NIBMsg_O, isBootStrap, 
-                                                      debug, nextIRToSent, 
+                                                      debug, localIRSet, 
+                                                      NIBIRSet, nextIRToSent, 
                                                       rowIndex, rowRemove, 
                                                       stepOfFailure_co, 
                                                       transaction_c, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
-                                                      debug_ofc, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, msg, 
@@ -2687,7 +2726,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
-                                       "Failure of assertion at line 1087, column 9.")
+                                       "Failure of assertion at line 1103, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2724,15 +2763,16 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, op1_, op2, transaction_, 
-                                             nextIR, stepOfFailure_c, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
-                                             stepOfFailure_co, transaction_c, 
-                                             NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, NIBMsg_O, 
+                                             isBootStrap, debug, localIRSet, 
+                                             NIBIRSet, nextIRToSent, rowIndex, 
+                                             rowRemove, stepOfFailure_co, 
+                                             transaction_c, NIBMsg, op1, 
+                                             IRQueue, op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              op_ir_status_change, 
@@ -2745,7 +2785,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 779, column 9 of macro called at line 1096, column 17.")
+                                                      "Failure of assertion at line 780, column 9 of macro called at line 1112, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -2795,17 +2835,18 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  recoveredElem, nextTrans, 
                                                  value, rowRemove_, IR2Remove, 
                                                  send_NIB_back, stepOfFailure_, 
-                                                 IRIndex, NIBMsg_, 
+                                                 IRIndex, reconcile, NIBMsg_, 
                                                  isBootStrap_, 
                                                  toBeScheduledIRs, key, op1_, 
                                                  op2, transaction_, nextIR, 
                                                  stepOfFailure_c, NIBMsg_O, 
                                                  isBootStrap, debug, 
+                                                 localIRSet, NIBIRSet, 
                                                  nextIRToSent, rowIndex, 
                                                  rowRemove, stepOfFailure_co, 
                                                  transaction_c, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
-                                                 debug_ofc, monitoringEvent, 
+                                                 monitoringEvent, 
                                                  setIRsToReset, resetIR, 
                                                  stepOfFailure, msg, 
                                                  op_ir_status_change, 
@@ -2823,9 +2864,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1124, column 9.")
+                                   "Failure of assertion at line 1140, column 9.")
                          /\ Assert(ofaInMsg'[self].IR  \in 1..MaxNumIRs, 
-                                   "Failure of assertion at line 1125, column 9.")
+                                   "Failure of assertion at line 1141, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2859,18 +2900,19 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          failedSet, statusResolveMsg, 
                                          recoveredElem, nextTrans, value, 
                                          rowRemove_, IR2Remove, send_NIB_back, 
-                                         stepOfFailure_, IRIndex, NIBMsg_, 
-                                         isBootStrap_, toBeScheduledIRs, key, 
-                                         op1_, op2, transaction_, nextIR, 
-                                         stepOfFailure_c, NIBMsg_O, 
-                                         isBootStrap, debug, nextIRToSent, 
+                                         stepOfFailure_, IRIndex, reconcile, 
+                                         NIBMsg_, isBootStrap_, 
+                                         toBeScheduledIRs, key, op1_, op2, 
+                                         transaction_, nextIR, stepOfFailure_c, 
+                                         NIBMsg_O, isBootStrap, debug, 
+                                         localIRSet, NIBIRSet, nextIRToSent, 
                                          rowIndex, rowRemove, stepOfFailure_co, 
                                          transaction_c, NIBMsg, op1, IRQueue, 
-                                         op_ir_status_change_, debug_ofc, 
-                                         monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
-                                         op_ir_status_change, op_first_install, 
-                                         transaction, controllerFailedModules >>
+                                         op_ir_status_change_, monitoringEvent, 
+                                         setIRsToReset, resetIR, stepOfFailure, 
+                                         msg, op_ir_status_change, 
+                                         op_first_install, transaction, 
+                                         controllerFailedModules >>
 
 SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                 /\ IF swOFACanProcessIRs(self[2])
@@ -2880,7 +2922,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                            /\ IF ofaInMsg[self].type = INSTALL_FLOW
                                                  THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInMsg[self].IR)]
                                                  ELSE /\ Assert(FALSE, 
-                                                                "Failure of assertion at line 1138, column 21.")
+                                                                "Failure of assertion at line 1154, column 21.")
                                                       /\ UNCHANGED Ofa2InstallerBuff
                                            /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
                                            /\ UNCHANGED ofaInMsg
@@ -2928,18 +2970,18 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 recoveredElem, nextTrans, 
                                                 value, rowRemove_, IR2Remove, 
                                                 send_NIB_back, stepOfFailure_, 
-                                                IRIndex, NIBMsg_, isBootStrap_, 
-                                                toBeScheduledIRs, key, op1_, 
-                                                op2, transaction_, nextIR, 
-                                                stepOfFailure_c, NIBMsg_O, 
-                                                isBootStrap, debug, 
+                                                IRIndex, reconcile, NIBMsg_, 
+                                                isBootStrap_, toBeScheduledIRs, 
+                                                key, op1_, op2, transaction_, 
+                                                nextIR, stepOfFailure_c, 
+                                                NIBMsg_O, isBootStrap, debug, 
+                                                localIRSet, NIBIRSet, 
                                                 nextIRToSent, rowIndex, 
                                                 rowRemove, stepOfFailure_co, 
                                                 transaction_c, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
-                                                debug_ofc, monitoringEvent, 
-                                                setIRsToReset, resetIR, 
-                                                stepOfFailure, msg, 
+                                                monitoringEvent, setIRsToReset, 
+                                                resetIR, stepOfFailure, msg, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction, 
                                                 controllerFailedModules >>
@@ -2956,7 +2998,7 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self] \in 1..MaxNumIRs, 
-                                    "Failure of assertion at line 1159, column 9.")
+                                    "Failure of assertion at line 1175, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
@@ -2989,15 +3031,16 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           statusResolveMsg, recoveredElem, 
                                           nextTrans, value, rowRemove_, 
                                           IR2Remove, send_NIB_back, 
-                                          stepOfFailure_, IRIndex, NIBMsg_, 
-                                          isBootStrap_, toBeScheduledIRs, key, 
-                                          op1_, op2, transaction_, nextIR, 
+                                          stepOfFailure_, IRIndex, reconcile, 
+                                          NIBMsg_, isBootStrap_, 
+                                          toBeScheduledIRs, key, op1_, op2, 
+                                          transaction_, nextIR, 
                                           stepOfFailure_c, NIBMsg_O, 
-                                          isBootStrap, debug, nextIRToSent, 
-                                          rowIndex, rowRemove, 
-                                          stepOfFailure_co, transaction_c, 
-                                          NIBMsg, op1, IRQueue, 
-                                          op_ir_status_change_, debug_ofc, 
+                                          isBootStrap, debug, localIRSet, 
+                                          NIBIRSet, nextIRToSent, rowIndex, 
+                                          rowRemove, stepOfFailure_co, 
+                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          op_ir_status_change_, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, msg, 
                                           op_ir_status_change, 
@@ -3065,18 +3108,19 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       value, rowRemove_, 
                                                       IR2Remove, send_NIB_back, 
                                                       stepOfFailure_, IRIndex, 
-                                                      NIBMsg_, isBootStrap_, 
+                                                      reconcile, NIBMsg_, 
+                                                      isBootStrap_, 
                                                       toBeScheduledIRs, key, 
                                                       op1_, op2, transaction_, 
                                                       nextIR, stepOfFailure_c, 
                                                       NIBMsg_O, isBootStrap, 
-                                                      debug, nextIRToSent, 
+                                                      debug, localIRSet, 
+                                                      NIBIRSet, nextIRToSent, 
                                                       rowIndex, rowRemove, 
                                                       stepOfFailure_co, 
                                                       transaction_c, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
-                                                      debug_ofc, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, msg, 
@@ -3096,7 +3140,7 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self] \in 1..MaxNumIRs, 
-                                       "Failure of assertion at line 1191, column 8.")
+                                       "Failure of assertion at line 1207, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3133,15 +3177,16 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, op1_, op2, transaction_, 
-                                             nextIR, stepOfFailure_c, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
-                                             stepOfFailure_co, transaction_c, 
-                                             NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, NIBMsg_O, 
+                                             isBootStrap, debug, localIRSet, 
+                                             NIBIRSet, nextIRToSent, rowIndex, 
+                                             rowRemove, stepOfFailure_co, 
+                                             transaction_c, NIBMsg, op1, 
+                                             IRQueue, op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              op_ir_status_change, 
@@ -3208,18 +3253,20 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     value, rowRemove_, 
                                                     IR2Remove, send_NIB_back, 
                                                     stepOfFailure_, IRIndex, 
-                                                    NIBMsg_, isBootStrap_, 
+                                                    reconcile, NIBMsg_, 
+                                                    isBootStrap_, 
                                                     toBeScheduledIRs, key, 
                                                     op1_, op2, transaction_, 
                                                     nextIR, stepOfFailure_c, 
                                                     NIBMsg_O, isBootStrap, 
-                                                    debug, nextIRToSent, 
+                                                    debug, localIRSet, 
+                                                    NIBIRSet, nextIRToSent, 
                                                     rowIndex, rowRemove, 
                                                     stepOfFailure_co, 
                                                     transaction_c, NIBMsg, op1, 
                                                     IRQueue, 
                                                     op_ir_status_change_, 
-                                                    debug_ofc, monitoringEvent, 
+                                                    monitoringEvent, 
                                                     setIRsToReset, resetIR, 
                                                     stepOfFailure, msg, 
                                                     op_ir_status_change, 
@@ -3293,20 +3340,21 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          rowRemove_, IR2Remove, 
                                                          send_NIB_back, 
                                                          stepOfFailure_, 
-                                                         IRIndex, NIBMsg_, 
-                                                         isBootStrap_, 
+                                                         IRIndex, reconcile, 
+                                                         NIBMsg_, isBootStrap_, 
                                                          toBeScheduledIRs, key, 
                                                          op1_, op2, 
                                                          transaction_, nextIR, 
                                                          stepOfFailure_c, 
                                                          NIBMsg_O, isBootStrap, 
-                                                         debug, nextIRToSent, 
+                                                         debug, localIRSet, 
+                                                         NIBIRSet, 
+                                                         nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         debug_ofc, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
@@ -3331,7 +3379,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ sw_fail_ordering_var # <<>>
                        /\ self[2] \in Head(sw_fail_ordering_var)
                        /\ Assert((self[2]) \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 533, column 9 of macro called at line 1243, column 9.")
+                                 "Failure of assertion at line 534, column 9 of macro called at line 1259, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{(self[2])})>> \o Tail(sw_fail_ordering_var)
@@ -3340,7 +3388,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ IF failedElem'[self] = "cpu"
                              THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                   /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                            "Failure of assertion at line 606, column 9 of macro called at line 1252, column 17.")
+                                            "Failure of assertion at line 607, column 9 of macro called at line 1268, column 17.")
                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                           ![self[2]].ofa = Failed,
                                                                           ![self[2]].installer = Failed]
@@ -3362,7 +3410,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                              ELSE /\ IF failedElem'[self] = "ofa"
                                         THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                              /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                       "Failure of assertion at line 658, column 9 of macro called at line 1255, column 17.")
+                                                       "Failure of assertion at line 659, column 9 of macro called at line 1271, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                              /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                    THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3378,11 +3426,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                         ELSE /\ IF failedElem'[self] = "installer"
                                                    THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                         /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                  "Failure of assertion at line 702, column 9 of macro called at line 1258, column 17.")
+                                                                  "Failure of assertion at line 703, column 9 of macro called at line 1274, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                               THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                             "Failure of assertion at line 705, column 13 of macro called at line 1258, column 17.")
+                                                                             "Failure of assertion at line 706, column 13 of macro called at line 1274, column 17.")
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                 swID |-> self[2],
@@ -3397,7 +3445,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                    ELSE /\ IF failedElem'[self] = "nicAsic"
                                                               THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                                    /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                             "Failure of assertion at line 552, column 9 of macro called at line 1261, column 17.")
+                                                                             "Failure of assertion at line 553, column 9 of macro called at line 1277, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3406,7 +3454,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                 num |-> controlMsgCounter'[self[2]]]]
                                                                    /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                               ELSE /\ Assert(FALSE, 
-                                                                             "Failure of assertion at line 1262, column 14.")
+                                                                             "Failure of assertion at line 1278, column 14.")
                                                                    /\ UNCHANGED << swSeqChangedStatus, 
                                                                                    controller2Switch, 
                                                                                    switchStatus, 
@@ -3441,15 +3489,16 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        statusResolveMsg, recoveredElem, 
                                        nextTrans, value, rowRemove_, IR2Remove, 
                                        send_NIB_back, stepOfFailure_, IRIndex, 
-                                       NIBMsg_, isBootStrap_, toBeScheduledIRs, 
-                                       key, op1_, op2, transaction_, nextIR, 
-                                       stepOfFailure_c, NIBMsg_O, isBootStrap, 
-                                       debug, nextIRToSent, rowIndex, 
-                                       rowRemove, stepOfFailure_co, 
+                                       reconcile, NIBMsg_, isBootStrap_, 
+                                       toBeScheduledIRs, key, op1_, op2, 
+                                       transaction_, nextIR, stepOfFailure_c, 
+                                       NIBMsg_O, isBootStrap, debug, 
+                                       localIRSet, NIBIRSet, nextIRToSent, 
+                                       rowIndex, rowRemove, stepOfFailure_co, 
                                        transaction_c, NIBMsg, op1, IRQueue, 
-                                       op_ir_status_change_, debug_ofc, 
-                                       monitoringEvent, setIRsToReset, resetIR, 
-                                       stepOfFailure, msg, op_ir_status_change, 
+                                       op_ir_status_change_, monitoringEvent, 
+                                       setIRsToReset, resetIR, stepOfFailure, 
+                                       msg, op_ir_status_change, 
                                        op_first_install, transaction, 
                                        controllerFailedModules >>
 
@@ -3466,7 +3515,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ IF recoveredElem'[self] = "cpu"
                                     THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                          /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 633, column 9 of macro called at line 1287, column 39.")
+                                                   "Failure of assertion at line 634, column 9 of macro called at line 1303, column 39.")
                                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                  ![self[2]].ofa = NotFailed,
                                                                                  ![self[2]].installer = NotFailed]
@@ -3489,7 +3538,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                     ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                THEN /\ nicAsicStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                              "Failure of assertion at line 578, column 9 of macro called at line 1288, column 46.")
+                                                              "Failure of assertion at line 579, column 9 of macro called at line 1304, column 46.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                     /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                     /\ IF switchStatus'[self[2]].ofa = Failed
@@ -3506,7 +3555,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "ofa"
                                                           THEN /\ ofaStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                         "Failure of assertion at line 680, column 9 of macro called at line 1289, column 42.")
+                                                                         "Failure of assertion at line 681, column 9 of macro called at line 1305, column 42.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                      THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3522,11 +3571,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "installer"
                                                                      THEN /\ installerInStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                    "Failure of assertion at line 724, column 9 of macro called at line 1290, column 48.")
+                                                                                    "Failure of assertion at line 725, column 9 of macro called at line 1306, column 48.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                 THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                               "Failure of assertion at line 727, column 13 of macro called at line 1290, column 48.")
+                                                                                               "Failure of assertion at line 728, column 13 of macro called at line 1306, column 48.")
                                                                                      /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                 swID |-> self[2],
@@ -3538,7 +3587,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                      controlMsgCounter, 
                                                                                                      statusResolveMsg >>
                                                                      ELSE /\ Assert(FALSE, 
-                                                                                    "Failure of assertion at line 1291, column 14.")
+                                                                                    "Failure of assertion at line 1307, column 14.")
                                                                           /\ UNCHANGED << swSeqChangedStatus, 
                                                                                           switchStatus, 
                                                                                           controlMsgCounter, 
@@ -3579,18 +3628,18 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               notFailedSet, failedElem, 
                                               nextTrans, value, rowRemove_, 
                                               IR2Remove, send_NIB_back, 
-                                              stepOfFailure_, IRIndex, NIBMsg_, 
-                                              isBootStrap_, toBeScheduledIRs, 
-                                              key, op1_, op2, transaction_, 
-                                              nextIR, stepOfFailure_c, 
-                                              NIBMsg_O, isBootStrap, debug, 
-                                              nextIRToSent, rowIndex, 
+                                              stepOfFailure_, IRIndex, 
+                                              reconcile, NIBMsg_, isBootStrap_, 
+                                              toBeScheduledIRs, key, op1_, op2, 
+                                              transaction_, nextIR, 
+                                              stepOfFailure_c, NIBMsg_O, 
+                                              isBootStrap, debug, localIRSet, 
+                                              NIBIRSet, nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_co, 
                                               transaction_c, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
-                                              debug_ofc, monitoringEvent, 
-                                              setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
+                                              monitoringEvent, setIRsToReset, 
+                                              resetIR, stepOfFailure, msg, 
                                               op_ir_status_change, 
                                               op_first_install, transaction, 
                                               controllerFailedModules >>
@@ -3617,7 +3666,7 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 779, column 9 of macro called at line 1325, column 9.")
+                             "Failure of assertion at line 780, column 9 of macro called at line 1341, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3645,13 +3694,13 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    failedElem, failedSet, statusResolveMsg, 
                                    recoveredElem, nextTrans, value, rowRemove_, 
                                    IR2Remove, send_NIB_back, stepOfFailure_, 
-                                   IRIndex, NIBMsg_, isBootStrap_, 
+                                   IRIndex, reconcile, NIBMsg_, isBootStrap_, 
                                    toBeScheduledIRs, key, op1_, op2, 
                                    transaction_, nextIR, stepOfFailure_c, 
-                                   NIBMsg_O, isBootStrap, debug, nextIRToSent, 
-                                   rowIndex, rowRemove, stepOfFailure_co, 
-                                   transaction_c, NIBMsg, op1, IRQueue, 
-                                   op_ir_status_change_, debug_ofc, 
+                                   NIBMsg_O, isBootStrap, debug, localIRSet, 
+                                   NIBIRSet, nextIRToSent, rowIndex, rowRemove, 
+                                   stepOfFailure_co, transaction_c, NIBMsg, 
+                                   op1, IRQueue, op_ir_status_change_, 
                                    monitoringEvent, setIRsToReset, resetIR, 
                                    stepOfFailure, msg, op_ir_status_change, 
                                    op_first_install, transaction, 
@@ -3672,12 +3721,12 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                      /\ IF stepOfFailure_'[self] # 2
                                            THEN /\ IF (nextTrans'[self].name = "PrepareIR")
                                                       THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                     "Failure of assertion at line 930, column 9 of macro called at line 1350, column 17.")
+                                                                     "Failure of assertion at line 943, column 9 of macro called at line 1366, column 17.")
                                                            /\ Assert(Len(nextTrans'[self].ops[1].key) = 2, 
-                                                                     "Failure of assertion at line 931, column 9 of macro called at line 1350, column 17.")
+                                                                     "Failure of assertion at line 944, column 9 of macro called at line 1366, column 17.")
                                                            /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                                            /\ Assert(nextTrans'[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                     "Failure of assertion at line 933, column 9 of macro called at line 1350, column 17.")
+                                                                     "Failure of assertion at line 946, column 9 of macro called at line 1366, column 17.")
                                                            /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans'[self].ops[2].key] = nextTrans'[self].ops[2].value]
                                                            /\ UNCHANGED << FirstInstall, 
                                                                            IRStatus, 
@@ -3689,15 +3738,14 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                            IRIndex >>
                                                       ELSE /\ IF (nextTrans'[self].name = "ScheduleIR")
                                                                  THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                "Failure of assertion at line 939, column 9 of macro called at line 1350, column 17.")
+                                                                                "Failure of assertion at line 952, column 9 of macro called at line 1366, column 17.")
                                                                       /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans'[self].ops[1].value)
                                                                       /\ Assert(nextTrans'[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                                                "Failure of assertion at line 941, column 9 of macro called at line 1350, column 17.")
+                                                                                "Failure of assertion at line 954, column 9 of macro called at line 1366, column 17.")
                                                                       /\ Assert(Len(nextTrans'[self].ops[2].key) = 2, 
-                                                                                "Failure of assertion at line 942, column 9 of macro called at line 1350, column 17.")
+                                                                                "Failure of assertion at line 955, column 9 of macro called at line 1366, column 17.")
                                                                       /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans'[self].ops[2].key] = nextTrans'[self].ops[2].value]
-                                                                      /\ value' = [value EXCEPT ![self] = [controllerStateNIB |-> controllerStateNIB',
-                                                                                                                 IRStatusNIB |-> IRStatus,
+                                                                      /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                                                                  IRQueueNIB |->IRQueueNIB',
                                                                                                                  SetScheduledIRsNIB |-> SetScheduledIRs,
                                                                                                                  SwSuspensionStatusNIB |-> SwSuspensionStatus]]
@@ -3709,8 +3757,7 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                       IR2Remove, 
                                                                                       IRIndex >>
                                                                  ELSE /\ IF (nextTrans'[self].name = "SeqReadNIBStates")
-                                                                            THEN /\ value' = [value EXCEPT ![self] = [controllerStateNIB |-> controllerStateNIB,
-                                                                                                                            IRStatusNIB |-> IRStatus,
+                                                                            THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                                                                             IRQueueNIB |->IRQueueNIB,
                                                                                                                             SetScheduledIRsNIB |-> SetScheduledIRs,
                                                                                                                             SwSuspensionStatusNIB |-> SwSuspensionStatus]]
@@ -3724,8 +3771,7 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                  IR2Remove, 
                                                                                                  IRIndex >>
                                                                             ELSE /\ IF (nextTrans'[self].name = "OFCReadNIBStates")
-                                                                                       THEN /\ value' = [value EXCEPT ![self] = [controllerStateNIB |-> controllerStateNIB,
-                                                                                                                                       IRStatusNIB |-> IRStatus,
+                                                                                       THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                                                                                        IRQueueNIB |->IRQueueNIB,
                                                                                                                                        SetScheduledIRsNIB |-> SetScheduledIRs,
                                                                                                                                        SwSuspensionStatusNIB |-> SwSuspensionStatus]]
@@ -3740,9 +3786,9 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                             IRIndex >>
                                                                                        ELSE /\ IF (nextTrans'[self].name = "UpdateControllerState")
                                                                                                   THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                                                                 "Failure of assertion at line 966, column 17 of macro called at line 1350, column 17.")
+                                                                                                                 "Failure of assertion at line 979, column 17 of macro called at line 1366, column 17.")
                                                                                                        /\ Assert(Len(nextTrans'[self].ops[1].key) = 2, 
-                                                                                                                 "Failure of assertion at line 967, column 17 of macro called at line 1350, column 17.")
+                                                                                                                 "Failure of assertion at line 980, column 17 of macro called at line 1366, column 17.")
                                                                                                        /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                                                                                        /\ UNCHANGED << FirstInstall, 
                                                                                                                        IRStatus, 
@@ -3755,10 +3801,14 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                                        IRIndex >>
                                                                                                   ELSE /\ IF (nextTrans'[self].name = "RemoveIR")
                                                                                                              THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                            "Failure of assertion at line 970, column 17 of macro called at line 1350, column 17.")
+                                                                                                                            "Failure of assertion at line 983, column 17 of macro called at line 1366, column 17.")
                                                                                                                   /\ IR2Remove' = [IR2Remove EXCEPT ![self] = nextTrans'[self].ops[1].key]
-                                                                                                                  /\ rowRemove_' = [rowRemove_ EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove'[self], IRQueueNIB)]
-                                                                                                                  /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove_'[self])
+                                                                                                                  /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove'[self]
+                                                                                                                        THEN /\ rowRemove_' = [rowRemove_ EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove'[self], IRQueueNIB)]
+                                                                                                                             /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove_'[self])
+                                                                                                                        ELSE /\ TRUE
+                                                                                                                             /\ UNCHANGED << IRQueueNIB, 
+                                                                                                                                             rowRemove_ >>
                                                                                                                   /\ UNCHANGED << FirstInstall, 
                                                                                                                                   IRStatus, 
                                                                                                                                   SetScheduledIRs, 
@@ -3767,9 +3817,9 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                                                   IRIndex >>
                                                                                                              ELSE /\ IF (nextTrans'[self].name = "OFCChangeIRStatus2Sent")
                                                                                                                         THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                       "Failure of assertion at line 975, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                       "Failure of assertion at line 991, column 17 of macro called at line 1366, column 17.")
                                                                                                                              /\ Assert(Len(nextTrans'[self].ops) = 1, 
-                                                                                                                                       "Failure of assertion at line 976, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                       "Failure of assertion at line 992, column 17 of macro called at line 1366, column 17.")
                                                                                                                              /\ IRStatus' = [IRStatus EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                                                                                                              /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
                                                                                                                              /\ UNCHANGED << FirstInstall, 
@@ -3779,9 +3829,9 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                                                              IRIndex >>
                                                                                                                         ELSE /\ IF (nextTrans'[self].name = "ChangeSetScheduledIRs")
                                                                                                                                    THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                                                                                                  "Failure of assertion at line 980, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                  "Failure of assertion at line 996, column 17 of macro called at line 1366, column 17.")
                                                                                                                                         /\ Assert(Len(nextTrans'[self].ops) = 1, 
-                                                                                                                                                  "Failure of assertion at line 981, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                  "Failure of assertion at line 997, column 17 of macro called at line 1366, column 17.")
                                                                                                                                         /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                                                                                                                         /\ UNCHANGED << FirstInstall, 
                                                                                                                                                         IRStatus, 
@@ -3791,14 +3841,14 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                                                                         IRIndex >>
                                                                                                                                    ELSE /\ IF (nextTrans'[self].name = "UpdateIRTag")
                                                                                                                                               THEN /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                                             "Failure of assertion at line 984, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                             "Failure of assertion at line 1000, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                    /\ Assert(Len(nextTrans'[self].ops) = 1, 
-                                                                                                                                                             "Failure of assertion at line 985, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                             "Failure of assertion at line 1001, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                    /\ Assert(Len(IRQueueNIB) > 0, 
-                                                                                                                                                             "Failure of assertion at line 986, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                             "Failure of assertion at line 1002, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                    /\ IRIndex' = [IRIndex EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans'[self].ops[1].key]
                                                                                                                                                    /\ Assert(IRIndex'[self] # -1, 
-                                                                                                                                                             "Failure of assertion at line 988, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                             "Failure of assertion at line 1004, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                    /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex'[self]].tag = nextTrans'[self].ops[1].value]
                                                                                                                                                    /\ UNCHANGED << FirstInstall, 
                                                                                                                                                                    IRStatus, 
@@ -3806,15 +3856,14 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                                                                                                                                                    send_NIB_back >>
                                                                                                                                               ELSE /\ IF (nextTrans'[self].name = "FirstInstallIR")
                                                                                                                                                          THEN /\ Assert(Len(nextTrans'[self].ops) = 2, 
-                                                                                                                                                                        "Failure of assertion at line 991, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                                        "Failure of assertion at line 1007, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                               /\ Assert(nextTrans'[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                        "Failure of assertion at line 992, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                                        "Failure of assertion at line 1008, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                               /\ IRStatus' = [IRStatus EXCEPT ![nextTrans'[self].ops[1].key] = nextTrans'[self].ops[1].value]
                                                                                                                                                               /\ Assert(nextTrans'[self].ops[2].table = NIBT_FIRST_INSTALL, 
-                                                                                                                                                                        "Failure of assertion at line 994, column 17 of macro called at line 1350, column 17.")
+                                                                                                                                                                        "Failure of assertion at line 1010, column 17 of macro called at line 1366, column 17.")
                                                                                                                                                               /\ FirstInstall' = [FirstInstall EXCEPT ![nextTrans'[self].ops[2].key] = nextTrans'[self].ops[2].value]
-                                                                                                                                                              /\ value' = [value EXCEPT ![self] = [controllerStateNIB |-> controllerStateNIB,
-                                                                                                                                                                                                         IRStatusNIB |-> IRStatus',
+                                                                                                                                                              /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
                                                                                                                                                                                                          IRQueueNIB |->IRQueueNIB,
                                                                                                                                                                                                          SetScheduledIRsNIB |-> SetScheduledIRs,
                                                                                                                                                                                                          SwSuspensionStatusNIB |-> SwSuspensionStatus]]
@@ -3881,15 +3930,15 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                           ofaOutConfirmation, installerInIR, 
                                           statusMsg, notFailedSet, failedElem, 
                                           failedSet, statusResolveMsg, 
-                                          recoveredElem, NIBMsg_, isBootStrap_, 
-                                          toBeScheduledIRs, key, op1_, op2, 
-                                          transaction_, nextIR, 
+                                          recoveredElem, reconcile, NIBMsg_, 
+                                          isBootStrap_, toBeScheduledIRs, key, 
+                                          op1_, op2, transaction_, nextIR, 
                                           stepOfFailure_c, NIBMsg_O, 
-                                          isBootStrap, debug, nextIRToSent, 
-                                          rowIndex, rowRemove, 
-                                          stepOfFailure_co, transaction_c, 
-                                          NIBMsg, op1, IRQueue, 
-                                          op_ir_status_change_, debug_ofc, 
+                                          isBootStrap, debug, localIRSet, 
+                                          NIBIRSet, nextIRToSent, rowIndex, 
+                                          rowRemove, stepOfFailure_co, 
+                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          op_ir_status_change_, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, msg, 
                                           op_ir_status_change, 
@@ -3942,15 +3991,16 @@ NIBSendBackIfAny(self) == /\ pc[self] = "NIBSendBackIfAny"
                                           failedSet, statusResolveMsg, 
                                           recoveredElem, nextTrans, value, 
                                           rowRemove_, IR2Remove, 
-                                          stepOfFailure_, IRIndex, NIBMsg_, 
-                                          isBootStrap_, toBeScheduledIRs, key, 
-                                          op1_, op2, transaction_, nextIR, 
+                                          stepOfFailure_, IRIndex, reconcile, 
+                                          NIBMsg_, isBootStrap_, 
+                                          toBeScheduledIRs, key, op1_, op2, 
+                                          transaction_, nextIR, 
                                           stepOfFailure_c, NIBMsg_O, 
-                                          isBootStrap, debug, nextIRToSent, 
-                                          rowIndex, rowRemove, 
-                                          stepOfFailure_co, transaction_c, 
-                                          NIBMsg, op1, IRQueue, 
-                                          op_ir_status_change_, debug_ofc, 
+                                          isBootStrap, debug, localIRSet, 
+                                          NIBIRSet, nextIRToSent, rowIndex, 
+                                          rowRemove, stepOfFailure_co, 
+                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          op_ir_status_change_, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, msg, 
                                           op_ir_status_change, 
@@ -3963,6 +4013,8 @@ NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
                            /\ SwSuspensionStatus' = SwSuspensionStatusOFC
                            /\ IRQueueNIB' = IRQueueRC
                            /\ SetScheduledIRs' = SetScheduledIRsRC
+                           /\ NIB2RC' = <<>>
+                           /\ NIB2OFC' = <<>>
                            /\ pc' = [pc EXCEPT ![self] = "ChangeNIBStatusToNormal"]
                            /\ UNCHANGED << switchLock, controllerLock, 
                                            FirstInstall, sw_fail_ordering_var, 
@@ -3985,7 +4037,7 @@ NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
                                            controllerStateOFC, IRStatusOFC, 
                                            IRQueueOFC, SwSuspensionStatusOFC, 
                                            SetScheduledIRsOFC, NIBUpdateForOFC, 
-                                           NIB2OFC, NIB2RC, X2NIB, masterState, 
+                                           X2NIB, masterState, 
                                            controllerStateNIB, X2NIB_len, 
                                            NIBThreadID, RCThreadID, ingressPkt, 
                                            ingressIR, egressMsg, ofaInMsg, 
@@ -3995,15 +4047,15 @@ NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
                                            recoveredElem, nextTrans, value, 
                                            rowRemove_, IR2Remove, 
                                            send_NIB_back, stepOfFailure_, 
-                                           IRIndex, NIBMsg_, isBootStrap_, 
-                                           toBeScheduledIRs, key, op1_, op2, 
-                                           transaction_, nextIR, 
+                                           IRIndex, reconcile, NIBMsg_, 
+                                           isBootStrap_, toBeScheduledIRs, key, 
+                                           op1_, op2, transaction_, nextIR, 
                                            stepOfFailure_c, NIBMsg_O, 
-                                           isBootStrap, debug, nextIRToSent, 
-                                           rowIndex, rowRemove, 
-                                           stepOfFailure_co, transaction_c, 
-                                           NIBMsg, op1, IRQueue, 
-                                           op_ir_status_change_, debug_ofc, 
+                                           isBootStrap, debug, localIRSet, 
+                                           NIBIRSet, nextIRToSent, rowIndex, 
+                                           rowRemove, stepOfFailure_co, 
+                                           transaction_c, NIBMsg, op1, IRQueue, 
+                                           op_ir_status_change_, 
                                            monitoringEvent, setIRsToReset, 
                                            resetIR, stepOfFailure, msg, 
                                            op_ir_status_change, 
@@ -4012,8 +4064,7 @@ NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
 
 ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                  /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = NotFailed]
-                                 /\ value' = [value EXCEPT ![self] = [controllerStateNIB |-> controllerStateNIB,
-                                                                            IRStatusNIB |-> IRStatus,
+                                 /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                             IRQueueNIB |->IRQueueNIB,
                                                                             SetScheduledIRsNIB |-> SetScheduledIRs,
                                                                             SwSuspensionStatusNIB |-> SwSuspensionStatus]]
@@ -4022,6 +4073,7 @@ ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                        ELSE /\ TRUE
                                             /\ UNCHANGED NIB2RC
                                  /\ NIB2OFC' = Append(NIB2OFC, [value |-> value'[self]])
+                                 /\ reconcile' = [reconcile EXCEPT ![self] = TRUE]
                                  /\ pc' = [pc EXCEPT ![self] = "NIBEventHandling"]
                                  /\ UNCHANGED << switchLock, controllerLock, 
                                                  FirstInstall, 
@@ -4071,11 +4123,12 @@ ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                                  op2, transaction_, nextIR, 
                                                  stepOfFailure_c, NIBMsg_O, 
                                                  isBootStrap, debug, 
+                                                 localIRSet, NIBIRSet, 
                                                  nextIRToSent, rowIndex, 
                                                  rowRemove, stepOfFailure_co, 
                                                  transaction_c, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
-                                                 debug_ofc, monitoringEvent, 
+                                                 monitoringEvent, 
                                                  setIRsToReset, resetIR, 
                                                  stepOfFailure, msg, 
                                                  op_ir_status_change, 
@@ -4091,8 +4144,7 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                               /\ NIBMsg_' = [NIBMsg_ EXCEPT ![self] = Head(NIB2RC)]
                               /\ NIB2RC' = Tail(NIB2RC)
                               /\ IF isBootStrap_[self] = TRUE
-                                    THEN /\ controllerStateRC' = NIBMsg_'[self].value.controllerStateNIB
-                                         /\ IRStatusRC' = NIBMsg_'[self].value.IRStatusNIB
+                                    THEN /\ IRStatusRC' = NIBMsg_'[self].value.IRStatusNIB
                                          /\ IRQueueRC' = NIBMsg_'[self].value.IRQueueNIB
                                          /\ SwSuspensionStatusRC' = NIBMsg_'[self].value.SwSuspensionStatusNIB
                                          /\ NIBUpdateForRC' = TRUE
@@ -4100,18 +4152,16 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                          /\ UNCHANGED SetScheduledIRsRC
                                     ELSE /\ IF   IRStatusRC # NIBMsg_'[self].value.IRStatusNIB
                                                \/ SwSuspensionStatusRC # NIBMsg_'[self].value.SwSuspensionStatusNIB
-                                               THEN /\ controllerStateRC' = NIBMsg_'[self].value.controllerStateNIB
-                                                    /\ IRStatusRC' = NIBMsg_'[self].value.IRStatusNIB
-                                                    /\ IRQueueRC' = NIBMsg_'[self].value.IRQueueNIB
+                                               THEN /\ IRStatusRC' = NIBMsg_'[self].value.IRStatusNIB
                                                     /\ SwSuspensionStatusRC' = NIBMsg_'[self].value.SwSuspensionStatusNIB
                                                     /\ SetScheduledIRsRC' = [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
-                                                                                           THEN SetScheduledIRsRC[sw]
-                                                                                           ELSE {ir \in SetScheduledIRsRC[sw]:
-                                                                                                   IRStatusRC'[ir] # IR_DONE}]
+                                                                                   THEN SetScheduledIRsRC[sw]
+                                                                                   ELSE {ir \in SetScheduledIRsRC[sw]:
+                                                                                           IRStatusRC'[ir] # IR_DONE}]
+                                                    /\ IRQueueRC' = SelectSeq(IRQueueRC, LAMBDA i: IRStatusRC'[i.IR] # IR_DONE)
                                                     /\ NIBUpdateForRC' = TRUE
                                                ELSE /\ TRUE
                                                     /\ UNCHANGED << NIBUpdateForRC, 
-                                                                    controllerStateRC, 
                                                                     IRStatusRC, 
                                                                     IRQueueRC, 
                                                                     SwSuspensionStatusRC, 
@@ -4133,7 +4183,8 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                               controllerSubmoduleFailNum, 
                                               controllerSubmoduleFailStat, 
                                               switchOrdering, dependencyGraph, 
-                                              IR2SW, idThreadWorkingOnIR, 
+                                              IR2SW, controllerStateRC, 
+                                              idThreadWorkingOnIR, 
                                               workerThreadRanking, 
                                               controllerStateOFC, IRStatusOFC, 
                                               IRQueueOFC, 
@@ -4153,14 +4204,15 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                               recoveredElem, nextTrans, value, 
                                               rowRemove_, IR2Remove, 
                                               send_NIB_back, stepOfFailure_, 
-                                              IRIndex, toBeScheduledIRs, key, 
-                                              op1_, op2, transaction_, nextIR, 
+                                              IRIndex, reconcile, 
+                                              toBeScheduledIRs, key, op1_, op2, 
+                                              transaction_, nextIR, 
                                               stepOfFailure_c, NIBMsg_O, 
-                                              isBootStrap, debug, nextIRToSent, 
-                                              rowIndex, rowRemove, 
-                                              stepOfFailure_co, transaction_c, 
-                                              NIBMsg, op1, IRQueue, 
-                                              op_ir_status_change_, debug_ofc, 
+                                              isBootStrap, debug, localIRSet, 
+                                              NIBIRSet, nextIRToSent, rowIndex, 
+                                              rowRemove, stepOfFailure_co, 
+                                              transaction_c, NIBMsg, op1, 
+                                              IRQueue, op_ir_status_change_, 
                                               monitoringEvent, setIRsToReset, 
                                               resetIR, stepOfFailure, msg, 
                                               op_ir_status_change, 
@@ -4214,17 +4266,18 @@ RCSendReadTransaction(self) == /\ pc[self] = "RCSendReadTransaction"
                                                recoveredElem, nextTrans, value, 
                                                rowRemove_, IR2Remove, 
                                                send_NIB_back, stepOfFailure_, 
-                                               IRIndex, NIBMsg_, isBootStrap_, 
-                                               toBeScheduledIRs, key, op1_, 
-                                               op2, nextIR, stepOfFailure_c, 
-                                               NIBMsg_O, isBootStrap, debug, 
-                                               nextIRToSent, rowIndex, 
-                                               rowRemove, stepOfFailure_co, 
-                                               transaction_c, NIBMsg, op1, 
-                                               IRQueue, op_ir_status_change_, 
-                                               debug_ofc, monitoringEvent, 
-                                               setIRsToReset, resetIR, 
-                                               stepOfFailure, msg, 
+                                               IRIndex, reconcile, NIBMsg_, 
+                                               isBootStrap_, toBeScheduledIRs, 
+                                               key, op1_, op2, nextIR, 
+                                               stepOfFailure_c, NIBMsg_O, 
+                                               isBootStrap, debug, localIRSet, 
+                                               NIBIRSet, nextIRToSent, 
+                                               rowIndex, rowRemove, 
+                                               stepOfFailure_co, transaction_c, 
+                                               NIBMsg, op1, IRQueue, 
+                                               op_ir_status_change_, 
+                                               monitoringEvent, setIRsToReset, 
+                                               resetIR, stepOfFailure, msg, 
                                                op_ir_status_change, 
                                                op_first_install, transaction, 
                                                controllerFailedModules >>
@@ -4265,14 +4318,14 @@ SequencerProc(self) == /\ pc[self] = "SequencerProc"
                                        failedElem, failedSet, statusResolveMsg, 
                                        recoveredElem, nextTrans, value, 
                                        rowRemove_, IR2Remove, send_NIB_back, 
-                                       stepOfFailure_, IRIndex, NIBMsg_, 
-                                       isBootStrap_, toBeScheduledIRs, key, 
-                                       op1_, op2, transaction_, nextIR, 
+                                       stepOfFailure_, IRIndex, reconcile, 
+                                       NIBMsg_, isBootStrap_, toBeScheduledIRs, 
+                                       key, op1_, op2, transaction_, nextIR, 
                                        stepOfFailure_c, NIBMsg_O, isBootStrap, 
-                                       debug, nextIRToSent, rowIndex, 
-                                       rowRemove, stepOfFailure_co, 
-                                       transaction_c, NIBMsg, op1, IRQueue, 
-                                       op_ir_status_change_, debug_ofc, 
+                                       debug, localIRSet, NIBIRSet, 
+                                       nextIRToSent, rowIndex, rowRemove, 
+                                       stepOfFailure_co, transaction_c, NIBMsg, 
+                                       op1, IRQueue, op_ir_status_change_, 
                                        monitoringEvent, setIRsToReset, resetIR, 
                                        stepOfFailure, msg, op_ir_status_change, 
                                        op_first_install, transaction, 
@@ -4328,16 +4381,18 @@ RCComputeNextIR2Schedule(self) == /\ pc[self] = "RCComputeNextIR2Schedule"
                                                   value, rowRemove_, IR2Remove, 
                                                   send_NIB_back, 
                                                   stepOfFailure_, IRIndex, 
-                                                  NIBMsg_, isBootStrap_, key, 
-                                                  op1_, op2, transaction_, 
-                                                  nextIR, stepOfFailure_c, 
-                                                  NIBMsg_O, isBootStrap, debug, 
+                                                  reconcile, NIBMsg_, 
+                                                  isBootStrap_, key, op1_, op2, 
+                                                  transaction_, nextIR, 
+                                                  stepOfFailure_c, NIBMsg_O, 
+                                                  isBootStrap, debug, 
+                                                  localIRSet, NIBIRSet, 
                                                   nextIRToSent, rowIndex, 
                                                   rowRemove, stepOfFailure_co, 
                                                   transaction_c, NIBMsg, op1, 
                                                   IRQueue, 
                                                   op_ir_status_change_, 
-                                                  debug_ofc, monitoringEvent, 
+                                                  monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, msg, 
                                                   op_ir_status_change, 
@@ -4402,14 +4457,15 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             recoveredElem, nextTrans, value, 
                                             rowRemove_, IR2Remove, 
                                             send_NIB_back, stepOfFailure_, 
-                                            IRIndex, NIBMsg_, isBootStrap_, 
-                                            toBeScheduledIRs, key, op1_, op2, 
-                                            transaction_, NIBMsg_O, 
-                                            isBootStrap, debug, nextIRToSent, 
+                                            IRIndex, reconcile, NIBMsg_, 
+                                            isBootStrap_, toBeScheduledIRs, 
+                                            key, op1_, op2, transaction_, 
+                                            NIBMsg_O, isBootStrap, debug, 
+                                            localIRSet, NIBIRSet, nextIRToSent, 
                                             rowIndex, rowRemove, 
                                             stepOfFailure_co, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, debug_ofc, 
+                                            op_ir_status_change_, 
                                             monitoringEvent, setIRsToReset, 
                                             resetIR, stepOfFailure, msg, 
                                             op_ir_status_change, 
@@ -4422,15 +4478,11 @@ RCSendPrepareIR2NIB(self) == /\ pc[self] = "RCSendPrepareIR2NIB"
                                              stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
                                    ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                              /\ IF (stepOfFailure_c'[self] # 1)
-                                   THEN /\ IF isNIBUp(NIBThreadID)
-                                              THEN /\ op1_' = [op1_ EXCEPT ![self] = [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> STATUS_START_SCHEDULING, next |-> nextIR[self]]]]
-                                                   /\ op2' = [op2 EXCEPT ![self] = [table |-> NIBT_SET_SCHEDULED_IRS, key |-> IR2SW[nextIR[self]], value |-> SetScheduledIRsRC[IR2SW[nextIR[self]]] \cup {nextIR[self]}]]
-                                                   /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "PrepareIR", ops |-> <<op1_'[self], op2'[self]>>]]
-                                                   /\ X2NIB' = X2NIB \o <<transaction_'[self]>>
-                                              ELSE /\ TRUE
-                                                   /\ UNCHANGED << X2NIB, op1_, 
-                                                                   op2, 
-                                                                   transaction_ >>
+                                   THEN /\ isNIBUp(NIBThreadID)
+                                        /\ op1_' = [op1_ EXCEPT ![self] = [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> STATUS_START_SCHEDULING, next |-> nextIR[self]]]]
+                                        /\ op2' = [op2 EXCEPT ![self] = [table |-> NIBT_SET_SCHEDULED_IRS, key |-> IR2SW[nextIR[self]], value |-> SetScheduledIRsRC[IR2SW[nextIR[self]]] \cup {nextIR[self]}]]
+                                        /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "PrepareIR", ops |-> <<op1_'[self], op2'[self]>>]]
+                                        /\ X2NIB' = X2NIB \o <<transaction_'[self]>>
                                    ELSE /\ TRUE
                                         /\ UNCHANGED << X2NIB, op1_, op2, 
                                                         transaction_ >>
@@ -4475,14 +4527,15 @@ RCSendPrepareIR2NIB(self) == /\ pc[self] = "RCSendPrepareIR2NIB"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, nextIR, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, nextIR, 
+                                             NIBMsg_O, isBootStrap, debug, 
+                                             localIRSet, NIBIRSet, 
+                                             nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_co, transaction_c, 
                                              NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              op_ir_status_change, 
@@ -4543,17 +4596,18 @@ RCScheduleTheIR(self) == /\ pc[self] = "RCScheduleTheIR"
                                          failedSet, statusResolveMsg, 
                                          recoveredElem, nextTrans, value, 
                                          rowRemove_, IR2Remove, send_NIB_back, 
-                                         stepOfFailure_, IRIndex, NIBMsg_, 
-                                         isBootStrap_, key, op1_, op2, 
+                                         stepOfFailure_, IRIndex, reconcile, 
+                                         NIBMsg_, isBootStrap_, key, op1_, op2, 
                                          transaction_, nextIR, NIBMsg_O, 
-                                         isBootStrap, debug, nextIRToSent, 
-                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         isBootStrap, debug, localIRSet, 
+                                         NIBIRSet, nextIRToSent, rowIndex, 
+                                         rowRemove, stepOfFailure_co, 
                                          transaction_c, NIBMsg, op1, IRQueue, 
-                                         op_ir_status_change_, debug_ofc, 
-                                         monitoringEvent, setIRsToReset, 
-                                         resetIR, stepOfFailure, msg, 
-                                         op_ir_status_change, op_first_install, 
-                                         transaction, controllerFailedModules >>
+                                         op_ir_status_change_, monitoringEvent, 
+                                         setIRsToReset, resetIR, stepOfFailure, 
+                                         msg, op_ir_status_change, 
+                                         op_first_install, transaction, 
+                                         controllerFailedModules >>
 
 RCSendScheduleIR2NIB(self) == /\ pc[self] = "RCSendScheduleIR2NIB"
                               /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
@@ -4561,15 +4615,11 @@ RCSendScheduleIR2NIB(self) == /\ pc[self] = "RCSendScheduleIR2NIB"
                                               stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = num]
                                     ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                               /\ IF (stepOfFailure_c'[self] # 1)
-                                    THEN /\ IF isNIBUp(NIBThreadID)
-                                               THEN /\ op1_' = [op1_ EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> NULL, value |-> [IR |-> nextIR[self], tag |-> NO_TAG]]]
-                                                    /\ op2' = [op2 EXCEPT ![self] = [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> NO_STATUS]]]
-                                                    /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "ScheduleIR", ops |-> <<op1_'[self], op2'[self]>>]]
-                                                    /\ X2NIB' = X2NIB \o <<transaction_'[self]>>
-                                               ELSE /\ TRUE
-                                                    /\ UNCHANGED << X2NIB, 
-                                                                    op1_, op2, 
-                                                                    transaction_ >>
+                                    THEN /\ isNIBUp(NIBThreadID)
+                                         /\ op1_' = [op1_ EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> NULL, value |-> [IR |-> nextIR[self], tag |-> NO_TAG]]]
+                                         /\ op2' = [op2 EXCEPT ![self] = [table |-> NIBT_CONTROLLER_STATE, key |-> self, value |-> [type |-> NO_STATUS]]]
+                                         /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "ScheduleIR", ops |-> <<op1_'[self], op2'[self]>>]]
+                                         /\ X2NIB' = X2NIB \o <<transaction_'[self]>>
                                     ELSE /\ TRUE
                                          /\ UNCHANGED << X2NIB, op1_, op2, 
                                                          transaction_ >>
@@ -4619,16 +4669,16 @@ RCSendScheduleIR2NIB(self) == /\ pc[self] = "RCSendScheduleIR2NIB"
                                               recoveredElem, nextTrans, value, 
                                               rowRemove_, IR2Remove, 
                                               send_NIB_back, stepOfFailure_, 
-                                              IRIndex, NIBMsg_, isBootStrap_, 
-                                              toBeScheduledIRs, key, nextIR, 
-                                              NIBMsg_O, isBootStrap, debug, 
-                                              nextIRToSent, rowIndex, 
+                                              IRIndex, reconcile, NIBMsg_, 
+                                              isBootStrap_, toBeScheduledIRs, 
+                                              key, nextIR, NIBMsg_O, 
+                                              isBootStrap, debug, localIRSet, 
+                                              NIBIRSet, nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_co, 
                                               transaction_c, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
-                                              debug_ofc, monitoringEvent, 
-                                              setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
+                                              monitoringEvent, setIRsToReset, 
+                                              resetIR, stepOfFailure, msg, 
                                               op_ir_status_change, 
                                               op_first_install, transaction, 
                                               controllerFailedModules >>
@@ -4705,7 +4755,8 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           IR2Remove, 
                                                           send_NIB_back, 
                                                           stepOfFailure_, 
-                                                          IRIndex, NIBMsg_, 
+                                                          IRIndex, reconcile, 
+                                                          NIBMsg_, 
                                                           isBootStrap_, 
                                                           toBeScheduledIRs, 
                                                           key, op1_, op2, 
@@ -4713,13 +4764,13 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           stepOfFailure_c, 
                                                           NIBMsg_O, 
                                                           isBootStrap, debug, 
+                                                          localIRSet, NIBIRSet, 
                                                           nextIRToSent, 
                                                           rowIndex, rowRemove, 
                                                           stepOfFailure_co, 
                                                           transaction_c, 
                                                           NIBMsg, op1, IRQueue, 
                                                           op_ir_status_change_, 
-                                                          debug_ofc, 
                                                           monitoringEvent, 
                                                           setIRsToReset, 
                                                           resetIR, 
@@ -4742,10 +4793,16 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                /\ NIB2OFC # <<>>
                                /\ NIBMsg_O' = [NIBMsg_O EXCEPT ![self] = Head(NIB2OFC)]
                                /\ NIB2OFC' = Tail(NIB2OFC)
-                               /\ debug' = [debug EXCEPT ![self] = IRQueueOFC # NIBMsg_O'[self].value.IRQueueNIB]
-                               /\ IF IRQueueOFC # NIBMsg_O'[self].value.IRQueueNIB
+                               /\ localIRSet' = [localIRSet EXCEPT ![self] = {IRQueueOFC[i].IR: i \in DOMAIN IRQueueOFC}]
+                               /\ NIBIRSet' = [NIBIRSet EXCEPT ![self] = {NIBMsg_O'[self].value.IRQueueNIB[i].IR: i \in DOMAIN NIBMsg_O'[self].value.IRQueueNIB}]
+                               /\ IF localIRSet'[self] # NIBIRSet'[self]
                                      THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE)
-                                          /\ NIBUpdateForOFC' = TRUE
+                                          /\ Assert(Len(IRQueueOFC') < 3, 
+                                                    "Failure of assertion at line 1608, column 17.")
+                                          /\ IF IRQueueOFC' # <<>>
+                                                THEN /\ NIBUpdateForOFC' = TRUE
+                                                ELSE /\ TRUE
+                                                     /\ UNCHANGED NIBUpdateForOFC
                                      ELSE /\ TRUE
                                           /\ UNCHANGED << IRQueueOFC, 
                                                           NIBUpdateForOFC >>
@@ -4788,17 +4845,17 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                                recoveredElem, nextTrans, value, 
                                                rowRemove_, IR2Remove, 
                                                send_NIB_back, stepOfFailure_, 
-                                               IRIndex, NIBMsg_, isBootStrap_, 
-                                               toBeScheduledIRs, key, op1_, 
-                                               op2, transaction_, nextIR, 
-                                               stepOfFailure_c, isBootStrap, 
+                                               IRIndex, reconcile, NIBMsg_, 
+                                               isBootStrap_, toBeScheduledIRs, 
+                                               key, op1_, op2, transaction_, 
+                                               nextIR, stepOfFailure_c, 
+                                               isBootStrap, debug, 
                                                nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_co, 
                                                transaction_c, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
-                                               debug_ofc, monitoringEvent, 
-                                               setIRsToReset, resetIR, 
-                                               stepOfFailure, msg, 
+                                               monitoringEvent, setIRsToReset, 
+                                               resetIR, stepOfFailure, msg, 
                                                op_ir_status_change, 
                                                op_first_install, transaction, 
                                                controllerFailedModules >>
@@ -4844,15 +4901,16 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           failedSet, statusResolveMsg, 
                                           recoveredElem, nextTrans, value, 
                                           rowRemove_, IR2Remove, send_NIB_back, 
-                                          stepOfFailure_, IRIndex, NIBMsg_, 
-                                          isBootStrap_, toBeScheduledIRs, key, 
-                                          op1_, op2, transaction_, nextIR, 
+                                          stepOfFailure_, IRIndex, reconcile, 
+                                          NIBMsg_, isBootStrap_, 
+                                          toBeScheduledIRs, key, op1_, op2, 
+                                          transaction_, nextIR, 
                                           stepOfFailure_c, NIBMsg_O, 
-                                          isBootStrap, debug, nextIRToSent, 
-                                          rowIndex, rowRemove, 
-                                          stepOfFailure_co, transaction_c, 
-                                          NIBMsg, op1, IRQueue, 
-                                          op_ir_status_change_, debug_ofc, 
+                                          isBootStrap, debug, localIRSet, 
+                                          NIBIRSet, nextIRToSent, rowIndex, 
+                                          rowRemove, stepOfFailure_co, 
+                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          op_ir_status_change_, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, msg, 
                                           op_ir_status_change, 
@@ -4901,14 +4959,15 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                             recoveredElem, nextTrans, value, 
                                             rowRemove_, IR2Remove, 
                                             send_NIB_back, stepOfFailure_, 
-                                            IRIndex, NIBMsg_, isBootStrap_, 
-                                            toBeScheduledIRs, key, op1_, op2, 
-                                            transaction_, nextIR, 
-                                            stepOfFailure_c, NIBMsg_O, 
-                                            isBootStrap, debug, rowRemove, 
+                                            IRIndex, reconcile, NIBMsg_, 
+                                            isBootStrap_, toBeScheduledIRs, 
+                                            key, op1_, op2, transaction_, 
+                                            nextIR, stepOfFailure_c, NIBMsg_O, 
+                                            isBootStrap, debug, localIRSet, 
+                                            NIBIRSet, rowRemove, 
                                             stepOfFailure_co, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, debug_ofc, 
+                                            op_ir_status_change_, 
                                             monitoringEvent, setIRsToReset, 
                                             resetIR, stepOfFailure, msg, 
                                             op_ir_status_change, 
@@ -4916,6 +4975,7 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                             controllerFailedModules >>
 
 OFCUpdateIRQueueIRTag(self) == /\ pc[self] = "OFCUpdateIRQueueIRTag"
+                               /\ isNIBUp(NIBThreadID)
                                /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self], value |-> self]]
                                /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "UpdateIRTag", ops |-> <<op1'[self]>>]]
                                /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
@@ -4960,15 +5020,16 @@ OFCUpdateIRQueueIRTag(self) == /\ pc[self] = "OFCUpdateIRQueueIRTag"
                                                recoveredElem, nextTrans, value, 
                                                rowRemove_, IR2Remove, 
                                                send_NIB_back, stepOfFailure_, 
-                                               IRIndex, NIBMsg_, isBootStrap_, 
-                                               toBeScheduledIRs, key, op1_, 
-                                               op2, transaction_, nextIR, 
-                                               stepOfFailure_c, NIBMsg_O, 
-                                               isBootStrap, debug, 
+                                               IRIndex, reconcile, NIBMsg_, 
+                                               isBootStrap_, toBeScheduledIRs, 
+                                               key, op1_, op2, transaction_, 
+                                               nextIR, stepOfFailure_c, 
+                                               NIBMsg_O, isBootStrap, debug, 
+                                               localIRSet, NIBIRSet, 
                                                nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_co, 
                                                NIBMsg, IRQueue, 
-                                               op_ir_status_change_, debug_ofc, 
+                                               op_ir_status_change_, 
                                                monitoringEvent, setIRsToReset, 
                                                resetIR, stepOfFailure, msg, 
                                                op_ir_status_change, 
@@ -5034,17 +5095,18 @@ OFCStartSchedulingIR(self) == /\ pc[self] = "OFCStartSchedulingIR"
                                               recoveredElem, nextTrans, value, 
                                               rowRemove_, IR2Remove, 
                                               send_NIB_back, stepOfFailure_, 
-                                              IRIndex, NIBMsg_, isBootStrap_, 
-                                              toBeScheduledIRs, key, op1_, op2, 
-                                              transaction_, nextIR, 
-                                              stepOfFailure_c, NIBMsg_O, 
-                                              isBootStrap, debug, nextIRToSent, 
-                                              rowIndex, rowRemove, 
-                                              transaction_c, NIBMsg, op1, 
-                                              IRQueue, op_ir_status_change_, 
-                                              debug_ofc, monitoringEvent, 
-                                              setIRsToReset, resetIR, 
-                                              stepOfFailure, msg, 
+                                              IRIndex, reconcile, NIBMsg_, 
+                                              isBootStrap_, toBeScheduledIRs, 
+                                              key, op1_, op2, transaction_, 
+                                              nextIR, stepOfFailure_c, 
+                                              NIBMsg_O, isBootStrap, debug, 
+                                              localIRSet, NIBIRSet, 
+                                              nextIRToSent, rowIndex, 
+                                              rowRemove, transaction_c, NIBMsg, 
+                                              op1, IRQueue, 
+                                              op_ir_status_change_, 
+                                              monitoringEvent, setIRsToReset, 
+                                              resetIR, stepOfFailure, msg, 
                                               op_ir_status_change, 
                                               op_first_install, transaction, 
                                               controllerFailedModules >>
@@ -5054,14 +5116,10 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                       /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
                                       /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
-                                      /\ IF isNIBUp(NIBThreadID)
-                                            THEN /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
-                                                 /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
-                                                 /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
-                                            ELSE /\ TRUE
-                                                 /\ UNCHANGED << X2NIB, 
-                                                                 transaction_c, 
-                                                                 op1 >>
+                                      /\ isNIBUp(NIBThreadID)
+                                      /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
+                                      /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
+                                      /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
                                       /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                       /\ UNCHANGED << switchLock, 
                                                       controllerLock, 
@@ -5113,17 +5171,18 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
                                                       value, rowRemove_, 
                                                       IR2Remove, send_NIB_back, 
                                                       stepOfFailure_, IRIndex, 
-                                                      NIBMsg_, isBootStrap_, 
+                                                      reconcile, NIBMsg_, 
+                                                      isBootStrap_, 
                                                       toBeScheduledIRs, key, 
                                                       op1_, op2, transaction_, 
                                                       nextIR, stepOfFailure_c, 
                                                       NIBMsg_O, isBootStrap, 
-                                                      debug, nextIRToSent, 
+                                                      debug, localIRSet, 
+                                                      NIBIRSet, nextIRToSent, 
                                                       rowIndex, 
                                                       stepOfFailure_co, NIBMsg, 
                                                       IRQueue, 
                                                       op_ir_status_change_, 
-                                                      debug_ofc, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, msg, 
@@ -5147,14 +5206,10 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                 /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
                                       THEN /\ IF ~isSwitchSuspended(IR2SW[nextIRToSent[self]]) /\ IRStatusOFC[nextIRToSent[self]] = IR_NONE
                                                  THEN /\ IRStatusOFC' = [IRStatusOFC EXCEPT ![nextIRToSent[self]] = IR_SENT]
-                                                      /\ IF isNIBUp(NIBThreadID)
-                                                            THEN /\ op_ir_status_change_' = [op_ir_status_change_ EXCEPT ![self] = [table |-> NIBT_IR_STATUS, key |-> nextIRToSent[self], value |-> IR_SENT]]
-                                                                 /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change_'[self]>>]]
-                                                                 /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
-                                                            ELSE /\ TRUE
-                                                                 /\ UNCHANGED << X2NIB, 
-                                                                                 transaction_c, 
-                                                                                 op_ir_status_change_ >>
+                                                      /\ isNIBUp(NIBThreadID)
+                                                      /\ op_ir_status_change_' = [op_ir_status_change_ EXCEPT ![self] = [table |-> NIBT_IR_STATUS, key |-> nextIRToSent[self], value |-> IR_SENT]]
+                                                      /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change_'[self]>>]]
+                                                      /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
                                                       /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIRInner"]
                                                  ELSE /\ pc' = [pc EXCEPT ![self] = "OFCWaitForIRToHaveCorrectStatus"]
                                                       /\ UNCHANGED << IRStatusOFC, 
@@ -5205,17 +5260,17 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 recoveredElem, nextTrans, 
                                                 value, rowRemove_, IR2Remove, 
                                                 send_NIB_back, stepOfFailure_, 
-                                                IRIndex, NIBMsg_, isBootStrap_, 
-                                                toBeScheduledIRs, key, op1_, 
-                                                op2, transaction_, nextIR, 
-                                                stepOfFailure_c, NIBMsg_O, 
-                                                isBootStrap, debug, 
+                                                IRIndex, reconcile, NIBMsg_, 
+                                                isBootStrap_, toBeScheduledIRs, 
+                                                key, op1_, op2, transaction_, 
+                                                nextIR, stepOfFailure_c, 
+                                                NIBMsg_O, isBootStrap, debug, 
+                                                localIRSet, NIBIRSet, 
                                                 nextIRToSent, rowIndex, 
                                                 rowRemove, stepOfFailure_co, 
                                                 NIBMsg, op1, IRQueue, 
-                                                debug_ofc, monitoringEvent, 
-                                                setIRsToReset, resetIR, 
-                                                stepOfFailure, msg, 
+                                                monitoringEvent, setIRsToReset, 
+                                                resetIR, stepOfFailure, msg, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction, 
                                                 controllerFailedModules >>
@@ -5298,19 +5353,19 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         rowRemove_, IR2Remove, 
                                                         send_NIB_back, 
                                                         stepOfFailure_, 
-                                                        IRIndex, NIBMsg_, 
-                                                        isBootStrap_, 
+                                                        IRIndex, reconcile, 
+                                                        NIBMsg_, isBootStrap_, 
                                                         toBeScheduledIRs, key, 
                                                         op1_, op2, 
                                                         transaction_, nextIR, 
                                                         stepOfFailure_c, 
                                                         NIBMsg_O, isBootStrap, 
-                                                        debug, nextIRToSent, 
+                                                        debug, localIRSet, 
+                                                        NIBIRSet, nextIRToSent, 
                                                         rowIndex, rowRemove, 
                                                         transaction_c, NIBMsg, 
                                                         op1, IRQueue, 
                                                         op_ir_status_change_, 
-                                                        debug_ofc, 
                                                         monitoringEvent, 
                                                         setIRsToReset, resetIR, 
                                                         stepOfFailure, msg, 
@@ -5390,20 +5445,21 @@ OFCWaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "OFCWaitForIRToHaveCorrec
                                                          rowRemove_, IR2Remove, 
                                                          send_NIB_back, 
                                                          stepOfFailure_, 
-                                                         IRIndex, NIBMsg_, 
-                                                         isBootStrap_, 
+                                                         IRIndex, reconcile, 
+                                                         NIBMsg_, isBootStrap_, 
                                                          toBeScheduledIRs, key, 
                                                          op1_, op2, 
                                                          transaction_, nextIR, 
                                                          stepOfFailure_c, 
                                                          NIBMsg_O, isBootStrap, 
-                                                         debug, nextIRToSent, 
+                                                         debug, localIRSet, 
+                                                         NIBIRSet, 
+                                                         nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         debug_ofc, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
@@ -5487,20 +5543,21 @@ ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSe
                                                          rowRemove_, IR2Remove, 
                                                          send_NIB_back, 
                                                          stepOfFailure_, 
-                                                         IRIndex, NIBMsg_, 
-                                                         isBootStrap_, 
+                                                         IRIndex, reconcile, 
+                                                         NIBMsg_, isBootStrap_, 
                                                          toBeScheduledIRs, key, 
                                                          op1_, op2, 
                                                          transaction_, nextIR, 
                                                          stepOfFailure_c, 
                                                          NIBMsg_O, isBootStrap, 
-                                                         debug, nextIRToSent, 
+                                                         debug, localIRSet, 
+                                                         NIBIRSet, 
+                                                         nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         debug_ofc, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
@@ -5521,14 +5578,10 @@ OFCRemoveIRFromIRQueueOFC(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC"
                                               /\ IF (stepOfFailure_co'[self] # 1)
                                                     THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
                                                          /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
-                                                         /\ IF isNIBUp(NIBThreadID)
-                                                               THEN /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
-                                                                    /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
-                                                                    /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
-                                                               ELSE /\ TRUE
-                                                                    /\ UNCHANGED << X2NIB, 
-                                                                                    transaction_c, 
-                                                                                    op1 >>
+                                                         /\ isNIBUp(NIBThreadID)
+                                                         /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
+                                                         /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
+                                                         /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
                                                     ELSE /\ TRUE
                                                          /\ UNCHANGED << IRQueueOFC, 
                                                                          X2NIB, 
@@ -5594,15 +5647,17 @@ OFCRemoveIRFromIRQueueOFC(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC"
                                                    value, rowRemove_, 
                                                    IR2Remove, send_NIB_back, 
                                                    stepOfFailure_, IRIndex, 
-                                                   NIBMsg_, isBootStrap_, 
+                                                   reconcile, NIBMsg_, 
+                                                   isBootStrap_, 
                                                    toBeScheduledIRs, key, op1_, 
                                                    op2, transaction_, nextIR, 
                                                    stepOfFailure_c, NIBMsg_O, 
                                                    isBootStrap, debug, 
+                                                   localIRSet, NIBIRSet, 
                                                    nextIRToSent, rowIndex, 
                                                    NIBMsg, IRQueue, 
                                                    op_ir_status_change_, 
-                                                   debug_ofc, monitoringEvent, 
+                                                   monitoringEvent, 
                                                    setIRsToReset, resetIR, 
                                                    stepOfFailure, msg, 
                                                    op_ir_status_change, 
@@ -5700,7 +5755,9 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              IR2Remove, 
                                                              send_NIB_back, 
                                                              stepOfFailure_, 
-                                                             IRIndex, NIBMsg_, 
+                                                             IRIndex, 
+                                                             reconcile, 
+                                                             NIBMsg_, 
                                                              isBootStrap_, 
                                                              toBeScheduledIRs, 
                                                              key, op1_, op2, 
@@ -5709,7 +5766,8 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              stepOfFailure_c, 
                                                              NIBMsg_O, 
                                                              isBootStrap, 
-                                                             debug, 
+                                                             debug, localIRSet, 
+                                                             NIBIRSet, 
                                                              nextIRToSent, 
                                                              rowIndex, 
                                                              rowRemove, 
@@ -5718,7 +5776,6 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              NIBMsg, op1, 
                                                              IRQueue, 
                                                              op_ir_status_change_, 
-                                                             debug_ofc, 
                                                              monitoringEvent, 
                                                              setIRsToReset, 
                                                              resetIR, 
@@ -5800,20 +5857,22 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     value, rowRemove_, 
                                                     IR2Remove, send_NIB_back, 
                                                     stepOfFailure_, IRIndex, 
-                                                    NIBMsg_, isBootStrap_, 
+                                                    reconcile, NIBMsg_, 
+                                                    isBootStrap_, 
                                                     toBeScheduledIRs, key, 
                                                     op1_, op2, transaction_, 
                                                     nextIR, stepOfFailure_c, 
                                                     NIBMsg_O, isBootStrap, 
-                                                    debug, nextIRToSent, 
+                                                    debug, localIRSet, 
+                                                    NIBIRSet, nextIRToSent, 
                                                     rowIndex, rowRemove, 
                                                     stepOfFailure_co, 
                                                     transaction_c, NIBMsg, op1, 
                                                     IRQueue, 
                                                     op_ir_status_change_, 
-                                                    debug_ofc, setIRsToReset, 
-                                                    resetIR, stepOfFailure, 
-                                                    msg, op_ir_status_change, 
+                                                    setIRsToReset, resetIR, 
+                                                    stepOfFailure, msg, 
+                                                    op_ir_status_change, 
                                                     op_first_install, 
                                                     transaction, 
                                                     controllerFailedModules >>
@@ -5904,6 +5963,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    send_NIB_back, 
                                                                    stepOfFailure_, 
                                                                    IRIndex, 
+                                                                   reconcile, 
                                                                    NIBMsg_, 
                                                                    isBootStrap_, 
                                                                    toBeScheduledIRs, 
@@ -5915,6 +5975,8 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg_O, 
                                                                    isBootStrap, 
                                                                    debug, 
+                                                                   localIRSet, 
+                                                                   NIBIRSet, 
                                                                    nextIRToSent, 
                                                                    rowIndex, 
                                                                    rowRemove, 
@@ -5923,7 +5985,6 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg, op1, 
                                                                    IRQueue, 
                                                                    op_ir_status_change_, 
-                                                                   debug_ofc, 
                                                                    monitoringEvent, 
                                                                    setIRsToReset, 
                                                                    resetIR, 
@@ -5984,15 +6045,16 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, op1_, op2, transaction_, 
-                                             nextIR, stepOfFailure_c, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
-                                             stepOfFailure_co, transaction_c, 
-                                             NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, NIBMsg_O, 
+                                             isBootStrap, debug, localIRSet, 
+                                             NIBIRSet, nextIRToSent, rowIndex, 
+                                             rowRemove, stepOfFailure_co, 
+                                             transaction_c, NIBMsg, op1, 
+                                             IRQueue, op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              op_ir_status_change, 
@@ -6063,17 +6125,19 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    value, rowRemove_, 
                                                    IR2Remove, send_NIB_back, 
                                                    stepOfFailure_, IRIndex, 
-                                                   NIBMsg_, isBootStrap_, 
+                                                   reconcile, NIBMsg_, 
+                                                   isBootStrap_, 
                                                    toBeScheduledIRs, key, op1_, 
                                                    op2, transaction_, nextIR, 
                                                    stepOfFailure_c, NIBMsg_O, 
                                                    isBootStrap, debug, 
+                                                   localIRSet, NIBIRSet, 
                                                    nextIRToSent, rowIndex, 
                                                    rowRemove, stepOfFailure_co, 
                                                    transaction_c, NIBMsg, op1, 
                                                    IRQueue, 
                                                    op_ir_status_change_, 
-                                                   debug_ofc, monitoringEvent, 
+                                                   monitoringEvent, 
                                                    setIRsToReset, resetIR, msg, 
                                                    op_ir_status_change, 
                                                    op_first_install, 
@@ -6155,7 +6219,8 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           IR2Remove, 
                                                           send_NIB_back, 
                                                           stepOfFailure_, 
-                                                          IRIndex, NIBMsg_, 
+                                                          IRIndex, reconcile, 
+                                                          NIBMsg_, 
                                                           isBootStrap_, 
                                                           toBeScheduledIRs, 
                                                           key, op1_, op2, 
@@ -6163,13 +6228,13 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           stepOfFailure_c, 
                                                           NIBMsg_O, 
                                                           isBootStrap, debug, 
+                                                          localIRSet, NIBIRSet, 
                                                           nextIRToSent, 
                                                           rowIndex, rowRemove, 
                                                           stepOfFailure_co, 
                                                           transaction_c, 
                                                           NIBMsg, op1, IRQueue, 
                                                           op_ir_status_change_, 
-                                                          debug_ofc, 
                                                           monitoringEvent, 
                                                           setIRsToReset, 
                                                           resetIR, 
@@ -6230,15 +6295,15 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            recoveredElem, nextTrans, value, 
                                            rowRemove_, IR2Remove, 
                                            send_NIB_back, stepOfFailure_, 
-                                           IRIndex, NIBMsg_, isBootStrap_, 
-                                           toBeScheduledIRs, key, op1_, op2, 
-                                           transaction_, nextIR, 
+                                           IRIndex, reconcile, NIBMsg_, 
+                                           isBootStrap_, toBeScheduledIRs, key, 
+                                           op1_, op2, transaction_, nextIR, 
                                            stepOfFailure_c, NIBMsg_O, 
-                                           isBootStrap, debug, nextIRToSent, 
-                                           rowIndex, rowRemove, 
-                                           stepOfFailure_co, transaction_c, 
-                                           NIBMsg, op1, IRQueue, 
-                                           op_ir_status_change_, debug_ofc, 
+                                           isBootStrap, debug, localIRSet, 
+                                           NIBIRSet, nextIRToSent, rowIndex, 
+                                           rowRemove, stepOfFailure_co, 
+                                           transaction_c, NIBMsg, op1, IRQueue, 
+                                           op_ir_status_change_, 
                                            monitoringEvent, resetIR, 
                                            stepOfFailure, msg, 
                                            op_ir_status_change, 
@@ -6295,15 +6360,15 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      failedSet, statusResolveMsg, 
                                      recoveredElem, nextTrans, value, 
                                      rowRemove_, IR2Remove, send_NIB_back, 
-                                     stepOfFailure_, IRIndex, NIBMsg_, 
-                                     isBootStrap_, toBeScheduledIRs, key, op1_, 
-                                     op2, transaction_, nextIR, 
+                                     stepOfFailure_, IRIndex, reconcile, 
+                                     NIBMsg_, isBootStrap_, toBeScheduledIRs, 
+                                     key, op1_, op2, transaction_, nextIR, 
                                      stepOfFailure_c, NIBMsg_O, isBootStrap, 
-                                     debug, nextIRToSent, rowIndex, rowRemove, 
-                                     stepOfFailure_co, transaction_c, NIBMsg, 
-                                     op1, IRQueue, op_ir_status_change_, 
-                                     debug_ofc, monitoringEvent, stepOfFailure, 
-                                     msg, op_ir_status_change, 
+                                     debug, localIRSet, NIBIRSet, nextIRToSent, 
+                                     rowIndex, rowRemove, stepOfFailure_co, 
+                                     transaction_c, NIBMsg, op1, IRQueue, 
+                                     op_ir_status_change_, monitoringEvent, 
+                                     stepOfFailure, msg, op_ir_status_change, 
                                      op_first_install, transaction, 
                                      controllerFailedModules >>
 
@@ -6385,6 +6450,7 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    send_NIB_back, 
                                                                    stepOfFailure_, 
                                                                    IRIndex, 
+                                                                   reconcile, 
                                                                    NIBMsg_, 
                                                                    isBootStrap_, 
                                                                    toBeScheduledIRs, 
@@ -6396,6 +6462,8 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg_O, 
                                                                    isBootStrap, 
                                                                    debug, 
+                                                                   localIRSet, 
+                                                                   NIBIRSet, 
                                                                    nextIRToSent, 
                                                                    rowIndex, 
                                                                    rowRemove, 
@@ -6404,7 +6472,6 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg, op1, 
                                                                    IRQueue, 
                                                                    op_ir_status_change_, 
-                                                                   debug_ofc, 
                                                                    monitoringEvent, 
                                                                    setIRsToReset, 
                                                                    resetIR, 
@@ -6434,13 +6501,13 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                 /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                 /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                 /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                          "Failure of assertion at line 2006, column 9.")
+                                          "Failure of assertion at line 2037, column 9.")
                                 /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                          "Failure of assertion at line 2007, column 9.")
+                                          "Failure of assertion at line 2038, column 9.")
                                 /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                       THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                       ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 2028, column 13.")
+                                                     "Failure of assertion at line 2059, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                 /\ UNCHANGED << switchLock, FirstInstall, 
                                                 sw_fail_ordering_var, 
@@ -6484,18 +6551,18 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                                 recoveredElem, nextTrans, 
                                                 value, rowRemove_, IR2Remove, 
                                                 send_NIB_back, stepOfFailure_, 
-                                                IRIndex, NIBMsg_, isBootStrap_, 
-                                                toBeScheduledIRs, key, op1_, 
-                                                op2, transaction_, nextIR, 
-                                                stepOfFailure_c, NIBMsg_O, 
-                                                isBootStrap, debug, 
+                                                IRIndex, reconcile, NIBMsg_, 
+                                                isBootStrap_, toBeScheduledIRs, 
+                                                key, op1_, op2, transaction_, 
+                                                nextIR, stepOfFailure_c, 
+                                                NIBMsg_O, isBootStrap, debug, 
+                                                localIRSet, NIBIRSet, 
                                                 nextIRToSent, rowIndex, 
                                                 rowRemove, stepOfFailure_co, 
                                                 transaction_c, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
-                                                debug_ofc, monitoringEvent, 
-                                                setIRsToReset, resetIR, 
-                                                stepOfFailure, 
+                                                monitoringEvent, setIRsToReset, 
+                                                resetIR, stepOfFailure, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction, 
                                                 controllerFailedModules >>
@@ -6571,20 +6638,21 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          rowRemove_, IR2Remove, 
                                                          send_NIB_back, 
                                                          stepOfFailure_, 
-                                                         IRIndex, NIBMsg_, 
-                                                         isBootStrap_, 
+                                                         IRIndex, reconcile, 
+                                                         NIBMsg_, isBootStrap_, 
                                                          toBeScheduledIRs, key, 
                                                          op1_, op2, 
                                                          transaction_, nextIR, 
                                                          stepOfFailure_c, 
                                                          NIBMsg_O, isBootStrap, 
-                                                         debug, nextIRToSent, 
+                                                         debug, localIRSet, 
+                                                         NIBIRSet, 
+                                                         nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         debug_ofc, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
@@ -6653,15 +6721,16 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                              statusResolveMsg, recoveredElem, 
                                              nextTrans, value, rowRemove_, 
                                              IR2Remove, send_NIB_back, 
-                                             stepOfFailure_, IRIndex, NIBMsg_, 
-                                             isBootStrap_, toBeScheduledIRs, 
-                                             key, op1_, op2, transaction_, 
-                                             nextIR, stepOfFailure_c, NIBMsg_O, 
-                                             isBootStrap, debug, nextIRToSent, 
-                                             rowIndex, rowRemove, 
-                                             stepOfFailure_co, transaction_c, 
-                                             NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, debug_ofc, 
+                                             stepOfFailure_, IRIndex, 
+                                             reconcile, NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, NIBMsg_O, 
+                                             isBootStrap, debug, localIRSet, 
+                                             NIBIRSet, nextIRToSent, rowIndex, 
+                                             rowRemove, stepOfFailure_co, 
+                                             transaction_c, NIBMsg, op1, 
+                                             IRQueue, op_ir_status_change_, 
                                              monitoringEvent, setIRsToReset, 
                                              resetIR, stepOfFailure, msg, 
                                              controllerFailedModules >>
@@ -6677,7 +6746,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2065, column 13.")
+                                               "Failure of assertion at line 2096, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -6722,18 +6791,18 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                                 recoveredElem, nextTrans, 
                                                 value, rowRemove_, IR2Remove, 
                                                 send_NIB_back, stepOfFailure_, 
-                                                IRIndex, NIBMsg_, isBootStrap_, 
-                                                toBeScheduledIRs, key, op1_, 
-                                                op2, transaction_, nextIR, 
-                                                stepOfFailure_c, NIBMsg_O, 
-                                                isBootStrap, debug, 
+                                                IRIndex, reconcile, NIBMsg_, 
+                                                isBootStrap_, toBeScheduledIRs, 
+                                                key, op1_, op2, transaction_, 
+                                                nextIR, stepOfFailure_c, 
+                                                NIBMsg_O, isBootStrap, debug, 
+                                                localIRSet, NIBIRSet, 
                                                 nextIRToSent, rowIndex, 
                                                 rowRemove, stepOfFailure_co, 
                                                 transaction_c, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
-                                                debug_ofc, monitoringEvent, 
-                                                setIRsToReset, resetIR, 
-                                                stepOfFailure, msg, 
+                                                monitoringEvent, setIRsToReset, 
+                                                resetIR, stepOfFailure, msg, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction >>
 
@@ -6890,6 +6959,6 @@ Debug == (Len(X2NIB) < 10)
 
 =============================================================================
 \* Modification History
-\* Last modified Mon Mar 15 12:23:49 PDT 2021 by zmy
+\* Last modified Sat Mar 20 20:13:29 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
