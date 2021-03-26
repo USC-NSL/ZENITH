@@ -1,0 +1,2154 @@
+<<
+[
+ _TEAction |-> [
+   position |-> 1,
+   name |-> "Initial predicate",
+   location |-> "Unknown location"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 0,
+ DAGQueue |-> (rc0 :> <<>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 0 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [dag |-> 0]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 1),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [type |-> 0]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [type |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqProc" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 0),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> <<>> @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<{[sw |-> s0, partial |-> 0, transient |-> 0]}>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 2,
+   name |-> "ControllerTEProc",
+   location |-> "line 3458, col 27 to line 3515, col 68 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 0 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [dag |-> 0]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [type |-> 0]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [type |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqProc" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> <<>> @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<{[sw |-> s0, partial |-> 0, transient |-> 0]}>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 3,
+   name |-> "ControllerSeqProc",
+   location |-> "line 3519, col 28 to line 3560, col 69 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 0 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [type |-> 0]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [type |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> <<>> @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<{[sw |-> s0, partial |-> 0, transient |-> 0]}>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 4,
+   name |-> "SwitchFailure",
+   location |-> "line 3038, col 24 to line 3179, col 70 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [type |-> 0]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<[swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 5,
+   name |-> "ControllerEventHandlerProc",
+   location |-> "line 4444, col 37 to line 4504, col 78 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerSuspendSW" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<[swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 6,
+   name |-> "ControllerSeqScheduleDAG",
+   location |-> "line 3562, col 35 to line 3615, col 76 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_RUN @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerSuspendSW" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "SchedulerMechanism" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<[swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 7,
+   name |-> "ControllerSuspendSW",
+   location |-> "line 4594, col 30 to line 4647, col 71 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<[sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEvenHanlderRemoveEventFromQueue" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "SchedulerMechanism" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<[swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 8,
+   name |-> "ControllerEvenHanlderRemoveEventFromQueue",
+   location |-> "line 4506, col 52 to line 4592, col 93 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<[sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 0),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "SchedulerMechanism" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 9,
+   name |-> "SchedulerMechanism",
+   location |-> "line 3617, col 29 to line 3675, col 70 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<[sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_RUN @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> STATUS_START_SCHEDULING, next |-> 1] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [type |-> 0]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ScheduleTheIR" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 10,
+   name |-> "RCSNIBEventHndlerProc",
+   location |-> "line 3392, col 32 to line 3454, col 73 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 1,
+ DAGQueue |-> (rc0 :> <<[id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 0 @@
+  2 :> 1 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<[sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> STATUS_START_SCHEDULING, next |-> 1] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ScheduleTheIR" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 1),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [type |-> 0]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 11,
+   name |-> "ControllerTEProc",
+   location |-> "line 3458, col 27 to line 3515, col 68 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> ( rc0 :>
+      << [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]],
+         [id |-> 2, dag |-> [v |-> {4}, e |-> {}]] >> ),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> STATUS_START_SCHEDULING, next |-> 1] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ScheduleTheIR" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {1}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 12,
+   name |-> "ScheduleTheIR",
+   location |-> "line 3677, col 24 to line 3729, col 70 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> ( rc0 :>
+      << [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]],
+         [id |-> 2, dag |-> [v |-> {4}, e |-> {}]] >> ),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> NO_TAG, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqProc" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 13,
+   name |-> "ControllerSeqProc",
+   location |-> "line 3519, col 28 to line 3560, col 69 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> ( rc0 :>
+      << [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]],
+         [id |-> 2, dag |-> [v |-> {4}, e |-> {}]] >> ),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> NO_TAG, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<IR_UNLOCK, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 0),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThread" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> -1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 14,
+   name |-> "ControllerThread",
+   location |-> "line 3810, col 27 to line 3872, col 68 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> ( rc0 :>
+      << [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]],
+         [id |-> 2, dag |-> [v |-> {4}, e |-> {}]] >> ),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "ControllerThreadSendIR" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 15,
+   name |-> "ControllerThreadSendIR",
+   location |-> "line 3874, col 33 to line 3935, col 74 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> ( rc0 :>
+      << [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]],
+         [id |-> 2, dag |-> [v |-> {4}, e |-> {}]] >> ),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 16,
+   name |-> "ControllerSeqScheduleDAG",
+   location |-> "line 3562, col 35 to line 3615, col 76 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 1, dag |-> [v |-> {1, 2}, e |-> {<<1, 2>>}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqProc" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 17,
+   name |-> "ControllerSeqProc",
+   location |-> "line 3519, col 28 to line 3560, col 69 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 2, dag |-> [v |-> {4}, e |-> {}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 18,
+   name |-> "ControllerSeqScheduleDAG",
+   location |-> "line 3562, col 35 to line 3615, col 76 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 2, dag |-> [v |-> {4}, e |-> {}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 1),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "SchedulerMechanism" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {4}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 19,
+   name |-> "SchedulerMechanism",
+   location |-> "line 3617, col 29 to line 3675, col 70 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {4}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> STATUS_START_SCHEDULING, next |-> 4] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 2, dag |-> [v |-> {4}, e |-> {}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 4),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ScheduleTheIR" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {4}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 20,
+   name |-> "ScheduleTheIR",
+   location |-> "line 3677, col 24 to line 3729, col 70 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1], [tag |-> NO_TAG, IR |-> 4]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {4}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 2, dag |-> [v |-> {4}, e |-> {}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 4),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqProc" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+],
+[
+ _TEAction |-> [
+   position |-> 21,
+   name |-> "ControllerSeqProc",
+   location |-> "line 3519, col 28 to line 3560, col 69 of module SwitchPermanentFailure"
+ ],
+ ContProcSet |-> {<<ofc0, t0>>, <<ofc0, CONT_MONITOR>>, <<ofc0, CONT_EVENT>>, <<rc0, CONT_SEQ>>, <<rc0, CONT_TE>>, <<rc0, NIB_EVENT_HANDLER>>},
+ DAGID |-> 2,
+ DAGQueue |-> (rc0 :> <<[id |-> 2, dag |-> [v |-> {4}, e |-> {}]]>>),
+ DAGStaleOrNot |-> ( 0 :> 1 @@
+  1 :> 1 @@
+  2 :> 0 @@
+  3 :> 1 @@
+  4 :> 1 @@
+  5 :> 1 @@
+  6 :> 1 @@
+  7 :> 1 @@
+  8 :> 1 @@
+  9 :> 1 @@
+  10 :> 1 @@
+  11 :> 1 @@
+  12 :> 1 @@
+  13 :> 1 @@
+  14 :> 1 @@
+  15 :> 1 ),
+ FirstInstall |-> <<0, 0, 0, 0>>,
+ IRQueueNIB |-> <<[tag |-> <<ofc0, t0>>, IR |-> 1], [tag |-> NO_TAG, IR |-> 4]>>,
+ IRStatus |-> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>,
+ Installer2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ MaxDAGID |-> 15,
+ NicAsic2OfaBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2InstallerBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ Ofa2NicAsicBuff |-> (s0 :> <<>> @@ s1 :> <<>>),
+ RCIRStatus |-> (rc0 :> <<IR_NONE, IR_NONE, IR_NONE, IR_NONE>>),
+ RCNIBEventQueue |-> (rc0 :> <<>>),
+ RCSwSuspensionStatus |-> (rc0 :> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN)),
+ RecoveryStatus |-> ( s0 :> [partial |-> 0, transient |-> 0] @@
+  s1 :> [partial |-> 0, transient |-> 0] ),
+ SetScheduledIRs |-> (s0 :> {1} @@ s1 :> {4}),
+ SwProcSet |-> {<<SW_RESOLVE_PROC, s0>>, <<SW_RESOLVE_PROC, s1>>, <<NIC_ASIC_IN, s0>>, <<NIC_ASIC_IN, s1>>, <<SW_FAILURE_PROC, s0>>, <<SW_FAILURE_PROC, s1>>, <<INSTALLER, s0>>, <<INSTALLER, s1>>, <<OFA_IN, s0>>, <<OFA_IN, s1>>, <<OFA_OUT, s0>>, <<OFA_OUT, s1>>, <<NIC_ASIC_OUT, s0>>, <<NIC_ASIC_OUT, s1>>},
+ SwSuspensionStatus |-> (s0 :> SW_SUSPEND @@ s1 :> SW_RUN),
+ TCAM |-> (s0 :> <<>> @@ s1 :> <<>>),
+ TEEventQueue |-> (rc0 :> <<>>),
+ controlMsgCounter |-> (s0 :> 1 @@ s1 :> 0),
+ controller2Switch |-> (s0 :> <<>> @@ s1 :> <<>>),
+ controllerFailedModules |-> (<<ofc0, WATCH_DOG>> :> {} @@ <<rc0, WATCH_DOG>> :> {}),
+ controllerLock |-> <<NO_LOCK, NO_LOCK>>,
+ controllerStateNIB |-> (<<ofc0, t0>> :> [type |-> STATUS_LOCKING, next |-> 1] @@ <<ofc0, CONT_MONITOR>> :> [type |-> NO_STATUS] @@ <<ofc0, CONT_EVENT>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_SEQ>> :> [type |-> NO_STATUS] @@ <<rc0, CONT_TE>> :> [type |-> NO_STATUS] @@ <<rc0, NIB_EVENT_HANDLER>> :> [type |-> NO_STATUS]),
+ controllerSubmoduleFailNum |-> (ofc0 :> 0 @@ rc0 :> 0),
+ controllerSubmoduleFailStat |-> (<<ofc0, t0>> :> NotFailed @@ <<ofc0, CONT_MONITOR>> :> NotFailed @@ <<ofc0, CONT_EVENT>> :> NotFailed @@ <<rc0, CONT_SEQ>> :> NotFailed @@ <<rc0, CONT_TE>> :> NotFailed @@ <<rc0, NIB_EVENT_HANDLER>> :> NotFailed),
+ currDAG |-> (<<rc0, CONT_SEQ>> :> [id |-> 2, dag |-> [v |-> {4}, e |-> {}]]),
+ currSetDownSw |-> (<<rc0, CONT_TE>> :> {s0}),
+ egressMsg |-> (<<NIC_ASIC_OUT, s0>> :> [type |-> 0] @@ <<NIC_ASIC_OUT, s1>> :> [type |-> 0]),
+ event |-> (<<rc0, NIB_EVENT_HANDLER>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ failedElem |-> (<<SW_FAILURE_PROC, s0>> :> "" @@ <<SW_FAILURE_PROC, s1>> :> ""),
+ failedSet |-> (<<SW_RESOLVE_PROC, s0>> :> {} @@ <<SW_RESOLVE_PROC, s1>> :> {}),
+ idThreadWorkingOnIR |-> <<t0, IR_UNLOCK, IR_UNLOCK, IR_UNLOCK>>,
+ ingressIR |-> (<<NIC_ASIC_IN, s0>> :> [type |-> 0] @@ <<NIC_ASIC_IN, s1>> :> [type |-> 0]),
+ ingressPkt |-> (<<SW_SIMPLE_ID, s0>> :> [type |-> 0] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> 0]),
+ init |-> (<<rc0, CONT_TE>> :> 0),
+ installedIRs |-> <<>>,
+ installerInIR |-> (<<INSTALLER, s0>> :> 0 @@ <<INSTALLER, s1>> :> 0),
+ masterState |-> [ofc0 |-> "primary", rc0 |-> "primary"],
+ monitoringEvent |-> (<<ofc0, CONT_EVENT>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN]),
+ msg |-> (<<ofc0, CONT_MONITOR>> :> [type |-> 0]),
+ nextIR |-> (<<rc0, CONT_SEQ>> :> 4),
+ nextIRToSent |-> (<<ofc0, t0>> :> 1),
+ notFailedSet |-> (<<SW_FAILURE_PROC, s0>> :> {} @@ <<SW_FAILURE_PROC, s1>> :> {}),
+ obj |-> (<<SW_FAILURE_PROC, s0>> :> [sw |-> s0, partial |-> 0, transient |-> 0] @@ <<SW_FAILURE_PROC, s1>> :> [type |-> 0]),
+ ofaInMsg |-> (<<OFA_IN, s0>> :> [type |-> 0] @@ <<OFA_IN, s1>> :> [type |-> 0]),
+ ofaOutConfirmation |-> (<<OFA_OUT, s0>> :> 0 @@ <<OFA_OUT, s1>> :> 0),
+ pc |-> (<<SW_RESOLVE_PROC, s0>> :> "SwitchResolveFailure" @@ <<SW_RESOLVE_PROC, s1>> :> "SwitchResolveFailure" @@ <<NIC_ASIC_IN, s0>> :> "SwitchRcvPacket" @@ <<NIC_ASIC_IN, s1>> :> "SwitchRcvPacket" @@ <<ofc0, t0>> :> "WaitForIRToHaveCorrectStatus" @@ <<ofc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<ofc0, CONT_MONITOR>> :> "ControllerMonitorCheckIfMastr" @@ <<ofc0, CONT_EVENT>> :> "ControllerEventHandlerProc" @@ <<SW_FAILURE_PROC, s0>> :> "SwitchFailure" @@ <<SW_FAILURE_PROC, s1>> :> "SwitchFailure" @@ <<GHOST_UNLOCK_PROC, s0>> :> "ghostProc" @@ <<GHOST_UNLOCK_PROC, s1>> :> "ghostProc" @@ <<INSTALLER, s0>> :> "SwitchInstallerProc" @@ <<INSTALLER, s1>> :> "SwitchInstallerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SwitchSimpleProcess" @@ <<SW_SIMPLE_ID, s1>> :> "SwitchSimpleProcess" @@ <<OFA_IN, s0>> :> "SwitchOfaProcIn" @@ <<OFA_IN, s1>> :> "SwitchOfaProcIn" @@ <<rc0, CONT_SEQ>> :> "ControllerSeqScheduleDAG" @@ <<rc0, CONT_TE>> :> "ControllerTEProc" @@ <<rc0, WATCH_DOG>> :> "ControllerWatchDogProc" @@ <<rc0, NIB_EVENT_HANDLER>> :> "RCSNIBEventHndlerProc" @@ <<OFA_OUT, s0>> :> "SwitchOfaProcOut" @@ <<OFA_OUT, s1>> :> "SwitchOfaProcOut" @@ <<NIC_ASIC_OUT, s0>> :> "SwitchFromOFAPacket" @@ <<NIC_ASIC_OUT, s1>> :> "SwitchFromOFAPacket"),
+ prev_dag_id |-> (<<rc0, CONT_TE>> :> 2),
+ recoveredElem |-> (<<SW_RESOLVE_PROC, s0>> :> "" @@ <<SW_RESOLVE_PROC, s1>> :> ""),
+ resetIR |-> (<<ofc0, CONT_EVENT>> :> 0),
+ rowIndex |-> (<<ofc0, t0>> :> 1),
+ rowRemove |-> (<<ofc0, t0>> :> -1),
+ setIRsToReset |-> (<<ofc0, CONT_EVENT>> :> {}),
+ statusMsg |-> (<<SW_FAILURE_PROC, s0>> :> [swID |-> s0, num |-> 1, type |-> NIC_ASIC_DOWN] @@ <<SW_FAILURE_PROC, s1>> :> <<>>),
+ statusResolveMsg |-> (<<SW_RESOLVE_PROC, s0>> :> <<>> @@ <<SW_RESOLVE_PROC, s1>> :> <<>>),
+ stepOfFailure |-> (<<ofc0, CONT_EVENT>> :> 0),
+ stepOfFailure_ |-> (<<rc0, CONT_SEQ>> :> 0),
+ stepOfFailure_c |-> (<<ofc0, t0>> :> 0),
+ swSeqChangedStatus |-> <<>>,
+ sw_fail_ordering_var |-> <<>>,
+ switch2Controller |-> <<>>,
+ switchLock |-> <<NO_LOCK, NO_LOCK>>,
+ switchOrdering |-> (s0 :> 1 @@ s1 :> 2),
+ switchStatus |-> ( s0 :>
+      [ cpu |-> Failed,
+        nicAsic |-> Failed,
+        ofa |-> Failed,
+        installer |-> Failed ] @@
+  s1 :>
+      [ cpu |-> NotFailed,
+        nicAsic |-> NotFailed,
+        ofa |-> NotFailed,
+        installer |-> NotFailed ] ),
+ toBeScheduledIRs |-> (<<rc0, CONT_SEQ>> :> {}),
+ topoChangeEvent |-> (<<rc0, CONT_TE>> :> [sw |-> s0, type |-> TOPO_MOD, state |-> SW_SUSPEND]),
+ workerThreadRanking |-> (t0 :> 1)
+]
+>>
