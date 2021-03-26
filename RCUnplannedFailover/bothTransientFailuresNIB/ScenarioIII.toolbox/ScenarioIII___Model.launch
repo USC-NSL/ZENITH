@@ -12,7 +12,7 @@
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
     <intAttribute key="fpBits" value="1"/>
-    <intAttribute key="fpIndex" value="123"/>
+    <intAttribute key="fpIndex" value="0"/>
     <booleanAttribute key="fpIndexRandom" value="true"/>
     <intAttribute key="maxHeapSize" value="33"/>
     <intAttribute key="maxSetSize" value="1000000"/>
@@ -21,7 +21,7 @@
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="transaction, egressMsg, nextIRToSent, IRStatus, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, NIBIRSet, IR2SW, ofaOutConfirmation, transaction_, SwProcSet, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, op_ir_status_change_, ContProcSet, op_first_install, controllerStateNIB, Installer2OfaBuff, IRQueue, swSeqChangedStatus, setIRsToReset, controlMsgCounter, switch2Controller, key, TCAM, masterState, sw_fail_ordering_var, IRQueueOFC, stepOfFailure_co, resetIR, msg, stepOfFailure_, Ofa2InstallerBuff, NIB2RC, Ofa2NicAsicBuff, controllerStateOFC, dependencyGraph, failedSet, recoveredElem, NIBThreadID, op_ir_status_change, SwSuspensionStatus, SwSuspensionStatusOFC, SetScheduledIRsOFC, NIB2OFC, controllerSubmoduleFailNum, NIBMsg, IRStatusOFC, ingressIR, nextIR, X2NIB_len, isBootStrap, pc, notFailedSet, stepOfFailure, op1, op2, workerThreadRanking, transaction_c, NIBMsg_, RCThreadID, NicAsic2OfaBuff, stepOfFailure_c, NIBUpdateForRC, toBeScheduledIRs, isBootStrap_, op1_, FirstInstall, controller2Switch, SetScheduledIRs, send_NIB_back, rowIndex, monitoringEvent, switchLock, controllerStateRC, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, NIBMsg_O, X2NIB, statusMsg, IRStatusRC, value, controllerLock, IR2Remove, IRQueueRC, rowRemove_, controllerFailedModules, localIRSet, IRIndex, SetScheduledIRsRC, SwSuspensionStatusRC"/>
+    <stringAttribute key="modelBehaviorVars" value="transaction, egressMsg, nextIRToSent, IRStatus, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IR2SW, ofaOutConfirmation, SwProcSet, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, ContProcSet, controllerStateNIB, Installer2OfaBuff, setIRsToReset, swSeqChangedStatus, controlMsgCounter, switch2Controller, RC2NIB_len, key, TCAM, masterState, sw_fail_ordering_var, resetIR, msg, stepOfFailure_, Ofa2InstallerBuff, NIB2RC, Ofa2NicAsicBuff, dependencyGraph, failedSet, recoveredElem, OFC2NIB, SwSuspensionStatus, NIB2OFC, controllerSubmoduleFailNum, NIBMsg, ingressIR, nextIR, pc, stepOfFailure, notFailedSet, op1, op2, workerThreadRanking, NicAsic2OfaBuff, stepOfFailure_c, toBeScheduledIRs, RC2NIB, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, value, controllerLock, controllerFailedModules, SetScheduledIRsRC"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -76,7 +76,7 @@
         <listEntry value="CONT_EVENT;;CONT_EVENT;1;0"/>
         <listEntry value="SW_RUN;;SW_RUN;1;0"/>
         <listEntry value="STATUS_SENT_DONE;;STATUS_SENT_DONE;1;0"/>
-        <listEntry value="MAX_NUM_CONTROLLER_SUB_FAILURE;;[ofc0 |-&gt; 1, rc0 |-&gt; 0, nib0 |-&gt; 0];0;0"/>
+        <listEntry value="MAX_NUM_CONTROLLER_SUB_FAILURE;;[ofc0 |-&gt; 1, rc0 |-&gt; 0];0;0"/>
         <listEntry value="SW_DOWN;;SW_DOWN;1;0"/>
         <listEntry value="IR_DONE;;IR_DONE;1;0"/>
         <listEntry value="SW_COMPLEX_MODEL;;SW_COMPLEX_MODEL;1;0"/>
@@ -89,19 +89,15 @@
         <listEntry value="NIC_ASIC_OUT;;NIC_ASIC_OUT;1;0"/>
         <listEntry value="INSTALLED_SUCCESSFULLY;;INSTALLED_SUCCESSFULLY;1;0"/>
         <listEntry value="WHICH_SWITCH_MODEL;;(s0 :&gt; SW_COMPLEX_MODEL) @@ (s1 :&gt; SW_COMPLEX_MODEL);0;0"/>
-        <listEntry value="NIBT_SET_SCHEDULED_IRS;;NIBT_SET_SCHEDULED_IRS;0;0"/>
-        <listEntry value="nib0;;nib0;0;0"/>
-        <listEntry value="CONT_NIB_OFC_EVENT;;CONT_NIB_OFC_EVENT;0;0"/>
-        <listEntry value="NULL;;NULL;0;0"/>
-        <listEntry value="CONT_RC_NIB_EVENT;;CONT_RC_NIB_EVENT;0;0"/>
-        <listEntry value="NIBT_IR_QUEUE;;NIBT_IR_QUEUE;0;0"/>
-        <listEntry value="CONT_OFC_NIB_EVENT;;CONT_OFC_NIB_EVENT;0;0"/>
-        <listEntry value="NIBT_CONTROLLER_STATE;;NIBT_CONTROLLER_STATE;0;0"/>
-        <listEntry value="CONT_NIB_RC_EVENT;;CONT_NIB_RC_EVENT;0;0"/>
-        <listEntry value="NIBT_IR_STATUS;;NIBT_IR_STATUS;0;0"/>
-        <listEntry value="InReconciliation;;InReconciliation;0;0"/>
-        <listEntry value="RC_FAILOVER;;RC_FAILOVER;0;0"/>
-        <listEntry value="NIBT_FIRST_INSTALL;;NIBT_FIRST_INSTALL;0;0"/>
+        <listEntry value="NIBT_SET_SCHEDULED_IRS;;;0;0"/>
+        <listEntry value="nib0;;;0;0"/>
+        <listEntry value="CONT_NIB_OFC_EVENT;;;0;0"/>
+        <listEntry value="NULL;;;0;0"/>
+        <listEntry value="CONT_RC_NIB_EVENT;;;0;0"/>
+        <listEntry value="NIBT_IR_QUEUE;;;0;0"/>
+        <listEntry value="CONT_OFC_NIB_EVENT;;;0;0"/>
+        <listEntry value="NIBT_CONTROLLER_STATE;;;0;0"/>
+        <listEntry value="CONT_NIB_RC_EVENT;;;0;0"/>
     </listAttribute>
     <intAttribute key="modelVersion" value="20191005"/>
     <intAttribute key="numberOfWorkers" value="8"/>
