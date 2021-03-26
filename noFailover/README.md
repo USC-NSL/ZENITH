@@ -1,5 +1,5 @@
-The order;
-I. Switch Partial Transient Failures.
-II. Controller Internal Transient Failures.
-III. Concurrent Transient Failures (Switch Partial Transient + Controller Internal Transient Failures).
-IV. Switch Complete Permanent Failures. 
+1. Switch Partial Transient Failures.
+2. Controller Internal Transient Failures.
+3. Concurrent Transient Failures (Switch Partial Transient + Controller Internal Transient Failures).
+4. Switch Complete Permanent Failures.
+ 

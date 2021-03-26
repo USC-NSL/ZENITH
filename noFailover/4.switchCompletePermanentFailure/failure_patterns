@@ -1,0 +1,6 @@
+Switch-level:
+	Complete Permanent Failure:
+		* Switch completely fails and never recovers. 
+
+OFC/RCS-level:
+	No Failure
