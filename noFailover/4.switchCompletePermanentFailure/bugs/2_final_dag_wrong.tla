@@ -1542,7 +1542,7 @@ ASSUME \A x \in 1..MaxNumIRs: x \in DOMAIN IR2SW
                             controllerModuleFails();
                             goto ControllerSeqStateReconciliation; 
                         elsif toBeScheduledIRs = {} then \* where while ends *\
-                            goto ControllerSeqProc;
+                            goto ControllerSeqScheduleDAG;
                         end if;  
                 end while;                                                
             end while;
@@ -2026,7 +2026,7 @@ ASSUME \A x \in 1..MaxNumIRs: x \in DOMAIN IR2SW
        
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a")
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750")
 \* Process variable stepOfFailure of process controllerSequencer at line 1478 col 50 changed to stepOfFailure_
 \* Process variable stepOfFailure of process controllerWorkerThreads at line 1581 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
@@ -3696,7 +3696,7 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                   /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
                                   /\ pc' = [pc EXCEPT ![self] = "ControllerSeqStateReconciliation"]
                              ELSE /\ IF toBeScheduledIRs'[self] = {}
-                                        THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSeqProc"]
+                                        THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSeqScheduleDAG"]
                                         ELSE /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                                   /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                   controllerSubmoduleFailStat >>
@@ -5251,9 +5251,9 @@ OperationsVariableSet == [ControllerSeqProc |-> {"IRStatus",
 
 \* Liveness Properties
 CorrectDAGInstalled == (\A x \in 1..MaxNumIRs: \/ /\ x \in FINAL_DAG.v
-                                                  /\ \E y \in DOMAIN installedIRs: installedIRs[y] = x
+                                                  /\ \E y \in DOMAIN TCAM[IR2SW[x]]: TCAM[IR2SW[x]][y] = x
                                                \/ /\ x \notin FINAL_DAG.v
-                                                  /\ ~\E y \in DOMAIN installedIRs: installedIRs[y] = x)
+                                                  /\ ~\E y \in DOMAIN TCAM[IR2SW[x]]: TCAM[IR2SW[x]][y] = x)
                                                   
 CorrectDoneStatusController == (\A x \in 1..MaxNumIRs: \/ /\ x \in FINAL_DAG.v
                                                           /\ IRStatus[x] = IR_DONE
@@ -5283,5 +5283,6 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
                                                          /\ <<x, y>> \notin whichDAG(x).e
 =============================================================================
 \* Modification History
-\* Last modified Fri Mar 26 03:54:25 PDT 2021 by root
+\* Last modified Fri Mar 26 17:39:29 PDT 2021 by root
 \* Created Mon Mar 15 17:28:25 PDT 2021 by root
+

@@ -16,3 +16,97 @@ assumption was there should be some sort of a timer in OFC that the worker waits
 timeout happens. I remove this part. 
 ======================================================================================================================
 ======================================================================================================================
+Bug#2: RC TE schedules DAG1({<<INSTALL IR1, INSTALL IR2>>}) → RC Sequencer reads DAG1 from the queue → RC Sequencer 
+schedules IR1 → OFC worker receives the IR and changes its flag to IR_SENT → OFC worker forwards the IR1 to sw0 → RC 
+NIB event handler receives the IR_MOD notification and changes the internal flag of IR1 to IR_SENT → sw0 installs the 
+IR1 and sends back the confirmation msg → OFC monitoring server receives the confirmation and updates the flag of IR 
+to IR_DONE → RC NIB event handler receives the IR_MOD notification and changes the internal flag of IR to IR_DONE → 
+sw0 fails → RC Sequencer checks whether DAG1 is stale before scheduling IR2 (DAG1 is not stale) → RC Sequencer 
+schedules IR2 → OFC worker receives the IR and changes its flag to IR_SENT → RC NIB event handler receives the 
+IR_MOD and changes state of IR2 to IR_SENT internally → OFC OF event handler suspends the switch → RC NIB event 
+handler receives the TOPO_MOD, suspends sw0 internally, and sends the notification to TE module → RC TE processes the 
+TOPO_MOD event, schedules a new DAG2({<<INSTALL IR4>>}), and marks DAG1 as stale → OFC worker forwards the IR2 to sw1 
+→ RC Sequencer finds out that DAG1 is stale, removes it from DAG queue and reads the next DAG → sw1 installs IR2 and 
+sends back the confirmation → OFC monitoring server receives the confirmation and changes the flag of IR2 to IR_DONE 
+→ RC NIB event handler receives the IR_MOD and changes the state of IR2 internally → RC sequencer schedules IR4 → OFC 
+worker receives the IR and changes its flag to IR_SENT → RC NIB event handler receives the IR_MOD and updates its 
+internal state → OFC worker forwards the IR → sw1 installs IR4 → ….
+
+Problem: The final DAG installed in the topology is not the same as DAG2. sw1 has both IR2 and IR4 in its TCAM.
+
+Solution: TE module should receive the IRStatus updates from RC NIB event handler, and schedules DAG based on the 
+topology and the installed IRs.
+======================================================================================================================
+======================================================================================================================
+TE algorithm: Upon a switch failure, TE marks the previous DAG as stale and schedules the new DAG based on the new 
+topology and current state of IRs. TE computation/recomputation is triggered only when topology changes.
+Bug#3: RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Sequencer reads DAG1 from the queue 
+→ RC Sequencer schedules IR1 → OFC worker receives the IR and changes its flag to IR_SENT → OFC worker forwards the 
+IR1 to sw0 → sw0 installs the IR1 and sends back the confirmation msg → OFC monitoring server receives the confirmation 
+and updates the flag of IR to IR_DONE → sw0 fails →  RC NIB event handler receives the IR_MOD notification and changes 
+the internal flag of IR to IR_SENT → OFC OF event handler suspends the switch → RC NIB event handler receives the IR_MOD 
+notification and changes the internal flag of IR to IR_DONE → RC NIB event handler receives the TOPO_MOD, suspends sw0 
+internally, and sends the notification to TE module → RC Sequencer checks whether DAG1 is stale before scheduling IR2 
+(DAG1 is not marked as stale) → RC Sequencer schedules IR2 → RC TE processes the TOPO_MOD event, schedules a new DAG 
+based on RCIRStatus and topology (DAG2({IR4 = INSTALL FLOW4})), and marks DAG1 as stale → OFC worker receives IR2 and 
+changes its flag to IR_SENT → OFC worker forwards IR2 → RC NIB event handler receives the IR_MOD notification and 
+changes the internal flag of IR2 to IR_SENT → sw1 receives IR2, installs flow2 and sends back the confirmation→ RC 
+Sequencer reads DAG2 from the queue → RC Sequencer schedules IR4 → OFC monitoring server receives the confirmation 
+and changes flag of IR2 to IR_DONE → RC NIB event handler receives the IR_MOD and changes the flag of IR2 to IR_DONE 
+→  OFC worker receives IR4 and changes its flag to IR_SENT → OFC worker forwards IR4 → sw1 receives IR4, installs 
+Flow4 and sends back the confirmation msg → ….
+
+Problem: The final DAG installed in the topology is not the same as DAG2. sw1 has both IR2 and IR4 in its TCAM.
+
+Solution: There are two possible solutions:
+1) Boss/Worker model for RC Sequencer. There is one Boss Sequencer and a set of Workers. The Boss receives the DAGs 
+and distributes them between the workers. Workers sequence the IRs and schedule the IRs. 
+
+In this architecture, when topology changes, TE marks some DAGs as stale and waits for the feedback from Boss Sequencer. 
+Boss Sequencer terminates the corresponding workers and sends TERMINATE_DONE to TE. The TE module then computes the 
+DAG based on the set of scheduledIRs.
+
+2) More than one shot TE computation. TE DAG computation is triggered on both Topology change and IRStatus change. 
+If the status of an IR which is not a part of DAG2 changes to something other than IR_NONE, schedule a deletion IR 
+in the next DAG. 
+
+The first one seems more reasonable as the Boss/Worker model is good for the sequencer to parallelize the tasks, 
+and also helps TE to be sure about the IRs on fly. (In our scenarios, we only need one worker). 
+======================================================================================================================
+======================================================================================================================
+TE algorithm: Upon a switch failure, TE marks the previous DAG as stale, sends the notification to Boss Sequencer and 
+waits for the feedback. It then schedules the new DAG based on the new topology and current state of IRs. 
+TE computation/recomputation is triggered only when topology changes.
+
+Bug#4: RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the notification 
+of the new DAG and adds DAG1 to the DAG Queue →  RC Worker Sequencer schedules IR1 → OFC worker receives the IR and 
+changes its flag to IR_SENT → OFC worker forward the IR → sw0 receives the IR, installs flow1 and sends back the 
+confirmation → RC NIB event handler receives the IR_MOD notification and changes the internal flag of IR1 to IR_SENT 
+→ OFC monitoring server receives the confirmation and changes the flag of IR1 to IR_DONE → RC NIB event handler receives 
+the IR_MOD notification and changes the internal flag of IR1 to IR_DONE → sw0 fails → RC worker Sequencer checks whether 
+DAG1 is stale before scheduling IR2, and since DAG1 is not stale, it schedules IR2 → OFC OF event handler suspends the 
+switch → RC NIB event handler receives the TOPO_MOD notification and suspends the sw0 →  OFC worker receives the IR2 and 
+changes its flag to IR_SENT → OFC worker forward the IR2 → sw1 installs FLOW2 and sends back the confirmation → RC TE 
+marks DAG1 as stale, sends the notification to RC Boss Sequencer and waits for the feedback → OFC monitoring server 
+receives the confirmation and updates state of IR2 to IR_DONE → RC Boss sequencer sends a stale signal to worker and 
+waits for the worker to unlock the DAG → RC worker sequencer catches the signal and unlocks the DAG → RC boss sequencer 
+changes state of DAG to DAG_NONE to enable the RC TE to continue → RC TE schedules DAG2({IR4 = INSTALL FLOW4}) → RC NIB 
+event handler receives the IR_MOD notification and changes the internal flag of IR2 to IR_SENT → RC NIB event handler 
+receives the IR_MOD notification and changes the internal flag of IR2 to IR_DONE → RC Boss sequencer receives DAG2 and 
+adds it to the worker’s queue → RC worker sequencer schedules IR4 → ….
+
+Problem: The final DAG installed in the topology is not the same as DAG2. sw1 has both IR2 and IR4 in its TCAM.
+
+Previously, we had a full virtual NIB implementation and as a result, IRs were added to the SetScheduledIRs by RC and 
+removed from that by OFC. In the full virtual NIB implementation, IRs which are scheduled by RC are always in one of 
+the following situations; (OFC first changes the state of IR to IR_SENT and then, removes the IR from the SetScheduledIRs)
+1) IRState[IR] = IR_SENT
+2) IRState[IR] = IR_DONE
+3) IR \in SetScheduledIRs
+Here, we have a Partially virtual/Partially actual NIB (actual NIB for IRState and topology, and virtual NIB for 
+setScheduledIRs). The issue happens because the OFC changes the state of IR to IR_SENT and submits a transaction 
+to NIB. After that, it removes the IR from the SetScheduledIRs. Since SetScheduledIRs is in the virtual part of the 
+NIB, IR is removed from RC’s SetScheduledIRs while the actual part of NIB has not yet processed IRState[IR] = IR_SENT. 
+This causes the RC TE module to think OFC is not working on the IR.
+
+Solution: RC should handle SetScheduledIRs completely and OFC should have no control on that.

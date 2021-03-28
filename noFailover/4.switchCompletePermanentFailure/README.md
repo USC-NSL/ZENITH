@@ -21,3 +21,7 @@ The parameters of the model are;
 9) FINAL_DAG 
 
 10) IR2SW
+
+11) IR2FLOW
+
+12) MaxNumFlowa
