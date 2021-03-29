@@ -1451,7 +1451,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             SwSuspensionStatusRC := SwSuspensionStatus;
             SetScheduledIRsRC := SetScheduledIRs;
             NIBUpdateForRC := TRUE;
-\*            NIB2RC := <<>>;
+            NIB2RC := <<>>;
             \* Change NIB status to up
             controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] := NotFailed ||
             controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] := NotFailed;
@@ -4230,6 +4230,7 @@ RCFailoverReadFromNIB(self) == /\ pc[self] = "RCFailoverReadFromNIB"
                                /\ SwSuspensionStatusRC' = SwSuspensionStatus
                                /\ SetScheduledIRsRC' = SetScheduledIRs
                                /\ NIBUpdateForRC' = TRUE
+                               /\ NIB2RC' = <<>>
                                /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![<<rc0,CONT_SEQ>>] = NotFailed,
                                                                                                      ![<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed]
                                /\ pc' = [pc EXCEPT ![self] = "Done"]
@@ -4257,7 +4258,7 @@ RCFailoverReadFromNIB(self) == /\ pc[self] = "RCFailoverReadFromNIB"
                                                IRQueueOFC, 
                                                SwSuspensionStatusOFC, 
                                                SetScheduledIRsOFC, NIB2OFC, 
-                                               NIB2RC, X2NIB, masterState, 
+                                               X2NIB, masterState, 
                                                controllerStateNIB, IRStatus, 
                                                SwSuspensionStatus, IRQueueNIB, 
                                                SetScheduledIRs, X2NIB_len, 
@@ -6923,6 +6924,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Thu Mar 25 22:37:54 PDT 2021 by zmy
+\* Last modified Mon Mar 29 11:44:04 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root

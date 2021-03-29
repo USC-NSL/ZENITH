@@ -1388,9 +1388,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         
         NIBSendBackIfAny:
             if send_NIB_back = "NIB2RC" then
-                if isRCUp(RCThreadID) then
+\*                if isRCUp(RCThreadID) then
                     NIB2RC := Append(NIB2RC, [value |-> value]);
-                end if;    
+\*                end if;    
             elsif send_NIB_back = "NIB2OFC" then
             \* TODO(@pooria): how to tell if OFC is up or not to send back the message?
 \*                if moduleIsUp(OFCThreadID) then
@@ -3987,10 +3987,7 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
 
 NIBSendBackIfAny(self) == /\ pc[self] = "NIBSendBackIfAny"
                           /\ IF send_NIB_back[self] = "NIB2RC"
-                                THEN /\ IF isRCUp(RCThreadID)
-                                           THEN /\ NIB2RC' = Append(NIB2RC, [value |-> value[self]])
-                                           ELSE /\ TRUE
-                                                /\ UNCHANGED NIB2RC
+                                THEN /\ NIB2RC' = Append(NIB2RC, [value |-> value[self]])
                                      /\ UNCHANGED NIB2OFC
                                 ELSE /\ IF send_NIB_back[self] = "NIB2OFC"
                                            THEN /\ NIB2OFC' = Append(NIB2OFC, [value |-> value[self]])
@@ -6923,6 +6920,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Thu Mar 25 22:37:54 PDT 2021 by zmy
+\* Last modified Mon Mar 29 11:30:16 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
