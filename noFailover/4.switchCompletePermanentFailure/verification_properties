@@ -1,1 +1,11 @@
+Liveness;
+1. only the correct DAG is eventually installed. 
+(All the IRs corresponding to the correct DAG are installed in the TCAMs, 
+and there is no extra IR in any of the TCAMs)
+2. IRs of the correct DAG have eventually IR_DONE flag in NIB.
 
+Safety; 
+1. No two workers working on the same IR. 
+2. No Redundant Installation (If the status of IR becomes IR_DONE for the first time, it should always remain IR_DONE)
+3. No violation of dependency graph of IRs for any DAG.
+4. Each IR is installed at most once.

@@ -489,7 +489,11 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* getIRSetToSuspend(CID, SID) == {x \in SetScheduledIRs[SID]: NIBIRStatus[x] = IR_NONE}           
                                                                              
         \*************************** Monitoring Server **********************
-        getIRIDForFlow(flowID) == CHOOSE x \in 1..MaxNumFlows: IR2FLOW[x] = flowID
+        getIRIDForFlow(flowID, irType) == CHOOSE x \in DOMAIN irTypeMapping: /\ \/ /\ irType = INSTALLED_SUCCESSFULLY
+                                                                                   /\ irTypeMapping[x].type = INSTALL_FLOW
+                                                                                \/ /\ irType = DELETED_SUCCESSFULLY
+                                                                                   /\ irTypeMapping[x].type = DELETE_FLOW
+                                                                             /\ irTypeMapping[x].flow = flowID
         \*************************** Watchdog *******************************
         returnControllerFailedModules(cont) == {x \in ContProcSet: /\ x[1] = cont
                                                                    /\ controllerSubmoduleFailStat[x] = Failed}
@@ -1344,11 +1348,11 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* IV. there is no difference if switch fails after the corresponding IR is in IR_DONE mode
         \* V. switches fail according to the order of sw_fail_ordering_var (input), so
         \*    this switch should be at the head of failure ordering sequence.  
-        await ~isFinished;
+        \*await ~isFinished;
         await /\ controllerLock = <<NO_LOCK, NO_LOCK>>
               /\ \/ switchLock = <<NO_LOCK, NO_LOCK>>
                  \/ switchLock[2] = self[2];
-        await \E x \in getSetIRsForSwitch(self[2]): NIBIRStatus[x] # IR_DONE;
+        \*await \E x \in getSetIRsForSwitch(self[2]): NIBIRStatus[x] # IR_DONE;
         await sw_fail_ordering_var # <<>>;
         await \E x \in Head(sw_fail_ordering_var): x.sw = self[2];
         obj := CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2];
@@ -1397,7 +1401,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* retrieves all the failed elements and create a branch in each of which
         \* a seperate element recovers
         await RecoveryStatus[self[2]].transient = 1;
-        await ~isFinished;
+        \*await ~isFinished;
         await /\ controllerLock = <<NO_LOCK, NO_LOCK>>
               /\ switchLock = <<NO_LOCK, NO_LOCK>>;
               
@@ -1551,19 +1555,17 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 irTypeMapping := irTypeMapping @@ (nxtRCIRID :> [type |-> DELETE_FLOW, flow |-> IR2FLOW[currIR]]);
                 ir2sw := ir2sw @@ (nxtRCIRID :> ir2sw[currIR]);
                 nxtDAG.dag.v := nxtDAG.dag.v \cup {nxtRCIRID};
-                nxtRCIRID := nxtRCIRID + 1;
                 setIRsInDAG := getSetIRsForSwitchInDAG(ir2sw[currIR], nxtDAGVertices); 
                         
                 ControllerTEAddEdge:
-                    while TRUE do
-                        controllerWaitForLockFree();
+                    while setIRsInDAG # {} do
+                        controllerAcquireLock();
                         currIRInDAG := CHOOSE x \in setIRsInDAG: TRUE;
                         setIRsInDAG := setIRsInDAG \ {currIRInDAG};
                         nxtDAG.dag.e := nxtDAG.dag.e \cup {<<nxtRCIRID, currIRInDAG>>};
-                        if setIRsInDAG = {} then
-                            goto ControllerTERemoveUnnecessaryIRs;
-                        end if;
                     end while;
+                    nxtRCIRID := nxtRCIRID + 1;                
+                    controllerAcquireLock();
             end while;
             controllerReleaseLock();
             DAGState[nxtDAG.id] := DAG_SUBMIT;
@@ -2078,9 +2080,10 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         await switch2Controller # <<>>;
         controllerReleaseLock();
         msg := Head(switch2Controller);
-        irID := getIRIDForFlow(msg.flow);
-        assert msg.from = ir2sw[irID];
+        assert msg.flow \in 1..MaxNumFlows;
         assert msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY};
+        irID := getIRIDForFlow(msg.flow, msg.type);
+        assert msg.from = ir2sw[irID];
         
         if msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY} then
             \* If msg type is INSTALLED_SUCCESSFULLY, we have to change the IR status
@@ -2142,9 +2145,9 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
        
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "f0f35180" /\ chksum(tla) = "116354c4") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "c978416d" /\ chksum(tla) = "9fdb807d") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "7a45fb4c") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "4e286c19") (chksum(pcal) = "6f77d7a0" /\ chksum(tla) = "1f75f444") (chksum(pcal) = "aa8b125c" /\ chksum(tla) = "8d865ca9") (chksum(pcal) = "cf3d0a41" /\ chksum(tla) = "5d555c32") (chksum(pcal) = "bcd87d9" /\ chksum(tla) = "21926a6d") (chksum(pcal) = "d086e217" /\ chksum(tla) = "65fe51b") (chksum(pcal) = "2d7f3fa9" /\ chksum(tla) = "291a932") (chksum(pcal) = "37e95dd2" /\ chksum(tla) = "407e6ef2") (chksum(pcal) = "f3837e52" /\ chksum(tla) = "e6a7b81b") (chksum(pcal) = "f135207f" /\ chksum(tla) = "c21368b0") (chksum(pcal) = "f0eefb51" /\ chksum(tla) = "b3a92d60") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "443ee621") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "7764057c") (chksum(pcal) = "f18a760" /\ chksum(tla) = "f7920ead") (chksum(pcal) = "ce92cfd2" /\ chksum(tla) = "b1c1b140") (chksum(pcal) = "d6d06718" /\ chksum(tla) = "9282732b") (chksum(pcal) = "42ee3c5e" /\ chksum(tla) = "80518238") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "c22c784a" /\ chksum(tla) = "81d3ea87") (chksum(pcal) = "3dd25d26" /\ chksum(tla) = "2b6204c8") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "9d2a12f4") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "40286c29") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "b4d767c4") (chksum(pcal) = "be68fae5" /\ chksum(tla) = "bbd15d38") (chksum(pcal) = "db916232" /\ chksum(tla) = "af315036") (chksum(pcal) = "66bee27d" /\ chksum(tla) = "12fe2e40") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "9a07bcc2") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "240a047e") (chksum(pcal) = "364a9b04" /\ chksum(tla) = "19f17100") (chksum(pcal) = "6b20d6a" /\ chksum(tla) = "67251219") (chksum(pcal) = "829c0e2c" /\ chksum(tla) = "8c827318") (chksum(pcal) = "a1dfa3e2" /\ chksum(tla) = "63c2fb6a") (chksum(pcal) = "6ac668f0" /\ chksum(tla) = "eca70484") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "bdf6aef3" /\ chksum(tla) = "374343fd") (chksum(pcal) = "275cfd35" /\ chksum(tla) = "ad4ac30d") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452")
-\* Process variable stepOfFailure of process controllerSequencer at line 1612 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1719 col 64 changed to stepOfFailure_c
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "f0f35180" /\ chksum(tla) = "116354c4") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "c978416d" /\ chksum(tla) = "9fdb807d") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "7a45fb4c") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "4e286c19") (chksum(pcal) = "6f77d7a0" /\ chksum(tla) = "1f75f444") (chksum(pcal) = "aa8b125c" /\ chksum(tla) = "8d865ca9") (chksum(pcal) = "cf3d0a41" /\ chksum(tla) = "5d555c32") (chksum(pcal) = "bcd87d9" /\ chksum(tla) = "21926a6d") (chksum(pcal) = "d086e217" /\ chksum(tla) = "65fe51b") (chksum(pcal) = "2d7f3fa9" /\ chksum(tla) = "291a932") (chksum(pcal) = "37e95dd2" /\ chksum(tla) = "407e6ef2") (chksum(pcal) = "f3837e52" /\ chksum(tla) = "e6a7b81b") (chksum(pcal) = "f135207f" /\ chksum(tla) = "c21368b0") (chksum(pcal) = "f0eefb51" /\ chksum(tla) = "b3a92d60") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "443ee621") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "7764057c") (chksum(pcal) = "f18a760" /\ chksum(tla) = "f7920ead") (chksum(pcal) = "ce92cfd2" /\ chksum(tla) = "b1c1b140") (chksum(pcal) = "d6d06718" /\ chksum(tla) = "9282732b") (chksum(pcal) = "42ee3c5e" /\ chksum(tla) = "80518238") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "c22c784a" /\ chksum(tla) = "81d3ea87") (chksum(pcal) = "3dd25d26" /\ chksum(tla) = "2b6204c8") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "9d2a12f4") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "40286c29") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "b4d767c4") (chksum(pcal) = "be68fae5" /\ chksum(tla) = "bbd15d38") (chksum(pcal) = "db916232" /\ chksum(tla) = "af315036") (chksum(pcal) = "66bee27d" /\ chksum(tla) = "12fe2e40") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "9a07bcc2") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "240a047e") (chksum(pcal) = "364a9b04" /\ chksum(tla) = "19f17100") (chksum(pcal) = "6b20d6a" /\ chksum(tla) = "67251219") (chksum(pcal) = "829c0e2c" /\ chksum(tla) = "8c827318") (chksum(pcal) = "a1dfa3e2" /\ chksum(tla) = "63c2fb6a") (chksum(pcal) = "6ac668f0" /\ chksum(tla) = "eca70484") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "bdf6aef3" /\ chksum(tla) = "374343fd") (chksum(pcal) = "275cfd35" /\ chksum(tla) = "ad4ac30d") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "9e9e8407" /\ chksum(tla) = "9cac35f2") (chksum(pcal) = "9aa4e816" /\ chksum(tla) = "9a332feb") (chksum(pcal) = "a30b13d4" /\ chksum(tla) = "5f074879") (chksum(pcal) = "e4caf3de" /\ chksum(tla) = "36a5f04e") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "980c642" /\ chksum(tla) = "54e27b3c") (chksum(pcal) = "69ded205" /\ chksum(tla) = "1b9425d6") (chksum(pcal) = "59c8a39c" /\ chksum(tla) = "4b65833e") (chksum(pcal) = "6b0daafa" /\ chksum(tla) = "71f1dff3") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc")
+\* Process variable stepOfFailure of process controllerSequencer at line 1614 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1721 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, irTypeMapping, ir2sw, swSeqChangedStatus, 
           controller2Switch, switch2Controller, switchStatus, installedIRs, 
@@ -2338,7 +2341,11 @@ getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
 
 
 
-getIRIDForFlow(flowID) == CHOOSE x \in 1..MaxNumFlows: IR2FLOW[x] = flowID
+getIRIDForFlow(flowID, irType) == CHOOSE x \in DOMAIN irTypeMapping: /\ \/ /\ irType = INSTALLED_SUCCESSFULLY
+                                                                           /\ irTypeMapping[x].type = INSTALL_FLOW
+                                                                        \/ /\ irType = DELETED_SUCCESSFULLY
+                                                                           /\ irTypeMapping[x].type = DELETE_FLOW
+                                                                     /\ irTypeMapping[x].flow = flowID
 
 returnControllerFailedModules(cont) == {x \in ContProcSet: /\ x[1] = cont
                                                            /\ controllerSubmoduleFailStat[x] = Failed}
@@ -2513,7 +2520,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                       "Failure of assertion at line 1128, column 9.")
+                                       "Failure of assertion at line 1132, column 9.")
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ IF ingressPkt'[self].type = INSTALL_FLOW
                                    THEN /\ installedIRs' = Append(installedIRs, ingressPkt'[self].flow)
@@ -2528,7 +2535,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                         /\ UNCHANGED installedIRs
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 805, column 9 of macro called at line 1142, column 9.")
+                                       "Failure of assertion at line 809, column 9 of macro called at line 1146, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2579,7 +2586,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ Len(controller2Switch[self[2]]) > 0
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(ingressIR'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                   "Failure of assertion at line 1167, column 9.")
+                                   "Failure of assertion at line 1171, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -2708,7 +2715,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ switchLock' = self
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = DELETED_SUCCESSFULLY, 
-                                       "Failure of assertion at line 1194, column 9.")
+                                       "Failure of assertion at line 1198, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2759,7 +2766,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 805, column 9 of macro called at line 1202, column 17.")
+                                                      "Failure of assertion at line 809, column 9 of macro called at line 1206, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -2830,9 +2837,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1230, column 9.")
+                                   "Failure of assertion at line 1234, column 9.")
                          /\ Assert(ofaInMsg'[self].flow  \in 1..MaxNumFlows, 
-                                   "Failure of assertion at line 1231, column 9.")
+                                   "Failure of assertion at line 1235, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2950,9 +2957,9 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self].flow \in 1..MaxNumFlows, 
-                                    "Failure of assertion at line 1261, column 9.")
+                                    "Failure of assertion at line 1265, column 9.")
                           /\ Assert(ofaOutConfirmation'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                    "Failure of assertion at line 1262, column 9.")
+                                    "Failure of assertion at line 1266, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
@@ -3082,9 +3089,9 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self].flow \in 1..MaxNumFlows, 
-                                       "Failure of assertion at line 1300, column 8.")
+                                       "Failure of assertion at line 1304, column 8.")
                              /\ Assert(installerInIR'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                       "Failure of assertion at line 1301, column 8.")
+                                       "Failure of assertion at line 1305, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3291,18 +3298,16 @@ installerModuleProc(self) == SwitchInstallerProc(self)
                                 \/ SwitchInstallerSendConfirmation(self)
 
 SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
-                       /\ ~isFinished
                        /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                           /\ \/ switchLock = <<NO_LOCK, NO_LOCK>>
                              \/ switchLock[2] = self[2]
-                       /\ \E x \in getSetIRsForSwitch(self[2]): NIBIRStatus[x] # IR_DONE
                        /\ sw_fail_ordering_var # <<>>
                        /\ \E x \in Head(sw_fail_ordering_var): x.sw = self[2]
                        /\ obj' = [obj EXCEPT ![self] = CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2]]
                        /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = obj'[self].transient,
                                                                    ![self[2]].partial = obj'[self].partial]
                        /\ Assert(obj'[self] \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 507, column 9 of macro called at line 1356, column 9.")
+                                 "Failure of assertion at line 511, column 9 of macro called at line 1360, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{obj'[self]})>> \o Tail(sw_fail_ordering_var)
@@ -3333,7 +3338,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        failedElem' = [failedElem EXCEPT ![self] = elem]
                                   /\ IF failedElem'[self] = "cpu"
                                         THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                                       "Failure of assertion at line 632, column 9 of macro called at line 1376, column 17.")
+                                                       "Failure of assertion at line 636, column 9 of macro called at line 1380, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                                      ![self[2]].ofa = Failed,
                                                                                      ![self[2]].installer = Failed]
@@ -3354,7 +3359,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                              /\ UNCHANGED controller2Switch
                                         ELSE /\ IF failedElem'[self] = "ofa"
                                                    THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                                  "Failure of assertion at line 684, column 9 of macro called at line 1378, column 17.")
+                                                                  "Failure of assertion at line 688, column 9 of macro called at line 1382, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                               THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3369,11 +3374,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                         /\ UNCHANGED controller2Switch
                                                    ELSE /\ IF failedElem'[self] = "installer"
                                                               THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                             "Failure of assertion at line 728, column 9 of macro called at line 1380, column 17.")
+                                                                             "Failure of assertion at line 732, column 9 of macro called at line 1384, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                                    /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                          THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                                        "Failure of assertion at line 731, column 13 of macro called at line 1380, column 17.")
+                                                                                        "Failure of assertion at line 735, column 13 of macro called at line 1384, column 17.")
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                               /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                            swID |-> self[2],
@@ -3387,7 +3392,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                    /\ UNCHANGED controller2Switch
                                                               ELSE /\ IF failedElem'[self] = "nicAsic"
                                                                          THEN /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                                        "Failure of assertion at line 578, column 9 of macro called at line 1382, column 17.")
+                                                                                        "Failure of assertion at line 582, column 9 of macro called at line 1386, column 17.")
                                                                               /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3396,7 +3401,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                            num |-> controlMsgCounter'[self[2]]]]
                                                                               /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                                          ELSE /\ Assert(FALSE, 
-                                                                                        "Failure of assertion at line 1383, column 18.")
+                                                                                        "Failure of assertion at line 1387, column 18.")
                                                                               /\ UNCHANGED << swSeqChangedStatus, 
                                                                                               controller2Switch, 
                                                                                               switchStatus, 
@@ -3442,18 +3447,17 @@ swFailureProc(self) == SwitchFailure(self)
 
 SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ RecoveryStatus[self[2]].transient = 1
-                              /\ ~isFinished
                               /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ IF RecoveryStatus[self[2]].partial = 0
                                     THEN /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 544, column 9 of macro called at line 1405, column 13.")
+                                                   "Failure of assertion at line 548, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                   "Failure of assertion at line 545, column 9 of macro called at line 1405, column 13.")
+                                                   "Failure of assertion at line 549, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].ofa = Failed, 
-                                                   "Failure of assertion at line 546, column 9 of macro called at line 1405, column 13.")
+                                                   "Failure of assertion at line 550, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].installer = Failed, 
-                                                   "Failure of assertion at line 547, column 9 of macro called at line 1405, column 13.")
+                                                   "Failure of assertion at line 551, column 9 of macro called at line 1409, column 13.")
                                          /\ nicAsicStartingMode(self[2])
                                          /\ ofaStartingMode(self[2])
                                          /\ installerInStartingMode(self[2])
@@ -3480,7 +3484,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                          /\ IF recoveredElem'[self] = "cpu"
                                                THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                              "Failure of assertion at line 659, column 9 of macro called at line 1413, column 43.")
+                                                              "Failure of assertion at line 663, column 9 of macro called at line 1417, column 43.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                             ![self[2]].ofa = NotFailed,
                                                                                             ![self[2]].installer = NotFailed]
@@ -3503,7 +3507,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                           THEN /\ nicAsicStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                                         "Failure of assertion at line 604, column 9 of macro called at line 1414, column 50.")
+                                                                         "Failure of assertion at line 608, column 9 of macro called at line 1418, column 50.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                                /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                /\ IF switchStatus'[self[2]].ofa = Failed
@@ -3520,7 +3524,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "ofa"
                                                                      THEN /\ ofaStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                                    "Failure of assertion at line 706, column 9 of macro called at line 1415, column 46.")
+                                                                                    "Failure of assertion at line 710, column 9 of macro called at line 1419, column 46.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                                 THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3536,11 +3540,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                      ELSE /\ IF recoveredElem'[self] = "installer"
                                                                                 THEN /\ installerInStartingMode(self[2])
                                                                                      /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                               "Failure of assertion at line 750, column 9 of macro called at line 1416, column 52.")
+                                                                                               "Failure of assertion at line 754, column 9 of macro called at line 1420, column 52.")
                                                                                      /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                                      /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                            THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                                          "Failure of assertion at line 753, column 13 of macro called at line 1416, column 52.")
+                                                                                                          "Failure of assertion at line 757, column 13 of macro called at line 1420, column 52.")
                                                                                                 /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                                 /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                            swID |-> self[2],
@@ -3552,7 +3556,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                                 controlMsgCounter, 
                                                                                                                 statusResolveMsg >>
                                                                                 ELSE /\ Assert(FALSE, 
-                                                                                               "Failure of assertion at line 1417, column 18.")
+                                                                                               "Failure of assertion at line 1421, column 18.")
                                                                                      /\ UNCHANGED << swSeqChangedStatus, 
                                                                                                      switchStatus, 
                                                                                                      controlMsgCounter, 
@@ -3624,7 +3628,7 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 805, column 9 of macro called at line 1454, column 9.")
+                             "Failure of assertion at line 809, column 9 of macro called at line 1458, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3667,7 +3671,7 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                /\ RCNIBEventQueue[self[1]] # <<>>
                                /\ event' = [event EXCEPT ![self] = Head(RCNIBEventQueue[self[1]])]
                                /\ Assert(event'[self].type \in {TOPO_MOD, IR_MOD}, 
-                                         "Failure of assertion at line 1472, column 9.")
+                                         "Failure of assertion at line 1476, column 9.")
                                /\ IF (event'[self].type = TOPO_MOD)
                                      THEN /\ IF RCSwSuspensionStatus[self[1]][event'[self].sw] # event'[self].state
                                                 THEN /\ RCSwSuspensionStatus' = [RCSwSuspensionStatus EXCEPT ![self[1]][event'[self].sw] = event'[self].state]
@@ -3795,7 +3799,7 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                 /\ topoChangeEvent' = [topoChangeEvent EXCEPT ![self] = Head(TEEventQueue[self[1]])]
                                                 /\ Assert(topoChangeEvent'[self].type \in {TOPO_MOD}, 
-                                                          "Failure of assertion at line 1509, column 17.")
+                                                          "Failure of assertion at line 1513, column 17.")
                                                 /\ IF topoChangeEvent'[self].state = SW_SUSPEND
                                                       THEN /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \cup {topoChangeEvent'[self].sw}]
                                                       ELSE /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \ {topoChangeEvent'[self].sw}]
@@ -4123,7 +4127,6 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                      /\ irTypeMapping' = irTypeMapping @@ (nxtRCIRID :> [type |-> DELETE_FLOW, flow |-> IR2FLOW[currIR'[self]]])
                                                      /\ ir2sw' = ir2sw @@ (nxtRCIRID :> ir2sw[currIR'[self]])
                                                      /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.v = nxtDAG[self].dag.v \cup {nxtRCIRID}]
-                                                     /\ nxtRCIRID' = nxtRCIRID + 1
                                                      /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = getSetIRsForSwitchInDAG(ir2sw'[currIR'[self]], nxtDAGVertices[self])]
                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
                                                      /\ UNCHANGED << DAGEventQueue, 
@@ -4138,7 +4141,6 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                                      irTypeMapping, 
                                                                      ir2sw, 
                                                                      RCIRStatus, 
-                                                                     nxtRCIRID, 
                                                                      NIBIRStatus, 
                                                                      nxtDAG, 
                                                                      setRemovableIRs, 
@@ -4168,6 +4170,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           MaxDAGID, 
                                                           RCNIBEventQueue, 
                                                           RCSwSuspensionStatus, 
+                                                          nxtRCIRID, 
                                                           idWorkerWorkingOnDAG, 
                                                           RCSeqWorkerStatus, 
                                                           idThreadWorkingOnIR, 
@@ -4209,16 +4212,23 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           controllerFailedModules >>
 
 ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
-                             /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
-                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                             /\ currIRInDAG' = [currIRInDAG EXCEPT ![self] = CHOOSE x \in setIRsInDAG[self]: TRUE]
-                             /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = setIRsInDAG[self] \ {currIRInDAG'[self]}]
-                             /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.e = nxtDAG[self].dag.e \cup {<<nxtRCIRID, currIRInDAG'[self]>>}]
-                             /\ IF setIRsInDAG'[self] = {}
-                                   THEN /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
-                             /\ UNCHANGED << switchLock, controllerLock, 
-                                             FirstInstall, 
+                             /\ IF setIRsInDAG[self] # {}
+                                   THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock' = self
+                                        /\ currIRInDAG' = [currIRInDAG EXCEPT ![self] = CHOOSE x \in setIRsInDAG[self]: TRUE]
+                                        /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = setIRsInDAG[self] \ {currIRInDAG'[self]}]
+                                        /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.e = nxtDAG[self].dag.e \cup {<<nxtRCIRID, currIRInDAG'[self]>>}]
+                                        /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
+                                        /\ UNCHANGED nxtRCIRID
+                                   ELSE /\ nxtRCIRID' = nxtRCIRID + 1
+                                        /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock' = self
+                                        /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+                                        /\ UNCHANGED << nxtDAG, currIRInDAG, 
+                                                        setIRsInDAG >>
+                             /\ UNCHANGED << switchLock, FirstInstall, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, irTypeMapping, ir2sw, 
                                              swSeqChangedStatus, 
@@ -4235,7 +4245,7 @@ ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                                              DAGEventQueue, DAGQueue, DAGID, 
                                              MaxDAGID, DAGState, 
                                              RCNIBEventQueue, RCIRStatus, 
-                                             RCSwSuspensionStatus, nxtRCIRID, 
+                                             RCSwSuspensionStatus, 
                                              idWorkerWorkingOnDAG, 
                                              RCSeqWorkerStatus, 
                                              idThreadWorkingOnIR, 
@@ -4277,7 +4287,7 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                /\ seqEvent' = [seqEvent EXCEPT ![self] = Head(DAGEventQueue[self[1]])]
                                /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Tail(DAGEventQueue[self[1]])]
                                /\ Assert(seqEvent'[self].type \in {DAG_NEW, DAG_STALE}, 
-                                         "Failure of assertion at line 1589, column 9.")
+                                         "Failure of assertion at line 1591, column 9.")
                                /\ IF seqEvent'[self].type = DAG_NEW
                                      THEN /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Append(DAGQueue[self[1]], seqEvent'[self].dag_obj)]
                                           /\ pc' = [pc EXCEPT ![self] = "ControllerBossSeqProc"]
@@ -4911,9 +4921,9 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                          ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                                    /\ IF (stepOfFailure_c'[self] # 1)
                                          THEN /\ Assert(irTypeMapping[nextIRToSent[self]].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                                        "Failure of assertion at line 909, column 9 of macro called at line 1789, column 29.")
+                                                        "Failure of assertion at line 913, column 9 of macro called at line 1791, column 29.")
                                               /\ Assert(irTypeMapping[nextIRToSent[self]].flow \in 1..MaxNumFlows, 
-                                                        "Failure of assertion at line 910, column 9 of macro called at line 1789, column 29.")
+                                                        "Failure of assertion at line 914, column 9 of macro called at line 1791, column 29.")
                                               /\ controller2Switch' = [controller2Switch EXCEPT ![ir2sw[nextIRToSent[self]]] = Append(controller2Switch[ir2sw[nextIRToSent[self]]], [type |-> irTypeMapping[nextIRToSent[self]].type,
                                                                                                                                                                                      to |-> ir2sw[nextIRToSent[self]],
                                                                                                                                                                                      flow |-> irTypeMapping[nextIRToSent[self]].flow])]
@@ -5961,11 +5971,13 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
-                                       /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow)]
-                                       /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
-                                                 "Failure of assertion at line 2082, column 9.")
-                                       /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
+                                       /\ Assert(msg'[self].flow \in 1..MaxNumFlows, 
                                                  "Failure of assertion at line 2083, column 9.")
+                                       /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
+                                                 "Failure of assertion at line 2084, column 9.")
+                                       /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow, msg'[self].type)]
+                                       /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
+                                                 "Failure of assertion at line 2086, column 9.")
                                        /\ IF msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                              ELSE /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
@@ -6191,7 +6203,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2134, column 13.")
+                                               "Failure of assertion at line 2137, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -6397,12 +6409,14 @@ firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
 whichDAG(ir) == CHOOSE x \in rangeSeq(TOPO_DAG_MAPPING): ir \in x.v
 
 ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
-                                                      \/ whichDAG(getIRIDForFlow(x)) # whichDAG(getIRIDForFlow(y))
+                                                      \/ whichDAG(getIRIDForFlow(x, INSTALLED_SUCCESSFULLY)) # whichDAG(getIRIDForFlow(y, INSTALLED_SUCCESSFULLY))
                                                       \/ /\ firstHappening(installedIRs, x) < firstHappening(installedIRs, y)                                                         
-                                                         /\ <<getIRIDForFlow(y), getIRIDForFlow(x)>> \notin whichDAG(x).e
+                                                         /\ <<getIRIDForFlow(y, INSTALLED_SUCCESSFULLY), getIRIDForFlow(x, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
                                                       \/ /\ firstHappening(installedIRs, x) > firstHappening(installedIRs, y)
-                                                         /\ <<getIRIDForFlow(x), getIRIDForFlow(y)>> \notin whichDAG(x).e
+                                                         /\ <<getIRIDForFlow(x, INSTALLED_SUCCESSFULLY), getIRIDForFlow(y, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
+EachIRAtMostOnce == ~\E x, y \in DOMAIN installedIRs: /\ x # y
+                                                      /\ installedIRs[x] = installedIRs[y]
 =============================================================================
 \* Modification History
-\* Last modified Sat Mar 27 23:07:11 PDT 2021 by root
+\* Last modified Sun Mar 28 02:50:09 PDT 2021 by root
 \* Created Mon Mar 15 17:28:25 PDT 2021 by root
