@@ -485,7 +485,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* getIRSetToReconcile(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
         \*                                                 /\ NIBIRStatus[x] \notin {IR_DONE, IR_NONE, IR_SUSPEND}}
         getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
-                                                     /\ NIBIRStatus[x] \notin {IR_NONE}}
+                                                     /\ NIBIRStatus[x] \notin {IR_DONE, IR_NONE}}
         \* getIRSetToSuspend(CID, SID) == {x \in SetScheduledIRs[SID]: NIBIRStatus[x] = IR_NONE}           
                                                                              
         \*************************** Monitoring Server **********************
@@ -528,8 +528,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             statusMsg := [type |-> NIC_ASIC_DOWN, 
                             swID |-> self[2],
                             num |-> controlMsgCounter[self[2]]];
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
-            switch2Controller := Append(switch2Controller, statusMsg);
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
         end if;
         
         switchStatus[self[2]] := [cpu |-> Failed, nicAsic |-> Failed, 
@@ -569,8 +568,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                              swID |-> self[2],
                              num |-> controlMsgCounter[self[2]],
                              status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]];  
-        \*swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);  
-        switch2Controller := Append(switch2Controller, statusResolveMsg);
+        swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);  
     end macro;
     \* =================================
     
@@ -588,8 +586,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         statusMsg := [type |-> NIC_ASIC_DOWN, 
                       swID |-> self[2],
                       num |-> controlMsgCounter[self[2]]];
-        \*swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
-        switch2Controller := Append(switch2Controller, statusMsg);              
+        swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);              
     end macro
     \* =================================
     
@@ -624,8 +621,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                  num |-> controlMsgCounter[self[2]],
                                  status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]];
         end if;
-        \*swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);   
-        switch2Controller := Append(switch2Controller, statusResolveMsg);         
+        swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);            
     end macro
     \* =================================
     
@@ -650,8 +646,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             statusMsg := [type |-> OFA_DOWN, 
                           swID |-> self[2],
                           num |-> controlMsgCounter[self[2]]];
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
-            switch2Controller := Append(switch2Controller, statusMsg);
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
         end if;
     end macro
     \* =================================
@@ -679,8 +674,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                  swID |-> self[2],
                                  num |-> controlMsgCounter[self[2]],
                                  status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]]; 
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);
-            switch2Controller := Append(switch2Controller, statusResolveMsg);    
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);    
         end if;
     end macro
     \* =================================    
@@ -700,8 +694,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             statusMsg := [type |-> OFA_DOWN, 
                           swID |-> self[2],
                           num |-> controlMsgCounter[self[2]]];
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
-            switch2Controller := Append(switch2Controller, statusMsg);    
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);    
         end if;
     end macro
     \* ================================= 
@@ -725,8 +718,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                  num |-> controlMsgCounter[self[2]],
                                  status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]];
             
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);
-            switch2Controller := Append(switch2Controller, statusResolveMsg);             
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);             
         end if;
     end macro
     \* =================================  
@@ -746,8 +738,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                           swID |-> self[2],
                           num |-> controlMsgCounter[self[2]],
                           status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]];
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
-            switch2Controller := Append(switch2Controller, statusMsg);
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusMsg);
         end if;
     end macro
     \* =================================
@@ -769,8 +760,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                  swID |-> self[2],
                                  num |-> controlMsgCounter[self[2]],
                                  status |-> [installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)]];       
-            \*swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);
-            switch2Controller := Append(switch2Controller, statusResolveMsg);    
+            swSeqChangedStatus := Append(swSeqChangedStatus, statusResolveMsg);    
         end if;
     end macro
     \* =================================
@@ -1488,11 +1478,14 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             if RCSwSuspensionStatus[self[1]][event.sw] # event.state then    
                 RCSwSuspensionStatus[self[1]][event.sw] := event.state;
                 TEEventQueue[self[1]] := Append(TEEventQueue[self[1]], event);
+                if event.state = SW_SUSPEND then
+                    SetScheduledIRs[event.sw] := SetScheduledIRs[event.sw] \ getSetIRsForSwitch(event.sw);
+                end if;
             end if;
         elsif (event.type = IR_MOD) then
             if RCIRStatus[self[1]][event.IR] # event.state then
                 RCIRStatus[self[1]][event.IR] := event.state;
-                if event.state \in {IR_SENT, IR_NONE, IR_DONE} then
+                if event.state \in {IR_SENT, IR_DONE} then
                     \* remove the IR from setscheduledIRs
                     SetScheduledIRs[ir2sw[event.IR]] := SetScheduledIRs[ir2sw[event.IR]]\{event.IR};    
                 end if;
@@ -1507,7 +1500,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     fair process controllerTrafficEngineering \in ({rc0} \X {CONT_TE})
     variables topoChangeEvent = [type |-> 0], currSetDownSw = {}, prev_dag_id = 0, init = 1,
         nxtDAG = [type |-> 0], setRemovableIRs = {}, currIR = 0, currIRInDAG = 0,
-        nxtDAGVertices = {}, setIRsInDAG = {}, prev_dag = [e |-> {}, v |-> {}];
+        nxtDAGVertices = {}, setIRsInDAG = {};
     begin
     ControllerTEProc:
     while TRUE do
@@ -1534,29 +1527,24 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             controllerWaitForLockFree();
             DAGID := (DAGID % MaxDAGID) + 1;
             nxtDAG := [id |-> DAGID, dag |-> TOPO_DAG_MAPPING[currSetDownSw]];
-            if prev_dag = nxtDAG.dag then
-                goto ControllerTEProc;
-            else
-                nxtDAGVertices := nxtDAG.dag.v;
-                if init = 0 then
-                    DAGState[prev_dag_id] := DAG_STALE;
+            nxtDAGVertices := nxtDAG.dag.v;
+            if init = 0 then
+                DAGState[prev_dag_id] := DAG_STALE;
                 
-                    ControllerTESendDagStaleNotif:
-                        controllerWaitForLockFree();
-                        DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_STALE, id |-> prev_dag_id]);
+                ControllerTESendDagStaleNotif:
+                    controllerWaitForLockFree();
+                    DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_STALE, id |-> prev_dag_id]);
                 
-                    ControllerTEWaitForStaleDAGToBeRemoved:
-                        controllerWaitForLockFree();
-                        await DAGState[prev_dag_id] = DAG_NONE;
-                        prev_dag_id := DAGID;
-                        prev_dag := nxtDAG.dag;
-                        setRemovableIRs := getSetRemovableIRs(self[1], SW \ currSetDownSw, nxtDAGVertices);
-                else
-                    init := 0;
+                ControllerTEWaitForStaleDAGToBeRemoved:
+                    controllerWaitForLockFree();
+                    await DAGState[prev_dag_id] = DAG_NONE;
                     prev_dag_id := DAGID;
-                end if;
+                    setRemovableIRs := getSetRemovableIRs(self[1], SW \ currSetDownSw, nxtDAGVertices);
+            else
+                init := 0;
+                prev_dag_id := DAGID;
             end if;
-            
+        
         ControllerTERemoveUnnecessaryIRs:
             while setRemovableIRs # {} do
                 controllerAcquireLock();
@@ -1583,10 +1571,6 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                     controllerAcquireLock();
             end while;
             controllerReleaseLock();
-            SetScheduledIRs := [x \in SW |-> (SetScheduledIRs[x] \ nxtDAG.dag.v)];
-            
-        ControllerTESubmitNewDAG:
-            controllerWaitForLockFree();
             DAGState[nxtDAG.id] := DAG_SUBMIT;
             DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_NEW, dag_obj |-> nxtDAG]);      
     
@@ -1954,6 +1938,29 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
          elsif canfreeSuspendedSw(monitoringEvent) /\ SwSuspensionStatus[monitoringEvent.swID] = SW_SUSPEND then
             \*call suspendInSchedulingIRs(monitoringEvent.swID);
             
+            \* ControllerFreeSuspendedSW consists of three operations; 
+            \* 1. Save on db that it is going to reset the IRs
+            \* 2. Change the SW status to SW_RUN (so all the corresponding IRs going to be scheduled immediately)
+            \* (event handler may fail between any of these Ops.)
+            ControllerFreeSuspendedSW: 
+                controllerWaitForLockFree();
+                whichStepToFail(2);
+                if (stepOfFailure # 1) then 
+                    \* Step 1: save state on NIB
+                    controllerStateNIB[self] := [type |-> START_RESET_IR, sw |-> monitoringEvent.swID]; 
+                    if (stepOfFailure # 2) then
+                        \* Step 2: change switch status to SW_RUN
+                        SwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
+                        RCNIBEventQueue[rc0] := Append(RCNIBEventQueue[rc0], [type |-> TOPO_MOD, 
+                                                                                sw |-> monitoringEvent.swID, state |-> SW_RUN]);  
+                    end if;
+                end if;
+                
+                if (stepOfFailure # 0) then
+                    controllerModuleFails();
+                    goto ControllerEventHandlerStateReconciliation;
+                end if;
+            
             \* ControllerCheckIfThisIsLastEvent consists of 3 operations;
             \* 1. Check if this is the last event for the corresponding sw (if it is not, then, maybe the switch
             \*      has failed again and resetting the IRs is not necessary). Note that we have to process the 
@@ -1975,8 +1982,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                             if (controllerSubmoduleFailStat[self] = NotFailed) then
                                 setIRsToReset := getIRSetToReset(monitoringEvent.swID);
                                 if (setIRsToReset = {}) then \* Do not do the operations in ResetAllIRs label if setIRsToReset is Empty *\
-                                    \*goto ControllerEvenHanlderRemoveEventFromQueue;
-                                    goto ControllerFreeSuspendedSW;
+                                    goto ControllerEvenHanlderRemoveEventFromQueue;
                                 end if;
                             else
                                 goto ControllerEventHandlerStateReconciliation;
@@ -1993,15 +1999,14 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                     
                                     \* the following operation (if -- end if;) should be done atomically
                                     \* using CAS operation
-                                    \*if NIBIRStatus[resetIR] # IR_DONE then
+                                    if NIBIRStatus[resetIR] # IR_DONE then
                                         NIBIRStatus[resetIR] := IR_NONE;
                                         RCNIBEventQueue[rc0] := Append(RCNIBEventQueue[rc0], 
                                                                         [type |-> IR_MOD, IR |-> resetIR, state |-> IR_NONE]);
-                                    \*end if;
+                                    end if;
                                     
                                     if setIRsToReset = {} then \* End of while *\
-                                        \*goto ControllerEvenHanlderRemoveEventFromQueue;
-                                        goto ControllerFreeSuspendedSW;
+                                        goto ControllerEvenHanlderRemoveEventFromQueue;
                                     end if;
                                 else
                                     goto ControllerEventHandlerStateReconciliation;
@@ -2009,28 +2014,6 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                             end while;
                     end if;
                 else
-                    goto ControllerEventHandlerStateReconciliation;
-                end if;
-            \* ControllerFreeSuspendedSW consists of three operations; 
-            \* 1. Save on db that it is going to reset the IRs
-            \* 2. Change the SW status to SW_RUN (so all the corresponding IRs going to be scheduled immediately)
-            \* (event handler may fail between any of these Ops.)
-            ControllerFreeSuspendedSW: 
-                controllerWaitForLockFree();
-                whichStepToFail(2);
-                if (stepOfFailure # 1) then 
-                    \* Step 1: save state on NIB
-                    controllerStateNIB[self] := [type |-> START_RESET_IR, sw |-> monitoringEvent.swID]; 
-                    if (stepOfFailure # 2) then
-                        \* Step 2: change switch status to SW_RUN
-                        SwSuspensionStatus[monitoringEvent.swID] := SW_RUN;
-                        RCNIBEventQueue[rc0] := Append(RCNIBEventQueue[rc0], [type |-> TOPO_MOD, 
-                                                                                sw |-> monitoringEvent.swID, state |-> SW_RUN]);  
-                    end if;
-                end if;
-                
-                if (stepOfFailure # 0) then
-                    controllerModuleFails();
                     goto ControllerEventHandlerStateReconciliation;
                 end if;
          end if;
@@ -2100,17 +2083,14 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         await switch2Controller # <<>>;
         controllerReleaseLock();
         msg := Head(switch2Controller);
-        assert  \/ "flow" \notin DOMAIN msg
-                \/ /\ "flow" \in DOMAIN msg
-                   /\ msg.flow \in 1..MaxNumFlows;
-        assert msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY, KEEP_ALIVE, NIC_ASIC_DOWN, OFA_DOWN};
+        assert msg.flow \in 1..MaxNumFlows;
+        assert msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY};
+        irID := getIRIDForFlow(msg.flow, msg.type);
+        assert msg.from = ir2sw[irID];
         
         if msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY} then
             \* If msg type is INSTALLED_SUCCESSFULLY, we have to change the IR status
             \* to IR_DONE. 
-            irID := getIRIDForFlow(msg.flow, msg.type);
-            assert msg.from = ir2sw[irID];
-        
             ControllerUpdateIR2:
                 controllerWaitForLockFree(); 
                 controllerModuleFailOrNot();
@@ -2121,8 +2101,6 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 else
                     goto ControllerMonitorCheckIfMastr;
                 end if;
-        else
-            swSeqChangedStatus := Append(swSeqChangedStatus, msg);
         end if;
         
         \*end if;
@@ -2170,9 +2148,9 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
        
     end algorithm
 *)
-\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "f0f35180" /\ chksum(tla) = "116354c4") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "c978416d" /\ chksum(tla) = "9fdb807d") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "7a45fb4c") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "4e286c19") (chksum(pcal) = "6f77d7a0" /\ chksum(tla) = "1f75f444") (chksum(pcal) = "aa8b125c" /\ chksum(tla) = "8d865ca9") (chksum(pcal) = "cf3d0a41" /\ chksum(tla) = "5d555c32") (chksum(pcal) = "bcd87d9" /\ chksum(tla) = "21926a6d") (chksum(pcal) = "d086e217" /\ chksum(tla) = "65fe51b") (chksum(pcal) = "2d7f3fa9" /\ chksum(tla) = "291a932") (chksum(pcal) = "37e95dd2" /\ chksum(tla) = "407e6ef2") (chksum(pcal) = "f3837e52" /\ chksum(tla) = "e6a7b81b") (chksum(pcal) = "f135207f" /\ chksum(tla) = "c21368b0") (chksum(pcal) = "f0eefb51" /\ chksum(tla) = "b3a92d60") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "443ee621") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "7764057c") (chksum(pcal) = "f18a760" /\ chksum(tla) = "f7920ead") (chksum(pcal) = "ce92cfd2" /\ chksum(tla) = "b1c1b140") (chksum(pcal) = "d6d06718" /\ chksum(tla) = "9282732b") (chksum(pcal) = "42ee3c5e" /\ chksum(tla) = "80518238") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "c22c784a" /\ chksum(tla) = "81d3ea87") (chksum(pcal) = "3dd25d26" /\ chksum(tla) = "2b6204c8") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "9d2a12f4") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "40286c29") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "b4d767c4") (chksum(pcal) = "be68fae5" /\ chksum(tla) = "bbd15d38") (chksum(pcal) = "db916232" /\ chksum(tla) = "af315036") (chksum(pcal) = "66bee27d" /\ chksum(tla) = "12fe2e40") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "9a07bcc2") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "240a047e") (chksum(pcal) = "364a9b04" /\ chksum(tla) = "19f17100") (chksum(pcal) = "6b20d6a" /\ chksum(tla) = "67251219") (chksum(pcal) = "829c0e2c" /\ chksum(tla) = "8c827318") (chksum(pcal) = "a1dfa3e2" /\ chksum(tla) = "63c2fb6a") (chksum(pcal) = "6ac668f0" /\ chksum(tla) = "eca70484") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "bdf6aef3" /\ chksum(tla) = "374343fd") (chksum(pcal) = "275cfd35" /\ chksum(tla) = "ad4ac30d") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "9e9e8407" /\ chksum(tla) = "9cac35f2") (chksum(pcal) = "9aa4e816" /\ chksum(tla) = "9a332feb") (chksum(pcal) = "a30b13d4" /\ chksum(tla) = "5f074879") (chksum(pcal) = "e4caf3de" /\ chksum(tla) = "36a5f04e") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "980c642" /\ chksum(tla) = "54e27b3c") (chksum(pcal) = "69ded205" /\ chksum(tla) = "1b9425d6") (chksum(pcal) = "59c8a39c" /\ chksum(tla) = "4b65833e") (chksum(pcal) = "6b0daafa" /\ chksum(tla) = "71f1dff3") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "e40d1db7" /\ chksum(tla) = "ba8c95ce") (chksum(pcal) = "74038c43" /\ chksum(tla) = "b16a5d68") (chksum(pcal) = "e540ce66" /\ chksum(tla) = "46b25d40") (chksum(pcal) = "c67df113" /\ chksum(tla) = "1f2575da") (chksum(pcal) = "c67df113" /\ chksum(tla) = "56dea48a") (chksum(pcal) = "fb02cd5b" /\ chksum(tla) = "afce9136") (chksum(pcal) = "dafc4d31" /\ chksum(tla) = "b4430444") (chksum(pcal) = "c55e656b" /\ chksum(tla) = "51df0a7d") (chksum(pcal) = "c55e656b" /\ chksum(tla) = "63a2ee45") (chksum(pcal) = "bc76b76d" /\ chksum(tla) = "6edfdc86") (chksum(pcal) = "45be716d" /\ chksum(tla) = "ad87f40c") (chksum(pcal) = "1eea2943" /\ chksum(tla) = "71e18cda") (chksum(pcal) = "9cffdea9" /\ chksum(tla) = "7d692264") (chksum(pcal) = "9d2d6553" /\ chksum(tla) = "a81fbd79") (chksum(pcal) = "b9bfbeb1" /\ chksum(tla) = "818bc6cd")
-\* Process variable stepOfFailure of process controllerSequencer at line 1633 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1740 col 64 changed to stepOfFailure_c
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-ee4aa5721a83bb912d04e1620640af0b (chksum(pcal) = "4659e0c1" /\ chksum(tla) = "fbf6be4a") (chksum(pcal) = "7a2fe2c1" /\ chksum(tla) = "14ddaa3a") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "82f87b30" /\ chksum(tla) = "47d3f7df") (chksum(pcal) = "23f446bc" /\ chksum(tla) = "723889b7") (chksum(pcal) = "c248126e" /\ chksum(tla) = "7c859022") (chksum(pcal) = "3b6de34d" /\ chksum(tla) = "ad4c98fd") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "45c9e90e") (chksum(pcal) = "f50dd7cc" /\ chksum(tla) = "6e880c75") (chksum(pcal) = "9b7e9154" /\ chksum(tla) = "bcec9455") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "f49fed71") (chksum(pcal) = "31f89ec4" /\ chksum(tla) = "628eb008") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "542cd8a0" /\ chksum(tla) = "d4de6745") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "48eae82e") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "8c5f03af") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "5bba88d3" /\ chksum(tla) = "a94d4467") (chksum(pcal) = "1f2b9c17" /\ chksum(tla) = "fee3deed") (chksum(pcal) = "dfde1fce" /\ chksum(tla) = "fe789038") (chksum(pcal) = "6ddeb726" /\ chksum(tla) = "3beb8e13") (chksum(pcal) = "5a75ba25" /\ chksum(tla) = "93b9b20e") (chksum(pcal) = "c8de7fb9" /\ chksum(tla) = "b833b74c") (chksum(pcal) = "94f3909" /\ chksum(tla) = "8ad80f38") (chksum(pcal) = "5d2e9460" /\ chksum(tla) = "c8187013") (chksum(pcal) = "d247bf8c" /\ chksum(tla) = "985db525") (chksum(pcal) = "9d6e4c" /\ chksum(tla) = "7dacb4e3") (chksum(pcal) = "9bdecb49" /\ chksum(tla) = "98dd9b9e") (chksum(pcal) = "6b238baf" /\ chksum(tla) = "290afe3e") (chksum(pcal) = "76d2acc4" /\ chksum(tla) = "3544ab03") (chksum(pcal) = "c1a8d0c0" /\ chksum(tla) = "d6de12ac") (chksum(pcal) = "7d4e2ade" /\ chksum(tla) = "f9ee86e3") (chksum(pcal) = "95171eb" /\ chksum(tla) = "1aa9a66a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "6bd52f45" /\ chksum(tla) = "155153ef") (chksum(pcal) = "bbc44abc" /\ chksum(tla) = "cbacbd3a") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "7d9bcccc" /\ chksum(tla) = "c5bd2e16") (chksum(pcal) = "3c7aeabb" /\ chksum(tla) = "e1e9121a") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "c765cee3" /\ chksum(tla) = "b3676750") (chksum(pcal) = "f0f35180" /\ chksum(tla) = "116354c4") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "ceaffbd8" /\ chksum(tla) = "31d4ed2f") (chksum(pcal) = "c978416d" /\ chksum(tla) = "9fdb807d") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "7a45fb4c") (chksum(pcal) = "9a483c9a" /\ chksum(tla) = "4e286c19") (chksum(pcal) = "6f77d7a0" /\ chksum(tla) = "1f75f444") (chksum(pcal) = "aa8b125c" /\ chksum(tla) = "8d865ca9") (chksum(pcal) = "cf3d0a41" /\ chksum(tla) = "5d555c32") (chksum(pcal) = "bcd87d9" /\ chksum(tla) = "21926a6d") (chksum(pcal) = "d086e217" /\ chksum(tla) = "65fe51b") (chksum(pcal) = "2d7f3fa9" /\ chksum(tla) = "291a932") (chksum(pcal) = "37e95dd2" /\ chksum(tla) = "407e6ef2") (chksum(pcal) = "f3837e52" /\ chksum(tla) = "e6a7b81b") (chksum(pcal) = "f135207f" /\ chksum(tla) = "c21368b0") (chksum(pcal) = "f0eefb51" /\ chksum(tla) = "b3a92d60") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "443ee621") (chksum(pcal) = "b00ad258" /\ chksum(tla) = "7764057c") (chksum(pcal) = "f18a760" /\ chksum(tla) = "f7920ead") (chksum(pcal) = "ce92cfd2" /\ chksum(tla) = "b1c1b140") (chksum(pcal) = "d6d06718" /\ chksum(tla) = "9282732b") (chksum(pcal) = "42ee3c5e" /\ chksum(tla) = "80518238") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "8cb13c72" /\ chksum(tla) = "bb41fb81") (chksum(pcal) = "c22c784a" /\ chksum(tla) = "81d3ea87") (chksum(pcal) = "3dd25d26" /\ chksum(tla) = "2b6204c8") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "9d2a12f4") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "40286c29") (chksum(pcal) = "8c4c98f" /\ chksum(tla) = "b4d767c4") (chksum(pcal) = "be68fae5" /\ chksum(tla) = "bbd15d38") (chksum(pcal) = "db916232" /\ chksum(tla) = "af315036") (chksum(pcal) = "66bee27d" /\ chksum(tla) = "12fe2e40") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "9a07bcc2") (chksum(pcal) = "2e97a457" /\ chksum(tla) = "240a047e") (chksum(pcal) = "364a9b04" /\ chksum(tla) = "19f17100") (chksum(pcal) = "6b20d6a" /\ chksum(tla) = "67251219") (chksum(pcal) = "829c0e2c" /\ chksum(tla) = "8c827318") (chksum(pcal) = "a1dfa3e2" /\ chksum(tla) = "63c2fb6a") (chksum(pcal) = "6ac668f0" /\ chksum(tla) = "eca70484") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "a4642e9b" /\ chksum(tla) = "5262f401") (chksum(pcal) = "bdf6aef3" /\ chksum(tla) = "374343fd") (chksum(pcal) = "275cfd35" /\ chksum(tla) = "ad4ac30d") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "a84db520" /\ chksum(tla) = "e0fd6452") (chksum(pcal) = "9e9e8407" /\ chksum(tla) = "9cac35f2") (chksum(pcal) = "9aa4e816" /\ chksum(tla) = "9a332feb") (chksum(pcal) = "a30b13d4" /\ chksum(tla) = "5f074879") (chksum(pcal) = "e4caf3de" /\ chksum(tla) = "36a5f04e") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "1406ea28" /\ chksum(tla) = "b81c8f91") (chksum(pcal) = "980c642" /\ chksum(tla) = "54e27b3c") (chksum(pcal) = "69ded205" /\ chksum(tla) = "1b9425d6") (chksum(pcal) = "59c8a39c" /\ chksum(tla) = "4b65833e") (chksum(pcal) = "6b0daafa" /\ chksum(tla) = "71f1dff3") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "4e7272db" /\ chksum(tla) = "ac6892dc") (chksum(pcal) = "e40d1db7" /\ chksum(tla) = "ba8c95ce")
+\* Process variable stepOfFailure of process controllerSequencer at line 1617 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1724 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, irTypeMapping, ir2sw, swSeqChangedStatus, 
           controller2Switch, switch2Controller, switchStatus, installedIRs, 
@@ -2362,7 +2340,7 @@ canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
 
 
 getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
-                                             /\ NIBIRStatus[x] \notin {IR_NONE}}
+                                             /\ NIBIRStatus[x] \notin {IR_DONE, IR_NONE}}
 
 
 
@@ -2382,9 +2360,9 @@ VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation,
           installerInIR, statusMsg, notFailedSet, failedElem, obj, failedSet, 
           statusResolveMsg, recoveredElem, event, topoChangeEvent, 
           currSetDownSw, prev_dag_id, init, nxtDAG, setRemovableIRs, currIR, 
-          currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, seqEvent, 
-          worker, toBeScheduledIRs, nextIR, stepOfFailure_, currDAG, 
-          nextIRToSent, rowIndex, rowRemove, stepOfFailure_c, monitoringEvent, 
+          currIRInDAG, nxtDAGVertices, setIRsInDAG, seqEvent, worker, 
+          toBeScheduledIRs, nextIR, stepOfFailure_, currDAG, nextIRToSent, 
+          rowIndex, rowRemove, stepOfFailure_c, monitoringEvent, 
           setIRsToReset, resetIR, stepOfFailure, msg, irID, 
           controllerFailedModules
 
@@ -2404,7 +2382,7 @@ vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var,
            notFailedSet, failedElem, obj, failedSet, statusResolveMsg, 
            recoveredElem, event, topoChangeEvent, currSetDownSw, prev_dag_id, 
            init, nxtDAG, setRemovableIRs, currIR, currIRInDAG, nxtDAGVertices, 
-           setIRsInDAG, prev_dag, seqEvent, worker, toBeScheduledIRs, nextIR, 
+           setIRsInDAG, seqEvent, worker, toBeScheduledIRs, nextIR, 
            stepOfFailure_, currDAG, nextIRToSent, rowIndex, rowRemove, 
            stepOfFailure_c, monitoringEvent, setIRsToReset, resetIR, 
            stepOfFailure, msg, irID, controllerFailedModules >>
@@ -2496,7 +2474,6 @@ Init == (* Global variables *)
         /\ currIRInDAG = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setIRsInDAG = [self \in ({rc0} \X {CONT_TE}) |-> {}]
-        /\ prev_dag = [self \in ({rc0} \X {CONT_TE}) |-> [e |-> {}, v |-> {}]]
         (* Process controllerBossSequencer *)
         /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> [type |-> 0]]
         /\ worker = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> 0]
@@ -2546,7 +2523,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                       "Failure of assertion at line 1142, column 9.")
+                                       "Failure of assertion at line 1132, column 9.")
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ IF ingressPkt'[self].type = INSTALL_FLOW
                                    THEN /\ installedIRs' = Append(installedIRs, ingressPkt'[self].flow)
@@ -2561,7 +2538,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                         /\ UNCHANGED installedIRs
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 819, column 9 of macro called at line 1156, column 9.")
+                                       "Failure of assertion at line 809, column 9 of macro called at line 1146, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2595,8 +2572,8 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              currSetDownSw, prev_dag_id, init, 
                                              nxtDAG, setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
+                                             setIRsInDAG, seqEvent, worker, 
+                                             toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_c, monitoringEvent, 
@@ -2612,7 +2589,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ Len(controller2Switch[self[2]]) > 0
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(ingressIR'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                   "Failure of assertion at line 1181, column 9.")
+                                   "Failure of assertion at line 1171, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -2648,8 +2625,8 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          currSetDownSw, prev_dag_id, init, 
                                          nxtDAG, setRemovableIRs, currIR, 
                                          currIRInDAG, nxtDAGVertices, 
-                                         setIRsInDAG, prev_dag, seqEvent, 
-                                         worker, toBeScheduledIRs, nextIR, 
+                                         setIRsInDAG, seqEvent, worker, 
+                                         toBeScheduledIRs, nextIR, 
                                          stepOfFailure_, currDAG, nextIRToSent, 
                                          rowIndex, rowRemove, stepOfFailure_c, 
                                          monitoringEvent, setIRsToReset, 
@@ -2718,12 +2695,11 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       nxtDAG, setRemovableIRs, 
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
-                                                      setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
-                                                      toBeScheduledIRs, nextIR, 
-                                                      stepOfFailure_, currDAG, 
-                                                      nextIRToSent, rowIndex, 
-                                                      rowRemove, 
+                                                      setIRsInDAG, seqEvent, 
+                                                      worker, toBeScheduledIRs, 
+                                                      nextIR, stepOfFailure_, 
+                                                      currDAG, nextIRToSent, 
+                                                      rowIndex, rowRemove, 
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
@@ -2742,7 +2718,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ switchLock' = self
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = DELETED_SUCCESSFULLY, 
-                                       "Failure of assertion at line 1208, column 9.")
+                                       "Failure of assertion at line 1198, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2778,8 +2754,8 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              currSetDownSw, prev_dag_id, init, 
                                              nxtDAG, setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
+                                             setIRsInDAG, seqEvent, worker, 
+                                             toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_c, monitoringEvent, 
@@ -2793,7 +2769,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 819, column 9 of macro called at line 1216, column 17.")
+                                                      "Failure of assertion at line 809, column 9 of macro called at line 1206, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -2843,7 +2819,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
+                                                 seqEvent, worker, 
                                                  toBeScheduledIRs, nextIR, 
                                                  stepOfFailure_, currDAG, 
                                                  nextIRToSent, rowIndex, 
@@ -2864,9 +2840,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1244, column 9.")
+                                   "Failure of assertion at line 1234, column 9.")
                          /\ Assert(ofaInMsg'[self].flow  \in 1..MaxNumFlows, 
-                                   "Failure of assertion at line 1245, column 9.")
+                                   "Failure of assertion at line 1235, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -2899,8 +2875,8 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          currSetDownSw, prev_dag_id, init, 
                                          nxtDAG, setRemovableIRs, currIR, 
                                          currIRInDAG, nxtDAGVertices, 
-                                         setIRsInDAG, prev_dag, seqEvent, 
-                                         worker, toBeScheduledIRs, nextIR, 
+                                         setIRsInDAG, seqEvent, worker, 
+                                         toBeScheduledIRs, nextIR, 
                                          stepOfFailure_, currDAG, nextIRToSent, 
                                          rowIndex, rowRemove, stepOfFailure_c, 
                                          monitoringEvent, setIRsToReset, 
@@ -2963,8 +2939,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 prev_dag_id, init, nxtDAG, 
                                                 setRemovableIRs, currIR, 
                                                 currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
+                                                setIRsInDAG, seqEvent, worker, 
                                                 toBeScheduledIRs, nextIR, 
                                                 stepOfFailure_, currDAG, 
                                                 nextIRToSent, rowIndex, 
@@ -2985,9 +2960,9 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self].flow \in 1..MaxNumFlows, 
-                                    "Failure of assertion at line 1275, column 9.")
+                                    "Failure of assertion at line 1265, column 9.")
                           /\ Assert(ofaOutConfirmation'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                    "Failure of assertion at line 1276, column 9.")
+                                    "Failure of assertion at line 1266, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstall, 
                                           sw_fail_ordering_var, ContProcSet, 
@@ -3020,9 +2995,8 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           prev_dag_id, init, nxtDAG, 
                                           setRemovableIRs, currIR, currIRInDAG, 
                                           nxtDAGVertices, setIRsInDAG, 
-                                          prev_dag, seqEvent, worker, 
-                                          toBeScheduledIRs, nextIR, 
-                                          stepOfFailure_, currDAG, 
+                                          seqEvent, worker, toBeScheduledIRs, 
+                                          nextIR, stepOfFailure_, currDAG, 
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure_c, monitoringEvent, 
                                           setIRsToReset, resetIR, 
@@ -3096,12 +3070,11 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       nxtDAG, setRemovableIRs, 
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
-                                                      setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
-                                                      toBeScheduledIRs, nextIR, 
-                                                      stepOfFailure_, currDAG, 
-                                                      nextIRToSent, rowIndex, 
-                                                      rowRemove, 
+                                                      setIRsInDAG, seqEvent, 
+                                                      worker, toBeScheduledIRs, 
+                                                      nextIR, stepOfFailure_, 
+                                                      currDAG, nextIRToSent, 
+                                                      rowIndex, rowRemove, 
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
@@ -3119,9 +3092,9 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self].flow \in 1..MaxNumFlows, 
-                                       "Failure of assertion at line 1314, column 8.")
+                                       "Failure of assertion at line 1304, column 8.")
                              /\ Assert(installerInIR'[self].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                       "Failure of assertion at line 1315, column 8.")
+                                       "Failure of assertion at line 1305, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3157,8 +3130,8 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
+                                             setIRsInDAG, seqEvent, worker, 
+                                             toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_c, monitoringEvent, 
@@ -3231,12 +3204,12 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     setRemovableIRs, currIR, 
                                                     currIRInDAG, 
                                                     nxtDAGVertices, 
-                                                    setIRsInDAG, prev_dag, 
-                                                    seqEvent, worker, 
-                                                    toBeScheduledIRs, nextIR, 
-                                                    stepOfFailure_, currDAG, 
-                                                    nextIRToSent, rowIndex, 
-                                                    rowRemove, stepOfFailure_c, 
+                                                    setIRsInDAG, seqEvent, 
+                                                    worker, toBeScheduledIRs, 
+                                                    nextIR, stepOfFailure_, 
+                                                    currDAG, nextIRToSent, 
+                                                    rowIndex, rowRemove, 
+                                                    stepOfFailure_c, 
                                                     monitoringEvent, 
                                                     setIRsToReset, resetIR, 
                                                     stepOfFailure, msg, irID, 
@@ -3308,8 +3281,8 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          setRemovableIRs, 
                                                          currIR, currIRInDAG, 
                                                          nxtDAGVertices, 
-                                                         setIRsInDAG, prev_dag, 
-                                                         seqEvent, worker, 
+                                                         setIRsInDAG, seqEvent, 
+                                                         worker, 
                                                          toBeScheduledIRs, 
                                                          nextIR, 
                                                          stepOfFailure_, 
@@ -3337,7 +3310,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = obj'[self].transient,
                                                                    ![self[2]].partial = obj'[self].partial]
                        /\ Assert(obj'[self] \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 511, column 9 of macro called at line 1370, column 9.")
+                                 "Failure of assertion at line 511, column 9 of macro called at line 1360, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{obj'[self]})>> \o Tail(sw_fail_ordering_var)
@@ -3348,9 +3321,9 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                              /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
                                                                                             swID |-> self[2],
                                                                                             num |-> controlMsgCounter'[self[2]]]]
-                                             /\ switch2Controller' = Append(switch2Controller, statusMsg'[self])
+                                             /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                         ELSE /\ TRUE
-                                             /\ UNCHANGED << switch2Controller, 
+                                             /\ UNCHANGED << swSeqChangedStatus, 
                                                              controlMsgCounter, 
                                                              statusMsg >>
                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]] = [cpu |-> Failed, nicAsic |-> Failed,
@@ -3368,7 +3341,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        failedElem' = [failedElem EXCEPT ![self] = elem]
                                   /\ IF failedElem'[self] = "cpu"
                                         THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                                       "Failure of assertion at line 640, column 9 of macro called at line 1390, column 17.")
+                                                       "Failure of assertion at line 636, column 9 of macro called at line 1380, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                                      ![self[2]].ofa = Failed,
                                                                                      ![self[2]].installer = Failed]
@@ -3381,59 +3354,59 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                         /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
                                                                                                      swID |-> self[2],
                                                                                                      num |-> controlMsgCounter'[self[2]]]]
-                                                        /\ switch2Controller' = Append(switch2Controller, statusMsg'[self])
+                                                        /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                    ELSE /\ TRUE
-                                                        /\ UNCHANGED << switch2Controller, 
+                                                        /\ UNCHANGED << swSeqChangedStatus, 
                                                                         controlMsgCounter, 
                                                                         statusMsg >>
                                              /\ UNCHANGED controller2Switch
                                         ELSE /\ IF failedElem'[self] = "ofa"
                                                    THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                                  "Failure of assertion at line 694, column 9 of macro called at line 1392, column 17.")
+                                                                  "Failure of assertion at line 688, column 9 of macro called at line 1382, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                               THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> OFA_DOWN,
                                                                                                                 swID |-> self[2],
                                                                                                                 num |-> controlMsgCounter'[self[2]]]]
-                                                                   /\ switch2Controller' = Append(switch2Controller, statusMsg'[self])
+                                                                   /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                               ELSE /\ TRUE
-                                                                   /\ UNCHANGED << switch2Controller, 
+                                                                   /\ UNCHANGED << swSeqChangedStatus, 
                                                                                    controlMsgCounter, 
                                                                                    statusMsg >>
                                                         /\ UNCHANGED controller2Switch
                                                    ELSE /\ IF failedElem'[self] = "installer"
                                                               THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                             "Failure of assertion at line 740, column 9 of macro called at line 1394, column 17.")
+                                                                             "Failure of assertion at line 732, column 9 of macro called at line 1384, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                                    /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                          THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                                        "Failure of assertion at line 743, column 13 of macro called at line 1394, column 17.")
+                                                                                        "Failure of assertion at line 735, column 13 of macro called at line 1384, column 17.")
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                               /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                            swID |-> self[2],
                                                                                                                            num |-> controlMsgCounter'[self[2]],
                                                                                                                            status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                                                              /\ switch2Controller' = Append(switch2Controller, statusMsg'[self])
+                                                                              /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                                          ELSE /\ TRUE
-                                                                              /\ UNCHANGED << switch2Controller, 
+                                                                              /\ UNCHANGED << swSeqChangedStatus, 
                                                                                               controlMsgCounter, 
                                                                                               statusMsg >>
                                                                    /\ UNCHANGED controller2Switch
                                                               ELSE /\ IF failedElem'[self] = "nicAsic"
                                                                          THEN /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                                        "Failure of assertion at line 584, column 9 of macro called at line 1396, column 17.")
+                                                                                        "Failure of assertion at line 582, column 9 of macro called at line 1386, column 17.")
                                                                               /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                               /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
                                                                                                                            swID |-> self[2],
                                                                                                                            num |-> controlMsgCounter'[self[2]]]]
-                                                                              /\ switch2Controller' = Append(switch2Controller, statusMsg'[self])
+                                                                              /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                                          ELSE /\ Assert(FALSE, 
-                                                                                        "Failure of assertion at line 1397, column 18.")
-                                                                              /\ UNCHANGED << controller2Switch, 
-                                                                                              switch2Controller, 
+                                                                                        "Failure of assertion at line 1387, column 18.")
+                                                                              /\ UNCHANGED << swSeqChangedStatus, 
+                                                                                              controller2Switch, 
                                                                                               switchStatus, 
                                                                                               controlMsgCounter, 
                                                                                               statusMsg >>
@@ -3445,8 +3418,8 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ pc' = [pc EXCEPT ![self] = "SwitchFailure"]
                        /\ UNCHANGED << switchLock, controllerLock, 
                                        FirstInstall, ContProcSet, SwProcSet, 
-                                       irTypeMapping, ir2sw, 
-                                       swSeqChangedStatus, installedIRs, 
+                                       irTypeMapping, ir2sw, switch2Controller, 
+                                       installedIRs, 
                                        controllerSubmoduleFailNum, 
                                        controllerSubmoduleFailStat, 
                                        switchOrdering, TEEventQueue, 
@@ -3465,13 +3438,13 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        topoChangeEvent, currSetDownSw, 
                                        prev_dag_id, init, nxtDAG, 
                                        setRemovableIRs, currIR, currIRInDAG, 
-                                       nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                       seqEvent, worker, toBeScheduledIRs, 
-                                       nextIR, stepOfFailure_, currDAG, 
-                                       nextIRToSent, rowIndex, rowRemove, 
-                                       stepOfFailure_c, monitoringEvent, 
-                                       setIRsToReset, resetIR, stepOfFailure, 
-                                       msg, irID, controllerFailedModules >>
+                                       nxtDAGVertices, setIRsInDAG, seqEvent, 
+                                       worker, toBeScheduledIRs, nextIR, 
+                                       stepOfFailure_, currDAG, nextIRToSent, 
+                                       rowIndex, rowRemove, stepOfFailure_c, 
+                                       monitoringEvent, setIRsToReset, resetIR, 
+                                       stepOfFailure, msg, irID, 
+                                       controllerFailedModules >>
 
 swFailureProc(self) == SwitchFailure(self)
 
@@ -3481,13 +3454,13 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ IF RecoveryStatus[self[2]].partial = 0
                                     THEN /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 549, column 9 of macro called at line 1419, column 13.")
+                                                   "Failure of assertion at line 548, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                   "Failure of assertion at line 550, column 9 of macro called at line 1419, column 13.")
+                                                   "Failure of assertion at line 549, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].ofa = Failed, 
-                                                   "Failure of assertion at line 551, column 9 of macro called at line 1419, column 13.")
+                                                   "Failure of assertion at line 550, column 9 of macro called at line 1409, column 13.")
                                          /\ Assert(switchStatus[self[2]].installer = Failed, 
-                                                   "Failure of assertion at line 552, column 9 of macro called at line 1419, column 13.")
+                                                   "Failure of assertion at line 551, column 9 of macro called at line 1409, column 13.")
                                          /\ nicAsicStartingMode(self[2])
                                          /\ ofaStartingMode(self[2])
                                          /\ installerInStartingMode(self[2])
@@ -3504,7 +3477,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                     swID |-> self[2],
                                                                                                     num |-> controlMsgCounter'[self[2]],
                                                                                                     status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                         /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self])
+                                         /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
                                          /\ UNCHANGED << failedSet, 
                                                          recoveredElem >>
                                     ELSE /\ failedSet' = [failedSet EXCEPT ![self] = returnSwitchFailedElements(self[2])]
@@ -3514,7 +3487,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                          /\ IF recoveredElem'[self] = "cpu"
                                                THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                              "Failure of assertion at line 668, column 9 of macro called at line 1427, column 43.")
+                                                              "Failure of assertion at line 663, column 9 of macro called at line 1417, column 43.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                             ![self[2]].ofa = NotFailed,
                                                                                             ![self[2]].installer = NotFailed]
@@ -3528,16 +3501,16 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                                           swID |-> self[2],
                                                                                                                           num |-> controlMsgCounter'[self[2]],
                                                                                                                           status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                                               /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self])
+                                                               /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
                                                           ELSE /\ TRUE
-                                                               /\ UNCHANGED << switch2Controller, 
+                                                               /\ UNCHANGED << swSeqChangedStatus, 
                                                                                controlMsgCounter, 
                                                                                statusResolveMsg >>
                                                     /\ UNCHANGED controller2Switch
                                                ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                           THEN /\ nicAsicStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                                         "Failure of assertion at line 611, column 9 of macro called at line 1428, column 50.")
+                                                                         "Failure of assertion at line 608, column 9 of macro called at line 1418, column 50.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                                /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                /\ IF switchStatus'[self[2]].ofa = Failed
@@ -3550,11 +3523,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                                                      swID |-> self[2],
                                                                                                                                      num |-> controlMsgCounter'[self[2]],
                                                                                                                                      status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                                               /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self])
+                                                               /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
                                                           ELSE /\ IF recoveredElem'[self] = "ofa"
                                                                      THEN /\ ofaStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                                    "Failure of assertion at line 717, column 9 of macro called at line 1429, column 46.")
+                                                                                    "Failure of assertion at line 710, column 9 of macro called at line 1419, column 46.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                                 THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3562,32 +3535,32 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                                                                 swID |-> self[2],
                                                                                                                                                 num |-> controlMsgCounter'[self[2]],
                                                                                                                                                 status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                                                                     /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self])
+                                                                                     /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
                                                                                 ELSE /\ TRUE
-                                                                                     /\ UNCHANGED << switch2Controller, 
+                                                                                     /\ UNCHANGED << swSeqChangedStatus, 
                                                                                                      controlMsgCounter, 
                                                                                                      statusResolveMsg >>
                                                                      ELSE /\ IF recoveredElem'[self] = "installer"
                                                                                 THEN /\ installerInStartingMode(self[2])
                                                                                      /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                               "Failure of assertion at line 763, column 9 of macro called at line 1430, column 52.")
+                                                                                               "Failure of assertion at line 754, column 9 of macro called at line 1420, column 52.")
                                                                                      /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                                      /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                            THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                                          "Failure of assertion at line 766, column 13 of macro called at line 1430, column 52.")
+                                                                                                          "Failure of assertion at line 757, column 13 of macro called at line 1420, column 52.")
                                                                                                 /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                                 /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                            swID |-> self[2],
                                                                                                                                                            num |-> controlMsgCounter'[self[2]],
                                                                                                                                                            status |-> [installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)]]]
-                                                                                                /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self])
+                                                                                                /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusResolveMsg'[self])
                                                                                            ELSE /\ TRUE
-                                                                                                /\ UNCHANGED << switch2Controller, 
+                                                                                                /\ UNCHANGED << swSeqChangedStatus, 
                                                                                                                 controlMsgCounter, 
                                                                                                                 statusResolveMsg >>
                                                                                 ELSE /\ Assert(FALSE, 
-                                                                                               "Failure of assertion at line 1431, column 18.")
-                                                                                     /\ UNCHANGED << switch2Controller, 
+                                                                                               "Failure of assertion at line 1421, column 18.")
+                                                                                     /\ UNCHANGED << swSeqChangedStatus, 
                                                                                                      switchStatus, 
                                                                                                      controlMsgCounter, 
                                                                                                      statusResolveMsg >>
@@ -3604,7 +3577,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               sw_fail_ordering_var, 
                                               ContProcSet, SwProcSet, 
                                               irTypeMapping, ir2sw, 
-                                              swSeqChangedStatus, installedIRs, 
+                                              switch2Controller, installedIRs, 
                                               controllerSubmoduleFailNum, 
                                               controllerSubmoduleFailStat, 
                                               switchOrdering, TEEventQueue, 
@@ -3627,8 +3600,8 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               currSetDownSw, prev_dag_id, init, 
                                               nxtDAG, setRemovableIRs, currIR, 
                                               currIRInDAG, nxtDAGVertices, 
-                                              setIRsInDAG, prev_dag, seqEvent, 
-                                              worker, toBeScheduledIRs, nextIR, 
+                                              setIRsInDAG, seqEvent, worker, 
+                                              toBeScheduledIRs, nextIR, 
                                               stepOfFailure_, currDAG, 
                                               nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_c, 
@@ -3658,7 +3631,7 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 819, column 9 of macro called at line 1468, column 9.")
+                             "Failure of assertion at line 809, column 9 of macro called at line 1458, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstall, 
@@ -3686,12 +3659,12 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    topoChangeEvent, currSetDownSw, prev_dag_id, 
                                    init, nxtDAG, setRemovableIRs, currIR, 
                                    currIRInDAG, nxtDAGVertices, setIRsInDAG, 
-                                   prev_dag, seqEvent, worker, 
-                                   toBeScheduledIRs, nextIR, stepOfFailure_, 
-                                   currDAG, nextIRToSent, rowIndex, rowRemove, 
-                                   stepOfFailure_c, monitoringEvent, 
-                                   setIRsToReset, resetIR, stepOfFailure, msg, 
-                                   irID, controllerFailedModules >>
+                                   seqEvent, worker, toBeScheduledIRs, nextIR, 
+                                   stepOfFailure_, currDAG, nextIRToSent, 
+                                   rowIndex, rowRemove, stepOfFailure_c, 
+                                   monitoringEvent, setIRsToReset, resetIR, 
+                                   stepOfFailure, msg, irID, 
+                                   controllerFailedModules >>
 
 ghostUnlockProcess(self) == ghostProc(self)
 
@@ -3701,20 +3674,24 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                /\ RCNIBEventQueue[self[1]] # <<>>
                                /\ event' = [event EXCEPT ![self] = Head(RCNIBEventQueue[self[1]])]
                                /\ Assert(event'[self].type \in {TOPO_MOD, IR_MOD}, 
-                                         "Failure of assertion at line 1486, column 9.")
+                                         "Failure of assertion at line 1476, column 9.")
                                /\ IF (event'[self].type = TOPO_MOD)
                                      THEN /\ IF RCSwSuspensionStatus[self[1]][event'[self].sw] # event'[self].state
                                                 THEN /\ RCSwSuspensionStatus' = [RCSwSuspensionStatus EXCEPT ![self[1]][event'[self].sw] = event'[self].state]
                                                      /\ TEEventQueue' = [TEEventQueue EXCEPT ![self[1]] = Append(TEEventQueue[self[1]], event'[self])]
+                                                     /\ IF event'[self].state = SW_SUSPEND
+                                                           THEN /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![event'[self].sw] = SetScheduledIRs[event'[self].sw] \ getSetIRsForSwitch(event'[self].sw)]
+                                                           ELSE /\ TRUE
+                                                                /\ UNCHANGED SetScheduledIRs
                                                 ELSE /\ TRUE
                                                      /\ UNCHANGED << TEEventQueue, 
-                                                                     RCSwSuspensionStatus >>
-                                          /\ UNCHANGED << RCIRStatus, 
-                                                          SetScheduledIRs >>
+                                                                     RCSwSuspensionStatus, 
+                                                                     SetScheduledIRs >>
+                                          /\ UNCHANGED RCIRStatus
                                      ELSE /\ IF (event'[self].type = IR_MOD)
                                                 THEN /\ IF RCIRStatus[self[1]][event'[self].IR] # event'[self].state
                                                            THEN /\ RCIRStatus' = [RCIRStatus EXCEPT ![self[1]][event'[self].IR] = event'[self].state]
-                                                                /\ IF event'[self].state \in {IR_SENT, IR_NONE, IR_DONE}
+                                                                /\ IF event'[self].state \in {IR_SENT, IR_DONE}
                                                                       THEN /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![ir2sw[event'[self].IR]] = SetScheduledIRs[ir2sw[event'[self].IR]]\{event'[self].IR}]
                                                                       ELSE /\ TRUE
                                                                            /\ UNCHANGED SetScheduledIRs
@@ -3764,7 +3741,7 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                                init, nxtDAG, setRemovableIRs, 
                                                currIR, currIRInDAG, 
                                                nxtDAGVertices, setIRsInDAG, 
-                                               prev_dag, seqEvent, worker, 
+                                               seqEvent, worker, 
                                                toBeScheduledIRs, nextIR, 
                                                stepOfFailure_, currDAG, 
                                                nextIRToSent, rowIndex, 
@@ -3815,9 +3792,8 @@ ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                                           prev_dag_id, init, nxtDAG, 
                                           setRemovableIRs, currIR, currIRInDAG, 
                                           nxtDAGVertices, setIRsInDAG, 
-                                          prev_dag, seqEvent, worker, 
-                                          toBeScheduledIRs, nextIR, 
-                                          stepOfFailure_, currDAG, 
+                                          seqEvent, worker, toBeScheduledIRs, 
+                                          nextIR, stepOfFailure_, currDAG, 
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure_c, monitoringEvent, 
                                           setIRsToReset, resetIR, 
@@ -3830,7 +3806,7 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                 /\ topoChangeEvent' = [topoChangeEvent EXCEPT ![self] = Head(TEEventQueue[self[1]])]
                                                 /\ Assert(topoChangeEvent'[self].type \in {TOPO_MOD}, 
-                                                          "Failure of assertion at line 1523, column 17.")
+                                                          "Failure of assertion at line 1516, column 17.")
                                                 /\ IF topoChangeEvent'[self].state = SW_SUSPEND
                                                       THEN /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \cup {topoChangeEvent'[self].sw}]
                                                       ELSE /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \ {topoChangeEvent'[self].sw}]
@@ -3890,12 +3866,11 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      setRemovableIRs, currIR, 
                                                      currIRInDAG, 
                                                      nxtDAGVertices, 
-                                                     setIRsInDAG, prev_dag, 
-                                                     seqEvent, worker, 
-                                                     toBeScheduledIRs, nextIR, 
-                                                     stepOfFailure_, currDAG, 
-                                                     nextIRToSent, rowIndex, 
-                                                     rowRemove, 
+                                                     setIRsInDAG, seqEvent, 
+                                                     worker, toBeScheduledIRs, 
+                                                     nextIR, stepOfFailure_, 
+                                                     currDAG, nextIRToSent, 
+                                                     rowIndex, rowRemove, 
                                                      stepOfFailure_c, 
                                                      monitoringEvent, 
                                                      setIRsToReset, resetIR, 
@@ -3907,22 +3882,16 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                            /\ DAGID' = (DAGID % MaxDAGID) + 1
                                            /\ nxtDAG' = [nxtDAG EXCEPT ![self] = [id |-> DAGID', dag |-> TOPO_DAG_MAPPING[currSetDownSw[self]]]]
-                                           /\ IF prev_dag[self] = nxtDAG'[self].dag
-                                                 THEN /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
-                                                      /\ UNCHANGED << DAGState, 
-                                                                      prev_dag_id, 
-                                                                      init, 
-                                                                      nxtDAGVertices >>
-                                                 ELSE /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
-                                                      /\ IF init[self] = 0
-                                                            THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
-                                                                 /\ UNCHANGED << prev_dag_id, 
-                                                                                 init >>
-                                                            ELSE /\ init' = [init EXCEPT ![self] = 0]
-                                                                 /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID']
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
-                                                                 /\ UNCHANGED DAGState
+                                           /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
+                                           /\ IF init[self] = 0
+                                                 THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
+                                                      /\ UNCHANGED << prev_dag_id, 
+                                                                      init >>
+                                                 ELSE /\ init' = [init EXCEPT ![self] = 0]
+                                                      /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID']
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+                                                      /\ UNCHANGED DAGState
                                            /\ UNCHANGED << switchLock, 
                                                            controllerLock, 
                                                            FirstInstall, 
@@ -3980,8 +3949,7 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            setRemovableIRs, 
                                                            currIR, currIRInDAG, 
                                                            setIRsInDAG, 
-                                                           prev_dag, seqEvent, 
-                                                           worker, 
+                                                           seqEvent, worker, 
                                                            toBeScheduledIRs, 
                                                            nextIR, 
                                                            stepOfFailure_, 
@@ -4053,8 +4021,8 @@ ControllerTESendDagStaleNotif(self) == /\ pc[self] = "ControllerTESendDagStaleNo
                                                        nxtDAG, setRemovableIRs, 
                                                        currIR, currIRInDAG, 
                                                        nxtDAGVertices, 
-                                                       setIRsInDAG, prev_dag, 
-                                                       seqEvent, worker, 
+                                                       setIRsInDAG, seqEvent, 
+                                                       worker, 
                                                        toBeScheduledIRs, 
                                                        nextIR, stepOfFailure_, 
                                                        currDAG, nextIRToSent, 
@@ -4071,7 +4039,6 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                 /\ DAGState[prev_dag_id[self]] = DAG_NONE
                                                 /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID]
-                                                /\ prev_dag' = [prev_dag EXCEPT ![self] = nxtDAG[self].dag]
                                                 /\ setRemovableIRs' = [setRemovableIRs EXCEPT ![self] = getSetRemovableIRs(self[1], SW \ currSetDownSw[self], nxtDAGVertices[self])]
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
                                                 /\ UNCHANGED << switchLock, 
@@ -4169,12 +4136,14 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                      /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.v = nxtDAG[self].dag.v \cup {nxtRCIRID}]
                                                      /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = getSetIRsForSwitchInDAG(ir2sw'[currIR'[self]], nxtDAGVertices[self])]
                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
-                                                     /\ UNCHANGED SetScheduledIRs
+                                                     /\ UNCHANGED << DAGEventQueue, 
+                                                                     DAGState >>
                                                 ELSE /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                                      /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                      /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
-                                                     /\ SetScheduledIRs' = [x \in SW |-> (SetScheduledIRs[x] \ nxtDAG[self].dag.v)]
-                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerTESubmitNewDAG"]
+                                                     /\ DAGState' = [DAGState EXCEPT ![nxtDAG[self].id] = DAG_SUBMIT]
+                                                     /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Append(DAGEventQueue[self[1]], [type |-> DAG_NEW, dag_obj |-> nxtDAG[self]])]
+                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
                                                      /\ UNCHANGED << FirstInstall, 
                                                                      irTypeMapping, 
                                                                      ir2sw, 
@@ -4204,9 +4173,8 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           controllerSubmoduleFailStat, 
                                                           switchOrdering, 
                                                           TEEventQueue, 
-                                                          DAGEventQueue, 
                                                           DAGQueue, DAGID, 
-                                                          MaxDAGID, DAGState, 
+                                                          MaxDAGID, 
                                                           RCNIBEventQueue, 
                                                           RCSwSuspensionStatus, 
                                                           nxtRCIRID, 
@@ -4218,6 +4186,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           controllerStateNIB, 
                                                           SwSuspensionStatus, 
                                                           IRQueueNIB, 
+                                                          SetScheduledIRs, 
                                                           ingressPkt, 
                                                           ingressIR, egressMsg, 
                                                           ofaInMsg, 
@@ -4234,8 +4203,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           prev_dag_id, init, 
                                                           currIRInDAG, 
                                                           nxtDAGVertices, 
-                                                          prev_dag, seqEvent, 
-                                                          worker, 
+                                                          seqEvent, worker, 
                                                           toBeScheduledIRs, 
                                                           nextIR, 
                                                           stepOfFailure_, 
@@ -4300,8 +4268,7 @@ ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                                              event, topoChangeEvent, 
                                              currSetDownSw, prev_dag_id, init, 
                                              setRemovableIRs, currIR, 
-                                             nxtDAGVertices, prev_dag, 
-                                             seqEvent, worker, 
+                                             nxtDAGVertices, seqEvent, worker, 
                                              toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
@@ -4310,67 +4277,6 @@ ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                                              stepOfFailure, msg, irID, 
                                              controllerFailedModules >>
 
-ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
-                                  /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
-                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                  /\ DAGState' = [DAGState EXCEPT ![nxtDAG[self].id] = DAG_SUBMIT]
-                                  /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Append(DAGEventQueue[self[1]], [type |-> DAG_NEW, dag_obj |-> nxtDAG[self]])]
-                                  /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
-                                  /\ UNCHANGED << switchLock, controllerLock, 
-                                                  FirstInstall, 
-                                                  sw_fail_ordering_var, 
-                                                  ContProcSet, SwProcSet, 
-                                                  irTypeMapping, ir2sw, 
-                                                  swSeqChangedStatus, 
-                                                  controller2Switch, 
-                                                  switch2Controller, 
-                                                  switchStatus, installedIRs, 
-                                                  NicAsic2OfaBuff, 
-                                                  Ofa2NicAsicBuff, 
-                                                  Installer2OfaBuff, 
-                                                  Ofa2InstallerBuff, TCAM, 
-                                                  controlMsgCounter, 
-                                                  RecoveryStatus, 
-                                                  controllerSubmoduleFailNum, 
-                                                  controllerSubmoduleFailStat, 
-                                                  switchOrdering, TEEventQueue, 
-                                                  DAGQueue, DAGID, MaxDAGID, 
-                                                  RCNIBEventQueue, RCIRStatus, 
-                                                  RCSwSuspensionStatus, 
-                                                  nxtRCIRID, 
-                                                  idWorkerWorkingOnDAG, 
-                                                  RCSeqWorkerStatus, 
-                                                  idThreadWorkingOnIR, 
-                                                  workerThreadRanking, 
-                                                  masterState, 
-                                                  controllerStateNIB, 
-                                                  NIBIRStatus, 
-                                                  SwSuspensionStatus, 
-                                                  IRQueueNIB, SetScheduledIRs, 
-                                                  ingressPkt, ingressIR, 
-                                                  egressMsg, ofaInMsg, 
-                                                  ofaOutConfirmation, 
-                                                  installerInIR, statusMsg, 
-                                                  notFailedSet, failedElem, 
-                                                  obj, failedSet, 
-                                                  statusResolveMsg, 
-                                                  recoveredElem, event, 
-                                                  topoChangeEvent, 
-                                                  currSetDownSw, prev_dag_id, 
-                                                  init, nxtDAG, 
-                                                  setRemovableIRs, currIR, 
-                                                  currIRInDAG, nxtDAGVertices, 
-                                                  setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
-                                                  toBeScheduledIRs, nextIR, 
-                                                  stepOfFailure_, currDAG, 
-                                                  nextIRToSent, rowIndex, 
-                                                  rowRemove, stepOfFailure_c, 
-                                                  monitoringEvent, 
-                                                  setIRsToReset, resetIR, 
-                                                  stepOfFailure, msg, irID, 
-                                                  controllerFailedModules >>
-
 controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTEEventProcessing(self)
                                          \/ ControllerTEComputeDagBasedOnTopo(self)
@@ -4378,7 +4284,6 @@ controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTEWaitForStaleDAGToBeRemoved(self)
                                          \/ ControllerTERemoveUnnecessaryIRs(self)
                                          \/ ControllerTEAddEdge(self)
-                                         \/ ControllerTESubmitNewDAG(self)
 
 ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                /\ controllerIsMaster(self[1])
@@ -4389,7 +4294,7 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                /\ seqEvent' = [seqEvent EXCEPT ![self] = Head(DAGEventQueue[self[1]])]
                                /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Tail(DAGEventQueue[self[1]])]
                                /\ Assert(seqEvent'[self].type \in {DAG_NEW, DAG_STALE}, 
-                                         "Failure of assertion at line 1610, column 9.")
+                                         "Failure of assertion at line 1594, column 9.")
                                /\ IF seqEvent'[self].type = DAG_NEW
                                      THEN /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Append(DAGQueue[self[1]], seqEvent'[self].dag_obj)]
                                           /\ pc' = [pc EXCEPT ![self] = "ControllerBossSeqProc"]
@@ -4442,9 +4347,8 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                                prev_dag_id, init, nxtDAG, 
                                                setRemovableIRs, currIR, 
                                                currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, 
-                                               toBeScheduledIRs, nextIR, 
-                                               stepOfFailure_, currDAG, 
+                                               setIRsInDAG, toBeScheduledIRs, 
+                                               nextIR, stepOfFailure_, currDAG, 
                                                nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_c, 
                                                monitoringEvent, setIRsToReset, 
@@ -4506,12 +4410,11 @@ WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
                                                      setRemovableIRs, currIR, 
                                                      currIRInDAG, 
                                                      nxtDAGVertices, 
-                                                     setIRsInDAG, prev_dag, 
-                                                     seqEvent, worker, 
-                                                     toBeScheduledIRs, nextIR, 
-                                                     stepOfFailure_, currDAG, 
-                                                     nextIRToSent, rowIndex, 
-                                                     rowRemove, 
+                                                     setIRsInDAG, seqEvent, 
+                                                     worker, toBeScheduledIRs, 
+                                                     nextIR, stepOfFailure_, 
+                                                     currDAG, nextIRToSent, 
+                                                     rowIndex, rowRemove, 
                                                      stepOfFailure_c, 
                                                      monitoringEvent, 
                                                      setIRsToReset, resetIR, 
@@ -4572,7 +4475,7 @@ ControllerWorkerSeqProc(self) == /\ pc[self] = "ControllerWorkerSeqProc"
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
+                                                 seqEvent, worker, 
                                                  toBeScheduledIRs, nextIR, 
                                                  stepOfFailure_, nextIRToSent, 
                                                  rowIndex, rowRemove, 
@@ -4650,9 +4553,9 @@ ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqSchedu
                                                         setRemovableIRs, 
                                                         currIR, currIRInDAG, 
                                                         nxtDAGVertices, 
-                                                        setIRsInDAG, prev_dag, 
-                                                        seqEvent, worker, 
-                                                        nextIR, stepOfFailure_, 
+                                                        setIRsInDAG, seqEvent, 
+                                                        worker, nextIR, 
+                                                        stepOfFailure_, 
                                                         currDAG, nextIRToSent, 
                                                         rowIndex, rowRemove, 
                                                         stepOfFailure_c, 
@@ -4721,8 +4624,8 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             currSetDownSw, prev_dag_id, init, 
                                             nxtDAG, setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, currDAG, 
+                                            setIRsInDAG, seqEvent, worker, 
+                                            toBeScheduledIRs, currDAG, 
                                             nextIRToSent, rowIndex, rowRemove, 
                                             stepOfFailure_c, monitoringEvent, 
                                             setIRsToReset, resetIR, 
@@ -4780,12 +4683,12 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                        topoChangeEvent, currSetDownSw, 
                                        prev_dag_id, init, nxtDAG, 
                                        setRemovableIRs, currIR, currIRInDAG, 
-                                       nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                       seqEvent, worker, nextIR, currDAG, 
-                                       nextIRToSent, rowIndex, rowRemove, 
-                                       stepOfFailure_c, monitoringEvent, 
-                                       setIRsToReset, resetIR, stepOfFailure, 
-                                       msg, irID, controllerFailedModules >>
+                                       nxtDAGVertices, setIRsInDAG, seqEvent, 
+                                       worker, nextIR, currDAG, nextIRToSent, 
+                                       rowIndex, rowRemove, stepOfFailure_c, 
+                                       monitoringEvent, setIRsToReset, resetIR, 
+                                       stepOfFailure, msg, irID, 
+                                       controllerFailedModules >>
 
 ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateReconciliation"
                                           /\ controllerIsMaster(self[1])
@@ -4855,8 +4758,7 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           currIR, currIRInDAG, 
                                                           nxtDAGVertices, 
                                                           setIRsInDAG, 
-                                                          prev_dag, seqEvent, 
-                                                          worker, 
+                                                          seqEvent, worker, 
                                                           toBeScheduledIRs, 
                                                           nextIR, 
                                                           stepOfFailure_, 
@@ -4940,11 +4842,11 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           prev_dag_id, init, nxtDAG, 
                                           setRemovableIRs, currIR, currIRInDAG, 
                                           nxtDAGVertices, setIRsInDAG, 
-                                          prev_dag, seqEvent, worker, 
-                                          toBeScheduledIRs, nextIR, 
-                                          stepOfFailure_, currDAG, rowRemove, 
-                                          monitoringEvent, setIRsToReset, 
-                                          resetIR, stepOfFailure, msg, irID, 
+                                          seqEvent, worker, toBeScheduledIRs, 
+                                          nextIR, stepOfFailure_, currDAG, 
+                                          rowRemove, monitoringEvent, 
+                                          setIRsToReset, resetIR, 
+                                          stepOfFailure, msg, irID, 
                                           controllerFailedModules >>
 
 ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
@@ -5008,8 +4910,7 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 prev_dag_id, init, nxtDAG, 
                                                 setRemovableIRs, currIR, 
                                                 currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
+                                                setIRsInDAG, seqEvent, worker, 
                                                 toBeScheduledIRs, nextIR, 
                                                 stepOfFailure_, currDAG, 
                                                 nextIRToSent, rowIndex, 
@@ -5027,9 +4928,9 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                          ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                                    /\ IF (stepOfFailure_c'[self] # 1)
                                          THEN /\ Assert(irTypeMapping[nextIRToSent[self]].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                                        "Failure of assertion at line 923, column 9 of macro called at line 1810, column 29.")
+                                                        "Failure of assertion at line 913, column 9 of macro called at line 1794, column 29.")
                                               /\ Assert(irTypeMapping[nextIRToSent[self]].flow \in 1..MaxNumFlows, 
-                                                        "Failure of assertion at line 924, column 9 of macro called at line 1810, column 29.")
+                                                        "Failure of assertion at line 914, column 9 of macro called at line 1794, column 29.")
                                               /\ controller2Switch' = [controller2Switch EXCEPT ![ir2sw[nextIRToSent[self]]] = Append(controller2Switch[ir2sw[nextIRToSent[self]]], [type |-> irTypeMapping[nextIRToSent[self]].type,
                                                                                                                                                                                      to |-> ir2sw[nextIRToSent[self]],
                                                                                                                                                                                      flow |-> irTypeMapping[nextIRToSent[self]].flow])]
@@ -5092,12 +4993,12 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    init, nxtDAG, 
                                                    setRemovableIRs, currIR, 
                                                    currIRInDAG, nxtDAGVertices, 
-                                                   setIRsInDAG, prev_dag, 
-                                                   seqEvent, worker, 
-                                                   toBeScheduledIRs, nextIR, 
-                                                   stepOfFailure_, currDAG, 
-                                                   nextIRToSent, rowIndex, 
-                                                   rowRemove, monitoringEvent, 
+                                                   setIRsInDAG, seqEvent, 
+                                                   worker, toBeScheduledIRs, 
+                                                   nextIR, stepOfFailure_, 
+                                                   currDAG, nextIRToSent, 
+                                                   rowIndex, rowRemove, 
+                                                   monitoringEvent, 
                                                    setIRsToReset, resetIR, 
                                                    stepOfFailure, msg, irID, 
                                                    controllerFailedModules >>
@@ -5176,8 +5077,8 @@ ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSe
                                                          setRemovableIRs, 
                                                          currIR, currIRInDAG, 
                                                          nxtDAGVertices, 
-                                                         setIRsInDAG, prev_dag, 
-                                                         seqEvent, worker, 
+                                                         setIRsInDAG, seqEvent, 
+                                                         worker, 
                                                          toBeScheduledIRs, 
                                                          nextIR, 
                                                          stepOfFailure_, 
@@ -5257,12 +5158,11 @@ RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
                                                   init, nxtDAG, 
                                                   setRemovableIRs, currIR, 
                                                   currIRInDAG, nxtDAGVertices, 
-                                                  setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
-                                                  toBeScheduledIRs, nextIR, 
-                                                  stepOfFailure_, currDAG, 
-                                                  nextIRToSent, rowIndex, 
-                                                  monitoringEvent, 
+                                                  setIRsInDAG, seqEvent, 
+                                                  worker, toBeScheduledIRs, 
+                                                  nextIR, stepOfFailure_, 
+                                                  currDAG, nextIRToSent, 
+                                                  rowIndex, monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, msg, irID, 
                                                   controllerFailedModules >>
@@ -5324,11 +5224,11 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
                                                       nxtDAG, setRemovableIRs, 
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
-                                                      setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
-                                                      toBeScheduledIRs, nextIR, 
-                                                      stepOfFailure_, currDAG, 
-                                                      nextIRToSent, rowIndex, 
+                                                      setIRsInDAG, seqEvent, 
+                                                      worker, toBeScheduledIRs, 
+                                                      nextIR, stepOfFailure_, 
+                                                      currDAG, nextIRToSent, 
+                                                      rowIndex, 
                                                       stepOfFailure_c, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
@@ -5422,7 +5322,6 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              currIRInDAG, 
                                                              nxtDAGVertices, 
                                                              setIRsInDAG, 
-                                                             prev_dag, 
                                                              seqEvent, worker, 
                                                              toBeScheduledIRs, 
                                                              nextIR, 
@@ -5457,7 +5356,7 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                     /\ IF shouldSuspendSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_RUN
                                           THEN /\ pc' = [pc EXCEPT ![self] = "ControllerSuspendSW"]
                                           ELSE /\ IF canfreeSuspendedSw(monitoringEvent'[self]) /\ SwSuspensionStatus[monitoringEvent'[self].swID] = SW_SUSPEND
-                                                     THEN /\ pc' = [pc EXCEPT ![self] = "ControllerCheckIfThisIsLastEvent"]
+                                                     THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
                                                      ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                     /\ UNCHANGED << switchLock, controllerLock, 
                                                     FirstInstall, 
@@ -5508,12 +5407,12 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     setRemovableIRs, currIR, 
                                                     currIRInDAG, 
                                                     nxtDAGVertices, 
-                                                    setIRsInDAG, prev_dag, 
-                                                    seqEvent, worker, 
-                                                    toBeScheduledIRs, nextIR, 
-                                                    stepOfFailure_, currDAG, 
-                                                    nextIRToSent, rowIndex, 
-                                                    rowRemove, stepOfFailure_c, 
+                                                    setIRsInDAG, seqEvent, 
+                                                    worker, toBeScheduledIRs, 
+                                                    nextIR, stepOfFailure_, 
+                                                    currDAG, nextIRToSent, 
+                                                    rowIndex, rowRemove, 
+                                                    stepOfFailure_c, 
                                                     setIRsToReset, resetIR, 
                                                     stepOfFailure, msg, irID, 
                                                     controllerFailedModules >>
@@ -5604,7 +5503,6 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    currIRInDAG, 
                                                                    nxtDAGVertices, 
                                                                    setIRsInDAG, 
-                                                                   prev_dag, 
                                                                    seqEvent, 
                                                                    worker, 
                                                                    toBeScheduledIRs, 
@@ -5673,14 +5571,92 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
+                                             setIRsInDAG, seqEvent, worker, 
+                                             toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_c, monitoringEvent, 
                                              setIRsToReset, resetIR, 
                                              stepOfFailure, msg, irID, 
                                              controllerFailedModules >>
+
+ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
+                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                   /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
+                                         THEN /\ \E num \in 0..2:
+                                                   stepOfFailure' = [stepOfFailure EXCEPT ![self] = num]
+                                         ELSE /\ stepOfFailure' = [stepOfFailure EXCEPT ![self] = 0]
+                                   /\ IF (stepOfFailure'[self] # 1)
+                                         THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> START_RESET_IR, sw |-> monitoringEvent[self].swID]]
+                                              /\ IF (stepOfFailure'[self] # 2)
+                                                    THEN /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_RUN]
+                                                         /\ RCNIBEventQueue' = [RCNIBEventQueue EXCEPT ![rc0] = Append(RCNIBEventQueue[rc0], [type |-> TOPO_MOD,
+                                                                                                                                                sw |-> monitoringEvent[self].swID, state |-> SW_RUN])]
+                                                    ELSE /\ TRUE
+                                                         /\ UNCHANGED << RCNIBEventQueue, 
+                                                                         SwSuspensionStatus >>
+                                         ELSE /\ TRUE
+                                              /\ UNCHANGED << RCNIBEventQueue, 
+                                                              controllerStateNIB, 
+                                                              SwSuspensionStatus >>
+                                   /\ IF (stepOfFailure'[self] # 0)
+                                         THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
+                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
+                                              /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
+                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerCheckIfThisIsLastEvent"]
+                                              /\ UNCHANGED << controllerSubmoduleFailNum, 
+                                                              controllerSubmoduleFailStat >>
+                                   /\ UNCHANGED << switchLock, controllerLock, 
+                                                   FirstInstall, 
+                                                   sw_fail_ordering_var, 
+                                                   ContProcSet, SwProcSet, 
+                                                   irTypeMapping, ir2sw, 
+                                                   swSeqChangedStatus, 
+                                                   controller2Switch, 
+                                                   switch2Controller, 
+                                                   switchStatus, installedIRs, 
+                                                   NicAsic2OfaBuff, 
+                                                   Ofa2NicAsicBuff, 
+                                                   Installer2OfaBuff, 
+                                                   Ofa2InstallerBuff, TCAM, 
+                                                   controlMsgCounter, 
+                                                   RecoveryStatus, 
+                                                   switchOrdering, 
+                                                   TEEventQueue, DAGEventQueue, 
+                                                   DAGQueue, DAGID, MaxDAGID, 
+                                                   DAGState, RCIRStatus, 
+                                                   RCSwSuspensionStatus, 
+                                                   nxtRCIRID, 
+                                                   idWorkerWorkingOnDAG, 
+                                                   RCSeqWorkerStatus, 
+                                                   idThreadWorkingOnIR, 
+                                                   workerThreadRanking, 
+                                                   masterState, NIBIRStatus, 
+                                                   IRQueueNIB, SetScheduledIRs, 
+                                                   ingressPkt, ingressIR, 
+                                                   egressMsg, ofaInMsg, 
+                                                   ofaOutConfirmation, 
+                                                   installerInIR, statusMsg, 
+                                                   notFailedSet, failedElem, 
+                                                   obj, failedSet, 
+                                                   statusResolveMsg, 
+                                                   recoveredElem, event, 
+                                                   topoChangeEvent, 
+                                                   currSetDownSw, prev_dag_id, 
+                                                   init, nxtDAG, 
+                                                   setRemovableIRs, currIR, 
+                                                   currIRInDAG, nxtDAGVertices, 
+                                                   setIRsInDAG, seqEvent, 
+                                                   worker, toBeScheduledIRs, 
+                                                   nextIR, stepOfFailure_, 
+                                                   currDAG, nextIRToSent, 
+                                                   rowIndex, rowRemove, 
+                                                   stepOfFailure_c, 
+                                                   monitoringEvent, 
+                                                   setIRsToReset, resetIR, msg, 
+                                                   irID, 
+                                                   controllerFailedModules >>
 
 ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIsLastEvent"
                                           /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
@@ -5697,7 +5673,7 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                           /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
                                                 THEN /\ IF ~existsMonitoringEventHigherNum(monitoringEvent[self])
                                                            THEN /\ pc' = [pc EXCEPT ![self] = "getIRsToBeChecked"]
-                                                           ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
+                                                           ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                                 ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                           /\ UNCHANGED << switchLock, 
                                                           controllerLock, 
@@ -5756,8 +5732,7 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           currIR, currIRInDAG, 
                                                           nxtDAGVertices, 
                                                           setIRsInDAG, 
-                                                          prev_dag, seqEvent, 
-                                                          worker, 
+                                                          seqEvent, worker, 
                                                           toBeScheduledIRs, 
                                                           nextIR, 
                                                           stepOfFailure_, 
@@ -5787,7 +5762,7 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                            /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
                                  THEN /\ setIRsToReset' = [setIRsToReset EXCEPT ![self] = getIRSetToReset(monitoringEvent[self].swID)]
                                       /\ IF (setIRsToReset'[self] = {})
-                                            THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
+                                            THEN /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                             ELSE /\ pc' = [pc EXCEPT ![self] = "ResetAllIRs"]
                                  ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                       /\ UNCHANGED setIRsToReset
@@ -5822,8 +5797,8 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            prev_dag_id, init, nxtDAG, 
                                            setRemovableIRs, currIR, 
                                            currIRInDAG, nxtDAGVertices, 
-                                           setIRsInDAG, prev_dag, seqEvent, 
-                                           worker, toBeScheduledIRs, nextIR, 
+                                           setIRsInDAG, seqEvent, worker, 
+                                           toBeScheduledIRs, nextIR, 
                                            stepOfFailure_, currDAG, 
                                            nextIRToSent, rowIndex, rowRemove, 
                                            stepOfFailure_c, monitoringEvent, 
@@ -5845,11 +5820,15 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                      /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
                            THEN /\ resetIR' = [resetIR EXCEPT ![self] = CHOOSE x \in setIRsToReset[self]: TRUE]
                                 /\ setIRsToReset' = [setIRsToReset EXCEPT ![self] = setIRsToReset[self] \ {resetIR'[self]}]
-                                /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![resetIR'[self]] = IR_NONE]
-                                /\ RCNIBEventQueue' = [RCNIBEventQueue EXCEPT ![rc0] = Append(RCNIBEventQueue[rc0],
-                                                                                               [type |-> IR_MOD, IR |-> resetIR'[self], state |-> IR_NONE])]
+                                /\ IF NIBIRStatus[resetIR'[self]] # IR_DONE
+                                      THEN /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![resetIR'[self]] = IR_NONE]
+                                           /\ RCNIBEventQueue' = [RCNIBEventQueue EXCEPT ![rc0] = Append(RCNIBEventQueue[rc0],
+                                                                                                          [type |-> IR_MOD, IR |-> resetIR'[self], state |-> IR_NONE])]
+                                      ELSE /\ TRUE
+                                           /\ UNCHANGED << RCNIBEventQueue, 
+                                                           NIBIRStatus >>
                                 /\ IF setIRsToReset'[self] = {}
-                                      THEN /\ pc' = [pc EXCEPT ![self] = "ControllerFreeSuspendedSW"]
+                                      THEN /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                       ELSE /\ pc' = [pc EXCEPT ![self] = "ResetAllIRs"]
                            ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                 /\ UNCHANGED << RCNIBEventQueue, NIBIRStatus, 
@@ -5879,91 +5858,12 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      topoChangeEvent, currSetDownSw, 
                                      prev_dag_id, init, nxtDAG, 
                                      setRemovableIRs, currIR, currIRInDAG, 
-                                     nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                     seqEvent, worker, toBeScheduledIRs, 
-                                     nextIR, stepOfFailure_, currDAG, 
-                                     nextIRToSent, rowIndex, rowRemove, 
-                                     stepOfFailure_c, monitoringEvent, 
-                                     stepOfFailure, msg, irID, 
+                                     nxtDAGVertices, setIRsInDAG, seqEvent, 
+                                     worker, toBeScheduledIRs, nextIR, 
+                                     stepOfFailure_, currDAG, nextIRToSent, 
+                                     rowIndex, rowRemove, stepOfFailure_c, 
+                                     monitoringEvent, stepOfFailure, msg, irID, 
                                      controllerFailedModules >>
-
-ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
-                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
-                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                   /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
-                                         THEN /\ \E num \in 0..2:
-                                                   stepOfFailure' = [stepOfFailure EXCEPT ![self] = num]
-                                         ELSE /\ stepOfFailure' = [stepOfFailure EXCEPT ![self] = 0]
-                                   /\ IF (stepOfFailure'[self] # 1)
-                                         THEN /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![self] = [type |-> START_RESET_IR, sw |-> monitoringEvent[self].swID]]
-                                              /\ IF (stepOfFailure'[self] # 2)
-                                                    THEN /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent[self].swID] = SW_RUN]
-                                                         /\ RCNIBEventQueue' = [RCNIBEventQueue EXCEPT ![rc0] = Append(RCNIBEventQueue[rc0], [type |-> TOPO_MOD,
-                                                                                                                                                sw |-> monitoringEvent[self].swID, state |-> SW_RUN])]
-                                                    ELSE /\ TRUE
-                                                         /\ UNCHANGED << RCNIBEventQueue, 
-                                                                         SwSuspensionStatus >>
-                                         ELSE /\ TRUE
-                                              /\ UNCHANGED << RCNIBEventQueue, 
-                                                              controllerStateNIB, 
-                                                              SwSuspensionStatus >>
-                                   /\ IF (stepOfFailure'[self] # 0)
-                                         THEN /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![self] = Failed]
-                                              /\ controllerSubmoduleFailNum' = [controllerSubmoduleFailNum EXCEPT ![self[1]] = controllerSubmoduleFailNum[self[1]] + 1]
-                                              /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
-                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
-                                              /\ UNCHANGED << controllerSubmoduleFailNum, 
-                                                              controllerSubmoduleFailStat >>
-                                   /\ UNCHANGED << switchLock, controllerLock, 
-                                                   FirstInstall, 
-                                                   sw_fail_ordering_var, 
-                                                   ContProcSet, SwProcSet, 
-                                                   irTypeMapping, ir2sw, 
-                                                   swSeqChangedStatus, 
-                                                   controller2Switch, 
-                                                   switch2Controller, 
-                                                   switchStatus, installedIRs, 
-                                                   NicAsic2OfaBuff, 
-                                                   Ofa2NicAsicBuff, 
-                                                   Installer2OfaBuff, 
-                                                   Ofa2InstallerBuff, TCAM, 
-                                                   controlMsgCounter, 
-                                                   RecoveryStatus, 
-                                                   switchOrdering, 
-                                                   TEEventQueue, DAGEventQueue, 
-                                                   DAGQueue, DAGID, MaxDAGID, 
-                                                   DAGState, RCIRStatus, 
-                                                   RCSwSuspensionStatus, 
-                                                   nxtRCIRID, 
-                                                   idWorkerWorkingOnDAG, 
-                                                   RCSeqWorkerStatus, 
-                                                   idThreadWorkingOnIR, 
-                                                   workerThreadRanking, 
-                                                   masterState, NIBIRStatus, 
-                                                   IRQueueNIB, SetScheduledIRs, 
-                                                   ingressPkt, ingressIR, 
-                                                   egressMsg, ofaInMsg, 
-                                                   ofaOutConfirmation, 
-                                                   installerInIR, statusMsg, 
-                                                   notFailedSet, failedElem, 
-                                                   obj, failedSet, 
-                                                   statusResolveMsg, 
-                                                   recoveredElem, event, 
-                                                   topoChangeEvent, 
-                                                   currSetDownSw, prev_dag_id, 
-                                                   init, nxtDAG, 
-                                                   setRemovableIRs, currIR, 
-                                                   currIRInDAG, nxtDAGVertices, 
-                                                   setIRsInDAG, prev_dag, 
-                                                   seqEvent, worker, 
-                                                   toBeScheduledIRs, nextIR, 
-                                                   stepOfFailure_, currDAG, 
-                                                   nextIRToSent, rowIndex, 
-                                                   rowRemove, stepOfFailure_c, 
-                                                   monitoringEvent, 
-                                                   setIRsToReset, resetIR, msg, 
-                                                   irID, 
-                                                   controllerFailedModules >>
 
 ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEventHandlerStateReconciliation"
                                                    /\ controllerIsMaster(self[1])
@@ -6044,7 +5944,6 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    currIRInDAG, 
                                                                    nxtDAGVertices, 
                                                                    setIRsInDAG, 
-                                                                   prev_dag, 
                                                                    seqEvent, 
                                                                    worker, 
                                                                    toBeScheduledIRs, 
@@ -6065,10 +5964,10 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
 controllerEventHandler(self) == ControllerEventHandlerProc(self)
                                    \/ ControllerEvenHanlderRemoveEventFromQueue(self)
                                    \/ ControllerSuspendSW(self)
+                                   \/ ControllerFreeSuspendedSW(self)
                                    \/ ControllerCheckIfThisIsLastEvent(self)
                                    \/ getIRsToBeChecked(self)
                                    \/ ResetAllIRs(self)
-                                   \/ ControllerFreeSuspendedSW(self)
                                    \/ ControllerEventHandlerStateReconciliation(self)
 
 ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMastr"
@@ -6079,26 +5978,22 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
-                                       /\ Assert(\/ "flow" \notin DOMAIN msg'[self]
-                                                 \/ /\ "flow" \in DOMAIN msg'[self]
-                                                    /\ msg'[self].flow \in 1..MaxNumFlows, 
-                                                 "Failure of assertion at line 2103, column 9.")
-                                       /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY, KEEP_ALIVE, NIC_ASIC_DOWN, OFA_DOWN}, 
-                                                 "Failure of assertion at line 2106, column 9.")
+                                       /\ Assert(msg'[self].flow \in 1..MaxNumFlows, 
+                                                 "Failure of assertion at line 2086, column 9.")
+                                       /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
+                                                 "Failure of assertion at line 2087, column 9.")
+                                       /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow, msg'[self].type)]
+                                       /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
+                                                 "Failure of assertion at line 2089, column 9.")
                                        /\ IF msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}
-                                             THEN /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow, msg'[self].type)]
-                                                  /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
-                                                            "Failure of assertion at line 2112, column 13.")
-                                                  /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
-                                                  /\ UNCHANGED swSeqChangedStatus
-                                             ELSE /\ swSeqChangedStatus' = Append(swSeqChangedStatus, msg'[self])
-                                                  /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
-                                                  /\ irID' = irID
+                                             THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
+                                             ELSE /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED << switchLock, 
                                                        FirstInstall, 
                                                        sw_fail_ordering_var, 
                                                        ContProcSet, SwProcSet, 
                                                        irTypeMapping, ir2sw, 
+                                                       swSeqChangedStatus, 
                                                        controller2Switch, 
                                                        switch2Controller, 
                                                        switchStatus, 
@@ -6145,8 +6040,8 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        nxtDAG, setRemovableIRs, 
                                                        currIR, currIRInDAG, 
                                                        nxtDAGVertices, 
-                                                       setIRsInDAG, prev_dag, 
-                                                       seqEvent, worker, 
+                                                       setIRsInDAG, seqEvent, 
+                                                       worker, 
                                                        toBeScheduledIRs, 
                                                        nextIR, stepOfFailure_, 
                                                        currDAG, nextIRToSent, 
@@ -6228,8 +6123,8 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          setRemovableIRs, 
                                                          currIR, currIRInDAG, 
                                                          nxtDAGVertices, 
-                                                         setIRsInDAG, prev_dag, 
-                                                         seqEvent, worker, 
+                                                         setIRsInDAG, seqEvent, 
+                                                         worker, 
                                                          toBeScheduledIRs, 
                                                          nextIR, 
                                                          stepOfFailure_, 
@@ -6295,8 +6190,8 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                              currSetDownSw, prev_dag_id, init, 
                                              nxtDAG, setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
+                                             setIRsInDAG, seqEvent, worker, 
+                                             toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, currDAG, 
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure_c, monitoringEvent, 
@@ -6315,7 +6210,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 2162, column 13.")
+                                               "Failure of assertion at line 2140, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -6359,8 +6254,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                                 prev_dag_id, init, nxtDAG, 
                                                 setRemovableIRs, currIR, 
                                                 currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
+                                                setIRsInDAG, seqEvent, worker, 
                                                 toBeScheduledIRs, nextIR, 
                                                 stepOfFailure_, currDAG, 
                                                 nextIRToSent, rowIndex, 
@@ -6531,5 +6425,6 @@ EachIRAtMostOnce == ~\E x, y \in DOMAIN installedIRs: /\ x # y
                                                       /\ installedIRs[x] = installedIRs[y]
 =============================================================================
 \* Modification History
-\* Last modified Thu Apr 01 06:45:01 PDT 2021 by root
+\* Last modified Wed Mar 31 22:03:38 PDT 2021 by root
 \* Created Sun Mar 28 03:06:08 PDT 2021 by root
+

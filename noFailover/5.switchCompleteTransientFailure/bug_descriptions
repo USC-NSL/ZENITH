@@ -1,0 +1,59 @@
+Bug#1: sw0 Fails → RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → OFC OF event handler 
+suspends the switch → sw0 recovers → RC Boss Sequencer receives the notification of the new DAG and adds DAG1 to 
+the DAG Queue → RC NIB event handler receives the TOPO_MOD event, suspends the switch internally and forwards the 
+TOPO_MOD event to TE for DAG recomputation → RC Worker Seq schedules IR1 → RC TE marks DAG1 as stale → RC Worker 
+Seq checks whether DAG1 is stale and since it is, it stops working on the DAG → OFC worker receives the IR and skips 
+IR1 since it thinks the switch is down → OFC OF event handler processes the sw0 recovery event and changes the state 
+of sw to SW_RUN → RC TE sends the notification of DAG_STALE to RC Boss Sequencer and waits for the feedback → RC NIB 
+event handler receives the TOPO_MOD event, changes the state of switch to SW_RUN and forwards the event to the TE → 
+Since no worker is working on DAG1, RC boss sequencer changes state of DAG to DAG_NONE to enable the RC TE to continue 
+→ RC TE schedules DAG2({IR3 = INSTALL FLOW3}) →  RC TE marks DAG1 as stale →  RC TE sends the notification of DAG_STALE 
+to RC Boss Sequencer and waits for the feedback → RC Boss Sequencer receives the notification of the new DAG and adds 
+DAG2 to the DAG Queue → RC Worker Seq reads DAG2 and locks the DAG → RC Boss sequencer sends a stale signal to worker 
+and waits for the worker to unlock the DAG → RC worker sequencer catches the signal and unlocks the DAG → RC boss 
+sequencer changes state of DAG to DAG_NONE to enable the RC TE to continue → RC TE schedules DAG3({<<IR1 = INSTALL 
+FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the notification of the new DAG and adds DAG3 to the 
+DAG Queue → RC Worker Seq reads DAG3 and locks the DAG
+
+Problem: Deadlock in IR Scheduling. The problem happens as RC handles the addition/removal of IR from SetScheduledIRs. 
+In this bug, IR1 was added to SetScheduledIRs during DAG1 and was never removed afterward (RC removes an IR from 
+SetScheduledIRs only when the flag of IR is either IR_SENT or IR_DONE). During DAG2, RC worker sequencer thinks IR 
+has already been scheduled since it is in SetScheduledIRs and waits for its installation. 
+
+Solution: RC should remove the IRs from SetScheduledIRs upon failure of a switch. 
+======================================================================================================================
+======================================================================================================================
+Bug#2: RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → sw0 fails → RC Boss Sequencer receives 
+the notification of the new DAG and adds DAG1 to the DAG Queue → RC worker sequencer reads DAG1 and locks the DAG → 
+sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → RC NIB event handler 
+receives the TOPO_MOD event, suspends the switch internally, removes corresponding IRs from the ScheduledIRSet and 
+forwards the TOPO_MOD event to TE for DAG recomputation → RC Worker Seq adds IR1 to the SetScheduledIRs and schedules 
+IR1 → OFC worker receives the IR and skips IR1 since it thinks the switch is down → …
+
+Problem: Deadlock in IR Scheduling. The problem happens because there is a delay between RC NIB event handler finding 
+out that a switch is failed and RC worker stopping to work on a DAG. During this bug, RC NIB event handler has first 
+removed the IRs from SetScheduledIRs upon sw failure event, and then, RC Worker Seq which at that time was working on 
+a stale DAG adds IR1 to SetScheduledIRs.
+
+Solution: The only way to avoid this is; TE module removes all the IRs of the newly computed DAG from the SetScheduledIRs 
+before submitting the DAG to the Boss worker. This solution might result in duplicate IR scheduling but it is ok as OFC 
+workers handle this situation. 
+======================================================================================================================
+======================================================================================================================
+Bug#3: RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the 
+notification of the new DAG and adds DAG1 to the DAG Queue → RC worker sequencer reads DAG1 and locks the DAG → RC 
+Worker Seq adds IR1 to the SetScheduledIRs and schedules IR1 → OFC worker reads the IR and changes its flag to IR_SENT
+→ OFC worker forwards the IR1 → sw0 receives IR1, install FLOW1 and responds with a confirmation → OFC monitoring 
+server receives the confirmation and change the flag of IR1 to IR_DONE → sw0 completely fails → RC NIB Event handler 
+receives the IR_MOD event and changes the flag of IR1 to IR_SENT locally → sw0 recovers and TCAM is empty → RC NIB 
+Event handler receives the IR_MOD event and changes the flag of IR1 to IR_DONE locally →  OFC OF event handler processes 
+the switch failure event and suspends the switch → RC Worker Seq adds IR1 to the SetScheduledIRs and schedules IR1 → OFC 
+OF event handler processes the switch recovery event and changes the state of switch to SW_RUN → …
+
+Problem: Previously, we explored the partial transient failure in which the TCAM maintained its entries during the 
+failure and recovery. In that case, if we have received a confirmation from the switch regarding an IR installation, 
+we are sure that the IR always remains there. Therefore, after the recovery, we do not perform anything on the IRs with 
+the flag IR_DONE. However, in case of complete transient failure, the TCAM loses its state. 
+
+Solution: we should either perform reconciliation or reset the flag of IR to IR_NONE to be forwarded again 
+(No matter what the flag of IR is). 
