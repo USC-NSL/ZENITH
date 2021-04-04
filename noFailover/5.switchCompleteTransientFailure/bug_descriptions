@@ -56,4 +56,60 @@ we are sure that the IR always remains there. Therefore, after the recovery, we 
 the flag IR_DONE. However, in case of complete transient failure, the TCAM loses its state. 
 
 Solution: we should either perform reconciliation or reset the flag of IR to IR_NONE to be forwarded again 
-(No matter what the flag of IR is). 
+(No matter what the flag of IR is). -- I decided to move forward with resetting the flag to see how far we can go. 
+------------------------------------------------------------------------------------------------------------------------------- 
+Bug#4: sw0 fails → OFC OF event handler processes the failure event and suspends the switch → RC TE schedules 
+DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the notification of the new DAG and adds 
+DAG1 to the DAG Queue → RC NIB event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the 
+TOPO_MOD event to TE for DAG recomputation → RC worker sequencer reads DAG1 and locks the DAG → sw0 recovers → OFC OF event 
+handler processes the recovery event and changes the flag of switch to SW_RUN → RC NIB event handler receives the TOPO_MOD event,
+ changes the state of switch to SW_RUN internally, and forwards the TOPO_MOD event to TE for DAG recomputation → RC TE module 
+processes the two TOPO_MOD events and creates the new DAG based on the new topology → RC TE module marks DAG1 as stale → RC Worker 
+Seq schedules IR1 → RC worker sequencer finds out that DAG1 is stale and unlocks the DAG → RC TE sends the notification of 
+DAG_STALE to RC Boss Sequencer and waits for the feedback → OFC worker reads IR and changes its state to IR_SENT → OFC worker 
+forwards IR1 to sw0 → sw0 receives IR1, installs FLOW1 and sends back the confirmation → Since no worker is working on DAG1, RC 
+boss sequencer changes state of DAG to DAG_NONE to enable the RC TE to continue → OFC OF event handler retrieves all the IRs that 
+needs to reset their flags {IR1} → RC TE removes the IRs of DAG2 from the SetScheduledIRs and submits the new DAG2({<<IR1 = 
+INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → OFC Monitoring Server receives the confirmation message and changes the flag of IR1 
+to IR_DONE → RC Boss Sequencer receives the notification of the new DAG and adds DAG2 to the DAG Queue → RC Worker Sequencer 
+reads DAG2 and locks the DAG → RC worker sequencer retrieves IR1 as the first IR to schedule (IR1 has IR_NONE flag in RC) and 
+adds it to the SetScheduledIRs → RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_SENT locally 
+→ RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_DONE locally → RC worker sequencer schedules 
+IR1 → OFC worker skips IR1 as it has IR_DONE status → OFC OF event handler resets the state of IR to IR_NONE → RC NIB Event 
+handler receives the IR_MOD event and changes the flag of IR1 to IR_NONE locally
+
+Problem1: Final DAG is not installed. Since IR1 is in SetScheduledIR, RC Sequencer will not schedule it again. At the same 
+time, IR1 has the IR_NONE flag meaning that RC Sequencer is not going to schedule IR2 which is a successor of IR1 in the DAG.
+ 
+Problem2: Although DAG2 is equal to DAG1, TE marks DAG1 as stale and schedules DAG2.
+
+Solution: For problem 1, RC should remove an IR from SetScheduledIR when the flag of IR is changed to IR_NONE. 
+For problem 2, TE should not schedule a new DAG if the new DAG is equal to the previous one. 
+-------------------------------------------------------------------------------------------------------------------------------
+Bug#5: sw0 fails → sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → RC NIB 
+event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to TE for DAG 
+recomputation → OFC OF event handler processes the switch recovery event and changes the state of switch to SW_RUN → RC NIB 
+event handler receives the TOPO_MOD event, changes the state of switch to SW_RUN internally, and forwards the TOPO_MOD event 
+to TE for DAG recomputation → RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives 
+the notification of the new DAG and adds DAG1 to the DAG Queue → RC worker sequencer reads DAG1 and locks the DAG → RC worker 
+sequencer schedules IR1 → OFC worker reads the IR and changes its state to IR_SENT → OFC OF event handler retrieves all the IRs 
+that needs to reset their flags {IR1} → OFC worker forwards IR1 → sw0 receives IR1, installs FLOW1 and sends back the confirmation 
+→  OFC monitoring server receives the confirmation and changes the flag of IR1 to IR_DONE → RC NIB Event handler receives the 
+IR_MOD event and changes the flag of IR1 to IR_SENT locally → RC NIB Event handler receives the IR_MOD event and changes the flag 
+of IR1 to IR_DONE locally → RC worker sequencer schedules IR2 → OFC worker changes the flag of IR2 to IR_SENT and forwards IR2 →
+ RC NIB Event handler receives the IR_MOD event and changes the flag of IR2 to IR_SENT locally → sw1 receives IR2, installs FLOW2 
+and sends back the confirmation → OFC monitoring server receives the confirmation and changes the flag of IR2 to IR_DONE → RC NIB 
+Event handler receives the IR_MOD event and changes the flag of IR2 to IR_DONE locally → Since all the IRs in DAG1 have IR_DONE 
+status, RC worker unlocks the DAG and removes the DAG from its queue → OFC OF event handler resets the flag of IR1 to IR_NONE → 
+RC NIB Event handler receives the IR_MOD event and changes the flag of IR2 to IR_NONE locally
+
+Problem: State of IR in NIB and RC is inconsistent with the actual state in the dataplane. IR1 is installed in sw0 but its flag 
+in NIB is IR_NONE.
+
+Solution: There are two possible solutions to avoid this; 
+1) Switch reconciliation after switch recovery. 
+2) Resetting the flag of IRs before changing the state of switch to SW_RUN.Previously, we were doing lazy updates where we update 
+the flag of IRs after changing the state of the switch. Avoiding a lazy update would potentially cause a head-of-line blocking.
+(I decided to move forward with the second choice to see what happens if we avoid switch reconciliation)
+-------------------------------------------------------------------------------------------------------------------------------
+

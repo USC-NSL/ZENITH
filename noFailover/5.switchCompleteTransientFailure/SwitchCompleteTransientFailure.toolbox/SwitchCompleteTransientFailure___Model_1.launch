@@ -5,13 +5,13 @@
     <stringAttribute key="distributedNetworkInterface" value="10.26.74.43"/>
     <intAttribute key="distributedNodesCount" value="1"/>
     <stringAttribute key="distributedTLC" value="off"/>
-    <intAttribute key="fpIndex" value="46"/>
+    <intAttribute key="fpIndex" value="48"/>
     <intAttribute key="maxHeapSize" value="25"/>
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="egressMsg, nextIRToSent, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, nxtDAG, seqEvent, ofaOutConfirmation, setIRsInDAG, SwProcSet, irID, obj, failedElem, IRQueueNIB, controllerSubmoduleFailStat, switchStatus, ContProcSet, nxtDAGVertices, controllerStateNIB, Installer2OfaBuff, swSeqChangedStatus, setIRsToReset, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, currIRInDAG, resetIR, msg, event, stepOfFailure_, DAGID, currSetDownSw, Ofa2InstallerBuff, DAGEventQueue, RCSeqWorkerStatus, Ofa2NicAsicBuff, failedSet, RCIRStatus, recoveredElem, NIBIRStatus, worker, SwSuspensionStatus, init, irTypeMapping, controllerSubmoduleFailNum, ir2sw, ingressIR, currIR, nextIR, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, workerThreadRanking, NicAsic2OfaBuff, currDAG, setRemovableIRs, stepOfFailure_c, toBeScheduledIRs, RCSwSuspensionStatus, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, DAGState, RecoveryStatus, controllerLock, controllerFailedModules, RCNIBEventQueue"/>
+    <stringAttribute key="modelBehaviorVars" value="egressMsg, nextIRToSent, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IRDoneSet, nxtDAG, seqEvent, ofaOutConfirmation, setIRsInDAG, SwProcSet, irID, obj, removedIR, failedElem, IRQueueNIB, controllerSubmoduleFailStat, switchStatus, prev_dag, ContProcSet, nxtDAGVertices, controllerStateNIB, Installer2OfaBuff, swSeqChangedStatus, setIRsToReset, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, currIRInDAG, resetIR, msg, event, stepOfFailure_, DAGID, currSetDownSw, Ofa2InstallerBuff, DAGEventQueue, RCSeqWorkerStatus, Ofa2NicAsicBuff, failedSet, RCIRStatus, recoveredElem, NIBIRStatus, worker, SwSuspensionStatus, init, irTypeMapping, controllerSubmoduleFailNum, ir2sw, ingressIR, currIR, nextIR, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, workerThreadRanking, NicAsic2OfaBuff, currDAG, setRemovableIRs, currIRMon, stepOfFailure_c, toBeScheduledIRs, RCSwSuspensionStatus, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, DAGState, RecoveryStatus, controllerLock, controllerFailedModules, RCNIBEventQueue"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -19,9 +19,10 @@
         <listEntry value="0RedundantInstallation"/>
         <listEntry value="1ConsistencyReq"/>
         <listEntry value="0EachIRAtMostOnce"/>
+        <listEntry value="1InstallationInvProp"/>
     </listAttribute>
     <listAttribute key="modelCorrectnessProperties">
-        <listEntry value="1InstallationLivenessProp"/>
+        <listEntry value="0InstallationLivenessProp"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="8"/>
     <stringAttribute key="modelExpressionEval" value=""/>
@@ -57,7 +58,6 @@
         <listEntry value="SW_SIMPLE_ID;;SW_SIMPLE_ID;1;0"/>
         <listEntry value="START_RESET_IR;;START_RESET_IR;1;0"/>
         <listEntry value="DAG_NEW;;DAG_NEW;1;0"/>
-        <listEntry value="CONT_TE;;CONT_TE;1;0"/>
         <listEntry value="SW;;{s0, s1};1;0"/>
         <listEntry value="Failed;;Failed;1;0"/>
         <listEntry value="OFA_IN;;OFA_IN;1;0"/>
@@ -65,14 +65,9 @@
         <listEntry value="INSTALLER_UP;;INSTALLER_UP;1;0"/>
         <listEntry value="WATCH_DOG;;WATCH_DOG;1;0"/>
         <listEntry value="INSTALLER_DOWN;;INSTALLER_DOWN;1;0"/>
-        <listEntry value="CONTROLLER_THREAD_POOL;;{t0};1;0"/>
-        <listEntry value="CONT_WORKER_SEQ;;CONT_WORKER_SEQ;1;0"/>
         <listEntry value="SW_SIMPLE_MODEL;;SW_SIMPLE_MODEL;1;0"/>
         <listEntry value="DAG_UNLOCK;;DAG_UNLOCK;1;0"/>
-        <listEntry value="CONT_MONITOR;;CONT_MONITOR;1;0"/>
-        <listEntry value="CONT_BOSS_SEQ;;CONT_BOSS_SEQ;1;0"/>
         <listEntry value="DAG_NONE;;DAG_NONE;1;0"/>
-        <listEntry value="CONT_EVENT;;CONT_EVENT;1;0"/>
         <listEntry value="MaxNumFlows;;3;0;0"/>
         <listEntry value="SW_RUN;;SW_RUN;1;0"/>
         <listEntry value="STATUS_SENT_DONE;;STATUS_SENT_DONE;1;0"/>
@@ -94,6 +89,12 @@
         <listEntry value="NIC_ASIC_OUT;;NIC_ASIC_OUT;1;0"/>
         <listEntry value="SEQ_WORKER_STALE_SIGNAL;;SEQ_WORKER_STALE_SIGNAL;1;0"/>
         <listEntry value="INSTALLED_SUCCESSFULLY;;INSTALLED_SUCCESSFULLY;1;0"/>
+        <listEntry value="CONT_TE;;CONT_TE;1;0"/>
+        <listEntry value="CONTROLLER_THREAD_POOL;;{t0};1;0"/>
+        <listEntry value="CONT_WORKER_SEQ;;CONT_WORKER_SEQ;1;0"/>
+        <listEntry value="CONT_MONITOR;;CONT_MONITOR;1;0"/>
+        <listEntry value="CONT_BOSS_SEQ;;CONT_BOSS_SEQ;1;0"/>
+        <listEntry value="CONT_EVENT;;CONT_EVENT;1;0"/>
     </listAttribute>
     <intAttribute key="modelVersion" value="20191005"/>
     <intAttribute key="numberOfWorkers" value="8"/>
