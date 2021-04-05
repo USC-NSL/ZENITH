@@ -1,0 +1,9 @@
+Switch-level:
+	Transient Partial Failures:
+		* Each switch module can fail at any time, and recover afterwards. 
+
+OFC/RCS-level:
+	Transient Partial Failures:
+		* Each OFC internal module may fail at anytime. Watchdog can detect this failure and restart the process at any possible time afterward. 
+
+
