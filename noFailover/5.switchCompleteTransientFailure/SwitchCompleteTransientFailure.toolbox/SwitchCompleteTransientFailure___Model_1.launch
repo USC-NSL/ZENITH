@@ -1,17 +1,27 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <launchConfiguration type="org.lamport.tla.toolbox.tool.tlc.modelCheck">
+    <stringAttribute key="TLCCmdLineParameters" value="-checkpoint 0&#10;-coverage 99999"/>
+    <intAttribute key="collectCoverage" value="0"/>
     <stringAttribute key="configurationName" value="Model_1"/>
+    <booleanAttribute key="deferLiveness" value="false"/>
+    <intAttribute key="dfidDepth" value="100"/>
+    <booleanAttribute key="dfidMode" value="false"/>
     <intAttribute key="distributedFPSetCount" value="0"/>
-    <stringAttribute key="distributedNetworkInterface" value="10.26.74.43"/>
+    <stringAttribute key="distributedNetworkInterface" value="68.181.216.7"/>
     <intAttribute key="distributedNodesCount" value="1"/>
     <stringAttribute key="distributedTLC" value="off"/>
-    <intAttribute key="fpIndex" value="48"/>
-    <intAttribute key="maxHeapSize" value="25"/>
+    <stringAttribute key="distributedTLCVMArgs" value=""/>
+    <intAttribute key="fpBits" value="1"/>
+    <intAttribute key="fpIndex" value="1"/>
+    <booleanAttribute key="fpIndexRandom" value="true"/>
+    <intAttribute key="maxHeapSize" value="90"/>
+    <intAttribute key="maxSetSize" value="1000000"/>
+    <booleanAttribute key="mcMode" value="true"/>
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="egressMsg, nextIRToSent, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IRDoneSet, nxtDAG, seqEvent, ofaOutConfirmation, setIRsInDAG, SwProcSet, irID, obj, removedIR, failedElem, IRQueueNIB, controllerSubmoduleFailStat, switchStatus, prev_dag, ContProcSet, nxtDAGVertices, controllerStateNIB, Installer2OfaBuff, swSeqChangedStatus, setIRsToReset, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, currIRInDAG, resetIR, msg, event, stepOfFailure_, DAGID, currSetDownSw, Ofa2InstallerBuff, DAGEventQueue, RCSeqWorkerStatus, Ofa2NicAsicBuff, failedSet, RCIRStatus, recoveredElem, NIBIRStatus, worker, SwSuspensionStatus, init, irTypeMapping, controllerSubmoduleFailNum, ir2sw, ingressIR, currIR, nextIR, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, workerThreadRanking, NicAsic2OfaBuff, currDAG, setRemovableIRs, currIRMon, stepOfFailure_c, toBeScheduledIRs, RCSwSuspensionStatus, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, DAGState, RecoveryStatus, controllerLock, controllerFailedModules, RCNIBEventQueue"/>
+    <stringAttribute key="modelBehaviorVars" value="egressMsg, nextIRToSent, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, IRDoneSet, nxtDAG, seqEvent, ofaOutConfirmation, setIRsInDAG, SwProcSet, irID, obj, removedIR, failedElem, IRQueueNIB, controllerSubmoduleFailStat, switchStatus, prev_dag, IRSet, ContProcSet, nxtDAGVertices, controllerStateNIB, Installer2OfaBuff, swSeqChangedStatus, setIRsToReset, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, currIRInDAG, resetIR, msg, event, stepOfFailure_, DAGID, currSetDownSw, Ofa2InstallerBuff, DAGEventQueue, RCSeqWorkerStatus, Ofa2NicAsicBuff, failedSet, RCIRStatus, recoveredElem, NIBIRStatus, worker, SwSuspensionStatus, init, irTypeMapping, controllerSubmoduleFailNum, ir2sw, ingressIR, currIR, nextIR, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, workerThreadRanking, NicAsic2OfaBuff, currDAG, setRemovableIRs, currIRMon, stepOfFailure_c, toBeScheduledIRs, RCSwSuspensionStatus, FirstInstall, controller2Switch, SetScheduledIRs, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, ingressPkt, statusResolveMsg, installerInIR, switchOrdering, statusMsg, DAGState, RecoveryStatus, controllerLock, controllerFailedModules, RCNIBEventQueue"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -24,7 +34,7 @@
     <listAttribute key="modelCorrectnessProperties">
         <listEntry value="0InstallationLivenessProp"/>
     </listAttribute>
-    <intAttribute key="modelEditorOpenTabs" value="8"/>
+    <intAttribute key="modelEditorOpenTabs" value="12"/>
     <stringAttribute key="modelExpressionEval" value=""/>
     <listAttribute key="modelParameterConstants">
         <listEntry value="SEQ_WORKER_STALE_REMOVED;;SEQ_WORKER_STALE_REMOVED;1;0"/>
@@ -33,7 +43,7 @@
         <listEntry value="IR_RECONCILE;;IR_RECONCILE;1;0"/>
         <listEntry value="NO_TAG;;NO_TAG;1;0"/>
         <listEntry value="OFA_DOWN;;OFA_DOWN;1;0"/>
-        <listEntry value="IR2SW;;(1 :&gt; s0) @@ (2 :&gt; s1) @@ (3 :&gt; s1);0;0"/>
+        <listEntry value="IR2SW;;(1 :&gt; s0) @@ (2 :&gt; s1) @@ (3 :&gt; s2) @@ (4 :&gt; s1) @@ (5 :&gt; s2);0;0"/>
         <listEntry value="SW_RESOLVE_PROC;;SW_RESOLVE_PROC;1;0"/>
         <listEntry value="SW_MODULE_CAN_FAIL_OR_NOT;;[cpu |-&gt; 0, nicAsic |-&gt; 0, ofa |-&gt; 0, installer |-&gt; 0];0;0"/>
         <listEntry value="NIC_ASIC_IN;;NIC_ASIC_IN;1;0"/>
@@ -58,24 +68,24 @@
         <listEntry value="SW_SIMPLE_ID;;SW_SIMPLE_ID;1;0"/>
         <listEntry value="START_RESET_IR;;START_RESET_IR;1;0"/>
         <listEntry value="DAG_NEW;;DAG_NEW;1;0"/>
-        <listEntry value="SW;;{s0, s1};1;0"/>
+        <listEntry value="SW;;{s0, s1, s2};1;0"/>
         <listEntry value="Failed;;Failed;1;0"/>
         <listEntry value="OFA_IN;;OFA_IN;1;0"/>
-        <listEntry value="MaxNumIRs;;3;0;0"/>
+        <listEntry value="MaxNumIRs;;5;0;0"/>
         <listEntry value="INSTALLER_UP;;INSTALLER_UP;1;0"/>
         <listEntry value="WATCH_DOG;;WATCH_DOG;1;0"/>
         <listEntry value="INSTALLER_DOWN;;INSTALLER_DOWN;1;0"/>
         <listEntry value="SW_SIMPLE_MODEL;;SW_SIMPLE_MODEL;1;0"/>
         <listEntry value="DAG_UNLOCK;;DAG_UNLOCK;1;0"/>
         <listEntry value="DAG_NONE;;DAG_NONE;1;0"/>
-        <listEntry value="MaxNumFlows;;3;0;0"/>
+        <listEntry value="MaxNumFlows;;5;0;0"/>
         <listEntry value="SW_RUN;;SW_RUN;1;0"/>
         <listEntry value="STATUS_SENT_DONE;;STATUS_SENT_DONE;1;0"/>
         <listEntry value="IR2FLOW;;[x \in 1..MaxNumIRs |-&gt; x];0;0"/>
-        <listEntry value="WHICH_SWITCH_MODEL;;(s0 :&gt; SW_SIMPLE_MODEL) @@ (s1 :&gt; SW_SIMPLE_MODEL);0;0"/>
+        <listEntry value="WHICH_SWITCH_MODEL;;(s0 :&gt; SW_SIMPLE_MODEL) @@ (s1 :&gt; SW_SIMPLE_MODEL) @@ (s2 :&gt; SW_SIMPLE_MODEL);0;0"/>
         <listEntry value="NIB_EVENT_HANDLER;;NIB_EVENT_HANDLER;1;0"/>
         <listEntry value="MAX_NUM_CONTROLLER_SUB_FAILURE;;[ofc0 |-&gt; 0, rc0 |-&gt; 0];0;0"/>
-        <listEntry value="TOPO_DAG_MAPPING;;({} :&gt; [v |-&gt; {1, 2}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;}]) @@ ({s0} :&gt; [v |-&gt; {3}, e |-&gt; {}]);0;0"/>
+        <listEntry value="TOPO_DAG_MAPPING;;({} :&gt; [v |-&gt; {1, 2, 3}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;, &lt;&lt;1, 3&gt;&gt;}]) @@ ({s0} :&gt; [v |-&gt; {4, 5}, e |-&gt; {&lt;&lt;5, 4&gt;&gt;}]);0;0"/>
         <listEntry value="IR_DONE;;IR_DONE;1;0"/>
         <listEntry value="SW_COMPLEX_MODEL;;SW_COMPLEX_MODEL;1;0"/>
         <listEntry value="STATUS_START_SCHEDULING;;STATUS_START_SCHEDULING;1;0"/>
@@ -83,22 +93,28 @@
         <listEntry value="rc0;;rc0;1;0"/>
         <listEntry value="NO_STATUS;;NO_STATUS;1;0"/>
         <listEntry value="OFA_OUT;;OFA_OUT;1;0"/>
-        <listEntry value="FINAL_DAG;;[v |-&gt; {1, 2}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;}];0;0"/>
+        <listEntry value="FINAL_DAG;;[v |-&gt; {1, 2, 3}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;, &lt;&lt;1, 3&gt;&gt;}];0;0"/>
         <listEntry value="TOPO_MOD;;TOPO_MOD;1;0"/>
         <listEntry value="IR_SENT;;IR_SENT;1;0"/>
         <listEntry value="NIC_ASIC_OUT;;NIC_ASIC_OUT;1;0"/>
         <listEntry value="SEQ_WORKER_STALE_SIGNAL;;SEQ_WORKER_STALE_SIGNAL;1;0"/>
         <listEntry value="INSTALLED_SUCCESSFULLY;;INSTALLED_SUCCESSFULLY;1;0"/>
         <listEntry value="CONT_TE;;CONT_TE;1;0"/>
-        <listEntry value="CONTROLLER_THREAD_POOL;;{t0};1;0"/>
+        <listEntry value="CONTROLLER_THREAD_POOL;;{t0, t1};1;0"/>
         <listEntry value="CONT_WORKER_SEQ;;CONT_WORKER_SEQ;1;0"/>
         <listEntry value="CONT_MONITOR;;CONT_MONITOR;1;0"/>
         <listEntry value="CONT_BOSS_SEQ;;CONT_BOSS_SEQ;1;0"/>
         <listEntry value="CONT_EVENT;;CONT_EVENT;1;0"/>
     </listAttribute>
     <intAttribute key="modelVersion" value="20191005"/>
-    <intAttribute key="numberOfWorkers" value="8"/>
+    <intAttribute key="numberOfWorkers" value="24"/>
+    <booleanAttribute key="recover" value="false"/>
     <stringAttribute key="result.mail.address" value=""/>
+    <intAttribute key="simuAril" value="-1"/>
+    <intAttribute key="simuDepth" value="100"/>
+    <intAttribute key="simuSeed" value="-1"/>
     <stringAttribute key="specName" value="SwitchCompleteTransientFailure"/>
     <stringAttribute key="tlcResourcesProfile" value="local custom"/>
+    <stringAttribute key="view" value=""/>
+    <booleanAttribute key="visualizeStateGraph" value="false"/>
 </launchConfiguration>
