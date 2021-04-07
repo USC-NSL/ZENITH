@@ -103,7 +103,7 @@
         <listEntry value="NIBT_FIRST_INSTALL;;NIBT_FIRST_INSTALL;1;0"/>
         <listEntry value="InReconciliation;;InReconciliation;1;0"/>
         <listEntry value="RC_FAILOVER;;RC_FAILOVER;1;0"/>
-        <listEntry value="RC_FAILURE;;RC_FAILURE;1;0"/>
+        <listEntry value="RC_NIB_FAILURE;;RC_NIB_FAILURE;0;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>

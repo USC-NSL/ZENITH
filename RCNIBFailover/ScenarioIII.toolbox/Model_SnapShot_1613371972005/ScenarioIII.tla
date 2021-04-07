@@ -48,7 +48,7 @@ CONSTANTS ofc0 \* OFC thread identifiers
 (***************************************************************************)
 CONSTANTS rc0, \* RC thread identifiers
           RC_FAILOVER, \* used in the RC failover process 
-          RC_FAILURE
+          RC_NIB_FAILURE \* process name to simulate RC+NIB failure
           
 (***************************************************************************)
 (************************ Switch Module identifiers ************************)
@@ -1453,7 +1453,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     (*                     RC + NIB failure                            *)
     (*******************************************************************)  
     \* ======== RC failure =====
-    fair process RCFailureProc \in ( {"proc"} \X {RC_FAILURE})
+    fair process RCFailureProc \in ( {"proc"} \X {RC_NIB_FAILURE})
     begin 
         RCFailure:
             controllerWaitForLockFree();
@@ -1496,22 +1496,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 IRQueueRC := IRQueueNIB;
                 \* Since RC knows NIB is in reconciliation, it can not read SetScheduledIRsRC.
                 \* Instead RC has to compute SetScheduledIRsRC based on current data plane status.
-                \* Step 1:
-                \* If IR_DONE, it will not be in SetScheduledIRsRC for sure.
-                \* If IR_SENT, it will be in the SetScheduledIRsRC for sure.
+                \* If IR_DONE/IR_SENT, it will not be in SetScheduledIRsRC for sure.
                 \* If IR_NONE, it is unclear if it should be in the SetScheduledIRsRC
-                \* -- if we add IR with IR_NONE to SetScheduledIRsRC, it could have been scheduled already. We need OFC to handle this
-                \* -- if we do not add IR with IR_NONE to SetScheduledIRsRC, it could be left unscheduled forever.
-                \* Step 2:
-                \* If IR is in IRQueueOFC, it should be in SetScheduledIRsRC.
-\*                IRSENTSet := {x \in 1..MaxNumIRs: IRStatusRC[x] = IR_SENT};
-\*                
-\*                {ir \in IRStatusRC : IRStatusRC[]}
-\*                SetScheduledIRsRC := [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
-\*                                            THEN SetScheduledIRsRC[sw]
-\*                                            ELSE {ir \in SetScheduledIRsRC[sw]: 
-\*                                                    IRStatusRC[ir] # IR_DONE}];
-\*                ScheduleIRSetTmp := {IR \IN rangeSeq(IRQueueRC): IRStatusRC[IR] # IR_DONE}
+                \* We choose to set SetScheduledIRsRC be empty right after reconciliation.
                 RC_READY := TRUE;
                 
             
@@ -2181,15 +2168,15 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-9127619cdc4f88afed7c37e8130af8cd (chksum(pcal) = "cb8e9368" /\ chksum(tla) = "9d4abbb1") (chksum(pcal) = "693f78c9" /\ chksum(tla) = "df5ffee9") (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) = "1bcf2871" /\ chksum(tla) = "c11ffdac")
 \* Process variable rowRemove of process NIBRCEventHandler at line 1371 col 56 changed to rowRemove_
 \* Process variable stepOfFailure of process NIBRCEventHandler at line 1372 col 50 changed to stepOfFailure_
-\* Process variable NIBMsg of process RCNIBEventHandler at line 1528 col 15 changed to NIBMsg_
-\* Process variable isBootStrap of process RCNIBEventHandler at line 1528 col 50 changed to isBootStrap_
-\* Process variable op1 of process controllerSequencer at line 1575 col 48 changed to op1_
-\* Process variable transaction of process controllerSequencer at line 1577 col 17 changed to transaction_
-\* Process variable stepOfFailure of process controllerSequencer at line 1578 col 29 changed to stepOfFailure_c
-\* Process variable NIBMsg of process OFCNIBEventHandler at line 1691 col 15 changed to NIBMsg_O
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 1716 col 64 changed to stepOfFailure_co
-\* Process variable transaction of process controllerWorkerThreads at line 1717 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1718 col 53 changed to op_ir_status_change_
+\* Process variable NIBMsg of process RCNIBEventHandler at line 1515 col 15 changed to NIBMsg_
+\* Process variable isBootStrap of process RCNIBEventHandler at line 1515 col 50 changed to isBootStrap_
+\* Process variable op1 of process controllerSequencer at line 1562 col 48 changed to op1_
+\* Process variable transaction of process controllerSequencer at line 1564 col 17 changed to transaction_
+\* Process variable stepOfFailure of process controllerSequencer at line 1565 col 29 changed to stepOfFailure_c
+\* Process variable NIBMsg of process OFCNIBEventHandler at line 1678 col 15 changed to NIBMsg_O
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 1703 col 64 changed to stepOfFailure_co
+\* Process variable transaction of process controllerWorkerThreads at line 1704 col 15 changed to transaction_c
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1705 col 53 changed to op_ir_status_change_
 VARIABLES switchLock, controllerLock, FirstInstall, sw_fail_ordering_var, 
           ContProcSet, SwProcSet, swSeqChangedStatus, controller2Switch, 
           switch2Controller, switchStatus, installedIRs, NicAsic2OfaBuff, 
@@ -2438,7 +2425,7 @@ vars == << switchLock, controllerLock, FirstInstall, sw_fail_ordering_var,
            monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
            op_ir_status_change, op_first_install, transaction >>
 
-ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (( {"proc"} \X {RC_FAILURE})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
+ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (( {"proc"} \X {RC_NIB_FAILURE})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
 
 Init == (* Global variables *)
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
@@ -2574,7 +2561,7 @@ Init == (* Global variables *)
                                         [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
                                         [] self \in ({GHOST_UNLOCK_PROC} \X SW) -> "ghostProc"
                                         [] self \in ({nib0} \X {CONT_NIB_RC_EVENT}) -> "NIBEventHandling"
-                                        [] self \in ( {"proc"} \X {RC_FAILURE}) -> "RCFailure"
+                                        [] self \in ( {"proc"} \X {RC_NIB_FAILURE}) -> "RCFailure"
                                         [] self \in ({"proc"} \X {RC_FAILOVER}) -> "RCFailoverResetStates"
                                         [] self \in ({rc0} \X {CONT_RC_NIB_EVENT}) -> "RCNIBEventHanderProc"
                                         [] self \in ({rc0} \X {CONT_SEQ}) -> "RCSendReadTransaction"
@@ -5364,7 +5351,7 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                /\ IF localIRSet'[self] # NIBIRSet'[self]
                                      THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE)
                                           /\ Assert(Len(IRQueueOFC') <= MaxNumIRs, 
-                                                    "Failure of assertion at line 1705, column 17.")
+                                                    "Failure of assertion at line 1692, column 17.")
                                      ELSE /\ TRUE
                                           /\ UNCHANGED IRQueueOFC
                                /\ pc' = [pc EXCEPT ![self] = "OFCNIBEventHanderProc"]
@@ -6994,13 +6981,13 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                 /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                 /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                 /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                          "Failure of assertion at line 2107, column 9.")
+                                          "Failure of assertion at line 2094, column 9.")
                                 /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                          "Failure of assertion at line 2108, column 9.")
+                                          "Failure of assertion at line 2095, column 9.")
                                 /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                       THEN /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRDone"]
                                       ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 2133, column 13.")
+                                                     "Failure of assertion at line 2120, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                 /\ UNCHANGED << switchLock, FirstInstall, 
                                                 sw_fail_ordering_var, 
@@ -7294,7 +7281,7 @@ Next == (\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
            \/ (\E self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self))
            \/ (\E self \in ({GHOST_UNLOCK_PROC} \X SW): ghostUnlockProcess(self))
            \/ (\E self \in ({nib0} \X {CONT_NIB_RC_EVENT}): NIBRCEventHandler(self))
-           \/ (\E self \in ( {"proc"} \X {RC_FAILURE}): RCFailureProc(self))
+           \/ (\E self \in ( {"proc"} \X {RC_NIB_FAILURE}): RCFailureProc(self))
            \/ (\E self \in ({"proc"} \X {RC_FAILOVER}): RCFailoverProc(self))
            \/ (\E self \in ({rc0} \X {CONT_RC_NIB_EVENT}): RCNIBEventHandler(self))
            \/ (\E self \in ({rc0} \X {CONT_SEQ}): controllerSequencer(self))
@@ -7315,7 +7302,7 @@ Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in ({SW_RESOLVE_PROC} \X SW) : WF_vars(swResolveFailure(self))
         /\ \A self \in ({GHOST_UNLOCK_PROC} \X SW) : WF_vars(ghostUnlockProcess(self))
         /\ \A self \in ({nib0} \X {CONT_NIB_RC_EVENT}) : WF_vars(NIBRCEventHandler(self))
-        /\ \A self \in ( {"proc"} \X {RC_FAILURE}) : WF_vars(RCFailureProc(self))
+        /\ \A self \in ( {"proc"} \X {RC_NIB_FAILURE}) : WF_vars(RCFailureProc(self))
         /\ \A self \in ({"proc"} \X {RC_FAILOVER}) : WF_vars(RCFailoverProc(self))
         /\ \A self \in ({rc0} \X {CONT_RC_NIB_EVENT}) : WF_vars(RCNIBEventHandler(self))
         /\ \A self \in ({rc0} \X {CONT_SEQ}) : WF_vars(controllerSequencer(self))
@@ -7437,6 +7424,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Tue Apr 06 12:04:41 PDT 2021 by zmy
+\* Last modified Tue Apr 06 23:22:03 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
