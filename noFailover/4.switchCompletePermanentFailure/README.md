@@ -14,7 +14,7 @@ The parameters of the model are;
 
 6) WHICH_SW_MODEL; determines which of the two available models each switch use (either SW_SIMPLE_MODEL or SW_COMPLEX_MODEL. e.g. (s0 :> SW_COMPLEX_MODEL) @@ (s1 :> SW_SIMPLE_MODEL). Note that SW_SIMPLE_MODEL does everything in one atomic operation and does not fail at all.
 
-7) DAG_FAILED_SW_MAPPING: This is a mapping from the set of failed switch to a DAG. For example, ({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ ({s0} :> [v |-> {4}, e |-> {}]) means if no switch has failed, the DAG that should be installed in the topology has two IRs and IR1 should be installed before IR2. If s0 fails, the DAG has only one IR with no dependencies. 
+7) TOPO_DAG_MAPPING: This is a mapping from the set of failed switch to a DAG. For example, ({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ ({s0} :> [v |-> {4}, e |-> {}]) means if no switch has failed, the DAG that should be installed in the topology has two IRs and IR1 should be installed before IR2. If s0 fails, the DAG has only one IR with no dependencies. 
 
 8) SW_MODULE_CAN_FAIL_OR_NOT: [Only for partial failures]. it defines whether each of the components of the switch can fail in the execution or not e.g. [cpu |-> 1, nicAsic |-> 0, ofa |-> 0, installer |-> 0].
 
@@ -25,3 +25,4 @@ The parameters of the model are;
 11) IR2FLOW: A mapping from IR to a flow number that the IR is going to install or delete e.g. (1 :> 2) @@ (2 :> 3)
 
 12) MaxNumFlows: Should be equal to the total number of FLOWs in IR2FLOW. [integer]
+

@@ -57,7 +57,8 @@ the flag IR_DONE. However, in case of complete transient failure, the TCAM loses
 
 Solution: we should either perform reconciliation or reset the flag of IR to IR_NONE to be forwarded again 
 (No matter what the flag of IR is). -- I decided to move forward with resetting the flag to see how far we can go. 
-------------------------------------------------------------------------------------------------------------------------------- 
+======================================================================================================================
+======================================================================================================================
 Bug#4: sw0 fails → OFC OF event handler processes the failure event and suspends the switch → RC TE schedules 
 DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the notification of the new DAG and adds 
 DAG1 to the DAG Queue → RC NIB event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the 
@@ -85,7 +86,8 @@ Problem2: Although DAG2 is equal to DAG1, TE marks DAG1 as stale and schedules D
 
 Solution: For problem 1, RC should remove an IR from SetScheduledIR when the flag of IR is changed to IR_NONE. 
 For problem 2, TE should not schedule a new DAG if the new DAG is equal to the previous one. 
--------------------------------------------------------------------------------------------------------------------------------
+======================================================================================================================
+======================================================================================================================
 Bug#5: sw0 fails → sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → RC NIB 
 event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to TE for DAG 
 recomputation → OFC OF event handler processes the switch recovery event and changes the state of switch to SW_RUN → RC NIB 
@@ -111,5 +113,181 @@ Solution: There are two possible solutions to avoid this;
 2) Resetting the flag of IRs before changing the state of switch to SW_RUN.Previously, we were doing lazy updates where we update 
 the flag of IRs after changing the state of the switch. Avoiding a lazy update would potentially cause a head-of-line blocking.
 (I decided to move forward with the second choice to see what happens if we avoid switch reconciliation)
--------------------------------------------------------------------------------------------------------------------------------
+======================================================================================================================
+======================================================================================================================
+Bug#6:  RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer receives the notification of 
+the new DAG and adds DAG1 to the DAG Queue → RC worker sequencer reads DAG1 and locks the DAG → RC Worker Seq adds IR1 to the 
+SetScheduledIRs and schedules IR1 → OFC worker reads the IR and changes its flag to IR_SENT →  RC NIB Event handler receives the 
+IR_MOD event and changes the flag of IR1 to IR_SENT locally → OFC worker forwards IR1 → sw0 receives IR1, installs FLOW1 and 
+sends back the confirmation → sw0 fails and TCAM state is lost → sw0 recovers → OFC OF event handler suspends the switch → RC NIB 
+event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to TE for DAG 
+recomputation → OFC OF event handler retrieves all the IRs that needs to reset their flags {IR1} → OFC OF event handler resets 
+the flag of IR1 to IR_NONE → RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_NONE locally → RC 
+monitoring server processes the confirmation message from sw0 and changes the flag of IR1 to IR_DONE → RC NIB Event handler 
+receives the IR_MOD event and changes the flag of IR1 to IR_DONE locally → RC Worker Seq schedules IR2. 
 
+Problem: On the control plane, the flag of IR1 is IR_DONE but IR1 is lost due to complete switch failure. The issue is the 
+race condition between monitoring server and OF event handler in updating the flag of IR. 
+
+Solution: monitoring server only changes the flag from IR_SENT to IR_DONE. If the status has changed from IR_SENT to IR_NONE by 
+the OFC OF event handler, an issue has happened between forwarding the IR and receiving the confirmation. Therefore, just ignore 
+the confirmation. (This is a correct solution when we have only 1 complete transient failure, having a combination of complete 
+failures (transient + permanent) causes an issue with this solution). 
+======================================================================================================================
+======================================================================================================================
+Bug #7: sw0 fails → sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → 
+RC NIB event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to 
+TE for DAG recomputation → RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Sequencer 
+receives the notification of the new DAG and adds DAG1 to the DAG Queue → RC worker sequencer reads DAG1 and locks 
+the DAG → OFC OF event handler starts processing the recovery event → retrieves all the IRs that needs to reset their 
+flags {} → OFC OF event handler changes the state of sw0 to SW_RUN → RC NIB event handler receives the TOPO_MOD event, 
+changes the state of sw to SW_RUN, and forwards the TOPO_MOD event to TE for DAG recomputation → RC Worker Seq schedules 
+IR1 → OFC worker receives the IR and changes the flag of IR1 to IR_SENT →  RC NIB Event handler receives the IR_MOD event 
+and changes the flag of IR1 to IR_SENT locally → OFC worker forwards IR1 → sw0 receives IR1, installs FLOW1 and sends back 
+the confirmation → OFC monitoring server processes the confirmation message from sw0 and changes the flag of IR1 to 
+IR_DONE → RC NIB Event handler receives the IR_MOD event and changes the flag of IR2 to IR_DONE locally → RC Worker Seq 
+schedules IR2 → RC TE marks DAG1 as stale and sends DAG_STALE event to Boss Seq → OFC worker receives the IR and changes 
+the flag of IR2 to IR_SENT → RC Worker Seq finds out DAG1 is stale and unlocks the DAG → RC Boss Seq receives the DAG_STALE 
+event and changes the state of DAG to DAG_NONE as no worker is working on DAG1 → OFC worker forwards IR2 →  sw1 receives 
+IR2, installs FLOW2 and sends back the confirmation → RC NIB Event handler receives the IR_MOD event and changes the flag 
+of IR2 to IR_SENT locally → RC TE schedules DAG2({<<IR13 = DELETE FLOW 2, IR3 = INSTALL FLOW3>>}) → OFC monitoring server 
+processes the confirmation message from sw1 and changes the flag of IR2 to IR_DONE → RC Boss Sequencer receives the 
+notification of the new DAG and adds DAG2 to the DAG Queue → RC worker sequencer reads DAG2 and locks the DAG → RC Worker 
+Sequencer schedules IR13 →RC TE marks DAG2 as stale and sends DAG_STALE event to Boss Seq → RC Worker Seq finds out DAG2 
+is stale and unlocks the DAG →  OFC worker receives the IR and changes the flag of IR13 to IR_SENT → RC NIB Event handler 
+receives the IR_MOD event and changes the flag of IR13 to IR_SENT locally → OFC worker forwards IR13 → sw1 receives IR13, 
+removes FLOW2 and sends back the confirmation → OFC monitoring server processes the confirmation message from sw1 and changes 
+the flag of IR13 to IR_DONE → RC NIB Event handler receives the IR_MOD event and changes the flag of IR13 to IR_DONE locally 
+→ RC Boss Seq receives the DAG_STALE event and changes the state of DAG to DAG_NONE as no worker is working on DAG2 → RC TE 
+schedules DAG3({<<IR1 = DELETE FLOW1, IR2 = INSTALL FLOW2>>})  → RC Boss Seq receives the new_DAG event and adds it to the 
+Queue → All the IRs in DAG3 has flag IR_DONE. Therefore, RC Worker Seq skips the DAG. 
+
+Problem: The IR2 which was installed during DAG1 and later removed by DAG2 still has the IR_DONE flag because the 
+monitoring server has not changed its flag upon receiving the confirmation of deletion IR. As a result, during DAG3, 
+IR2 is skipped.
+
+Solution: Monitoring server should change the flag of IR2 to IR_NONE upon receiving the confirmation for IR13 = DELETE FLOW2.
+======================================================================================================================
+======================================================================================================================
+Bug#8: sw0 fails → sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → 
+RC NIB event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to 
+TE for DAG recomputation → RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Seq receives 
+the DAG_STALE event and changes the state of DAG to DAG_NONE as no worker is working on DAG1 → RC worker sequencer 
+reads DAG1 and locks the DAG → OFC OF event handler starts processing the recovery event and retrieves all the IRs 
+that needs to reset their flags {} → OFC OF event handler changes the state of sw0 to SW_RUN → RC NIB event handler 
+receives the TOPO_MOD event, changes the state of sw to SW_RUN, and forwards the TOPO_MOD event to TE for DAG 
+recomputation →  RC Worker Seq schedules IR1 → OFC worker receives the IR and changes the flag of IR1 to IR_SENT → 
+RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_SENT locally → OFC worker forwards 
+IR1 → sw0 receives IR1, installs FLOW1 and sends back the confirmation → OFC monitoring server processes the 
+confirmation message from sw0 and changes the flag of IR1 to IR_DONE → RC NIB Event handler receives the IR_MOD event 
+and changes the flag of IR2 to IR_DONE locally → RC Worker Seq schedules IR2 → RC TE marks DAG1 as stale and sends 
+DAG_STALE event to Boss Seq → OFC worker receives the IR and changes the flag of IR2 to IR_SENT → RC Worker Seq finds 
+out DAG1 is stale and unlocks the DAG → OFC worker forwards IR2 →  sw1 receives IR2, installs FLOW2 and sends back the 
+confirmation → RC NIB Event handler receives the IR_MOD event and changes the flag of IR2 to IR_SENT locally → RC Boss 
+Seq receives the DAG_STALE event and changes the state of DAG to DAG_NONE as no worker is working on DAG1 → OFC 
+monitoring server processes the confirmation message from sw1 and changes the flag of IR2 to IR_DONE → RC NIB Event 
+handler receives the IR_MOD event and changes the flag of IR2 to IR_DONE locally → RC TE schedules DAG2
+({<<IR13 = DELETE FLOW 2, IR3 = INSTALL FLOW3>>}) → RC Boss Sequencer receives the notification of the new DAG and adds 
+DAG2 to the DAG Queue → RC worker sequencer reads DAG2 and locks the DAG → RC TE marks DAG2 as stale and sends DAG_STALE 
+event to Boss Seq → RC Worker Sequencer schedules IR13 → RC Worker Seq finds out DAG2 is stale and unlocks the DAG → OFC 
+worker receives the IR and changes the flag of IR13 to IR_SENT → RC NIB Event handler receives the IR_MOD event and 
+changes the flag of IR13 to IR_SENT locally →  OFC worker forwards IR13 → sw1 receives IR13, removes FLOW2 and sends 
+back the confirmation →  RC TE schedules DAG3({<<IR1 = DELETE FLOW1, IR2 = INSTALL FLOW2>>})  → RC Boss Sequencer receives 
+the notification of the new DAG and adds DAG3 to the DAG Queue → OFC monitoring server processes the confirmation message 
+from sw1 and changes the flag of IR13 to IR_DONE → OFC monitoring server updates the flag of IR2 to IR_NONE because the 
+IR is removed as a result of IR13 → All the IRs in DAG3 has flag IR_DONE. Therefore, RC Worker Seq skips the DAG → RC NIB 
+Event handler receives the IR_MOD event and changes the flag of IR13 to IR_DONE locally → RC NIB Event handler receives 
+the IR_MOD event and changes the flag of IR13 to IR_DONE locally
+
+Problem: The IR2 which was installed during DAG1 still has the IR_DONE flag during installation of DAG3. As a result, 
+during DAG3, IR2 is skipped. However, IR2 is deleted (IR13 in DAG2) later because although DAG2 is not processed by RC 
+anymore, OFC is still working on IR13.
+
+Solution: Additional Module for monitoring the IRs/Flows is required in RC. 
+* IRDoneSet to keep track of IRs that need to have IR_DONE status. Every other IR should have IR_NONE status.
+* After Worker Seq scheduling IR1 = INSTALL FLOW x
+	:> Add IR1 to IRDoneSet
+* After Worker Seq scheduling IR2 = DELETE FLOW x
+	:> Remove IR1 from IRDoneSet
+======================================================================================================================
+======================================================================================================================
+Bug#9: sw0 fails → sw0 recovers → RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Seq 
+receives the DAG_STALE event and changes the state of DAG to DAG_NONE as no worker is working on DAG1 → RC worker 
+sequencer reads DAG1 and locks the DAG → RC Worker Seq schedules IR1 → RC Worker adds IR1 to IRDoneSet → OFC OF event 
+handler processes the switch failure event and suspends the switch → RC NIB event handler receives the TOPO_MOD event, 
+suspends the switch internally, and forwards the TOPO_MOD event to TE for DAG recomputation → OFC OF event handler 
+starts processing the recovery event and retrieves all the IRs that needs to reset their flags {} → OFC OF event handler 
+changes the state of sw0 to SW_RUN → RC NIB event handler receives the TOPO_MOD event, changes the state of sw to SW_RUN, 
+and forwards the TOPO_MOD event to TE for DAG recomputation → OFC worker receives the IR and changes the flag of IR1 to 
+IR_SENT → RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_SENT locally → OFC worker 
+forwards IR1 → sw0 receives IR1, installs FLOW1 and sends back the confirmation → OFC monitoring server processes the 
+confirmation message from sw0 and changes the flag of IR1 to IR_DONE → RC NIB Event handler receives the IR_MOD event 
+and changes the flag of IR2 to IR_DONE locally → RC TE marks DAG1 as stale and sends DAG_STALE event to Boss Seq → RC 
+Worker Seq schedules IR2 → RC Worker adds IR2 to IRDoneSet → RC Worker Seq finds out DAG1 is stale and unlocks the DAG 
+→ RC Boss Seq receives the DAG_STALE event and changes the state of DAG to DAG_NONE as no worker is working on DAG1 → 
+RC TE schedules DAG2({<<IR13 = DELETE FLOW 2, IR3 = INSTALL FLOW3>>}) → RC Boss Sequencer receives the notification of 
+the new DAG and adds DAG2 to the DAG Queue → RC worker sequencer reads DAG2 and locks the DAG → RC TE marks DAG2 as 
+stale and sends DAG_STALE event to Boss Seq → RC Worker Sequencer schedules IR13 → RC Worker remove IR2 from IRDoneSet 
+→ RC Worker Seq finds out DAG2 is stale and unlocks the DAG → RC Boss Seq receives the DAG_STALE event and changes the 
+state of DAG to DAG_NONE as no worker is working on DAG1 → RC TE schedules DAG3({<<IR1 = DELETE FLOW1, IR2 = INSTALL 
+FLOW2>>})  → RC Boss Sequencer receives the notification of the new DAG and adds DAG2 to the DAG Queue → FC worker 
+receives the IR and changes the flag of IR2 to IR_SENT → RC NIB Event handler receives the IR_MOD event and changes 
+the flag of IR2 to IR_SENT locally → OFC worker forwards IR2 →  sw1 receives IR2, installs FLOW2 and sends back the 
+confirmation → OFC worker receives the IR and changes the flag of IR13 to IR_SENT → RC NIB Event handler receives 
+the IR_MOD event and changes the flag of IR13 to IR_SENT locally → OFC worker forwards IR13 → sw1 receives IR13, 
+removes FLOW2 and sends back the confirmation → OFC monitoring server processes the confirmation message from sw1 
+and changes the flag of IR2 to IR_DONE → RC NIB Event handler receives the IR_MOD event and changes the flag of IR2 
+to IR_DONE locally →  All the IRs in DAG3 has flag IR_DONE. Therefore, RC Worker Seq skips the DAG → OFC monitoring 
+server processes the confirmation message from sw1 and changes the flag of IR13 to IR_DONE → OFC monitoring server 
+updates the flag of IR2 to IR_NONE because the IR is removed as a result of IR13 → RC NIB Event handler receives 
+the IR_MOD event and changes the flag of IR13 to IR_DONE locally → RC NIB Event handler receives the IR_MOD event 
+and changes the flag of IR2 to IR_NONE locally.
+
+Problem: Similar issue happened as the previous bug. As IRs in DAG3 are never processed by the worker sequencer, 
+they are not added to the IRDoneSet. As a result, after DAG2, IRDoneSet = {IR1} and RC IRMonitor does not do 
+anything although it knows that IR2 is not installed in the switch.
+
+Solution: RC Worker Seq, instead of adding/removing an IR from IRDoneSet after scheduling the IR, waits until 
+it is done with the DAG, and then, it does the addition/removal for all the IRs in DAG.
+======================================================================================================================
+======================================================================================================================
+Bug#10: sw0 fails → sw0 recovers → OFC OF event handler processes the switch failure event and suspends the switch → 
+RC NIB event handler receives the TOPO_MOD event, suspends the switch internally, and forwards the TOPO_MOD event to 
+TE for DAG recomputation → OFC OF event handler starts processing the recovery event and retrieves all the IRs that 
+needs to reset their flags {} → OFC OF event handler changes the state of sw0 to SW_RUN → RC NIB event handler receives 
+the TOPO_MOD event, changes the state of sw to SW_RUN, and forwards the TOPO_MOD event to TE for DAG recomputation → 
+RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → RC Boss Seq receives the DAG_STALE event and 
+changes the state of DAG to DAG_NONE as no worker is working on DAG1 → RC worker sequencer reads DAG1 and locks the 
+DAG → RC Worker Seq schedules IR1 → OFC worker t0 receives the IR, locks the IR and changes the flag of IR1 to IR_SENT 
+→  RC NIB Event handler receives the IR_MOD event and changes the flag of IR1 to IR_SENT locally → OFC worker forwards 
+IR1 but does not unlock the IR→ sw0 receives IR1, installs FLOW1 and sends back the confirmation →  OFC monitoring 
+server processes the confirmation message from sw0 and changes the flag of IR1 to IR_DONE → RC NIB Event handler 
+receives the IR_MOD event and changes the flag of IR2 to IR_DONE locally → Since IR1 has not yet been added to IRDoneSet, 
+RC IR Monitor thinks IR1 is installed wrongly and schedules IR13 to delete Flow1 (for IR1) → OFC worker t1 receives the 
+IR13, locks the IR13 and changes the flag of IR13 to IR_SENT → RC NIB Event handler receives the IR_MOD event and changes 
+the flag of IR13 to IR_SENT locally → OFC worker t1 forwards IR13 and unlocks the IR →  sw1 receives IR13, removes FLOW1 
+and sends back the confirmation → OFC monitoring server processes the confirmation message from sw1 and changes the flag 
+of IR13 to IR_DONE → OFC monitoring server updates the flag of IR1 to IR_NONE because the IR is removed as a result of 
+IR13 → RC NIB Event handler receives the IR_MOD event and changes the flag of IR13 to IR_DONE locally → RC NIB Event 
+handler receives the IR_MOD event and changes the flag of IR13 to IR_DONE locally → RC Worker Seq schedules IR1 → OFC 
+worker t1 receives the IR1 and skips the IR as IR1 is locked by OFC worker t0 → OFC worker t0 unlocks the IR1 
+
+Problem: 
+1) Deadlock in IR installation. IR1 (= INSTALL FLOW1) is initially locked and forwarded by t0. t1 at the same time 
+forwards IR13 (= DELETE FLOW1) and sw0 removes FLOW1. In the second round, IR1 is added to SetScheduledIR and 
+scheduled again. However, t1 skips the IR because it is locked by t0. Therefore, none of the workers are working 
+on IR1 while RC thinks OFC is working on IR1 as IR1 is in SetScheduledIRs. 
+
+2) RC IR Monitor schedules IR13 for no reason. RC IR Monitor finds out that IR1 has to be installed with a delay as 
+IRs of a DAG are added/deleted from IRDoneSet only after the Sequencer is done with the DAG. During that delay, 
+IR1 might be installed completely and RC IR Monitor wrongly thinks that IR1 should be removed and schedules IR13.
+
+Solution: 
+OFC Worker when finds out an IR is locked should not skip the IR and move next. It should wait for the other 
+worker to unlock the IR. It then should lock and process the IR;
+1) If IRStatus[IR] = IR_DONE or IR_SENT → skip the IR
+2) If IRStatus[IR] = IR_NONE → forward the IR
+RC IR Monitor should add/remove IRs from IRDoneSet after adding the IRs to the SetScheduledIRs and before adding 
+the IRs to the IRQueue. 
+======================================================================================================================
+======================================================================================================================
