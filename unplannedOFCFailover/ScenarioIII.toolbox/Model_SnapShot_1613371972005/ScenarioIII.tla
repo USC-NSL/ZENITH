@@ -1075,7 +1075,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         await whichSwitchModel(self[2]) = SW_SIMPLE_MODEL;          
         await Len(controller2Switch[self[2]]) > 0;
         \* Switch check if OFC is up; if not wait until it is up
-        await isNIBUp(NIBThreadID);
+        await isOFCUp(OFCThreadID);
         switchWaitForLock();
         ingressPkt := Head(controller2Switch[self[2]]);
         assert ingressPkt.type = INSTALL_FLOW;
@@ -1778,7 +1778,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     fair process controllerWorkerThreads \in ({ofc0} \X CONTROLLER_THREAD_POOL)
     variables nextIRToSent = 0, rowIndex = -1, rowRemove = -1, stepOfFailure = 0,
               transaction = <<>>, NIBMsg = [value |-> [x |-> <<>>]], 
-              op1 = [table |-> ""], IRQueue = <<>>, op_ir_status_change = [table |-> ""]; 
+              op1 = [table |-> ""], IRQueue = <<>>, 
+              op_ir_status_change = [table |-> ""],
+              removeIR = FALSE; 
     begin
     ControllerThread:
     while TRUE do
@@ -1808,19 +1810,23 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 rowIndex := getFirstIRIndexToRead(self, IRQueueOFC);
                 nextIRToSent := IRQueueOFC[rowIndex].IR;
                 IRQueueOFC[rowIndex].tag := self;
+                \* This is only useful during OFC failover to prevent redundant IR scheduling
+                if IRStatusOFC[nextIRToSent] = IR_DONE then
+                   goto OFCRemoveIRFromIRQueueOFC;
+                end if;
             end if;
         
-        OFCUpdateIRQueueIRTag:
-            controllerWaitForLockFree();
-            if isOFCFailed(self) then
-                FlagOFCWorkerFailover := TRUE;
-                goto OFCWorkerFailover;
-            else
-                await isNIBUp(NIBThreadID);
-                op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent, value |-> self];
-                transaction := [name |-> "UpdateIRTag", ops |-> <<op1>>];
-                X2NIB := X2NIB \o <<transaction>>;
-            end if;
+\*        OFCUpdateIRQueueIRTag:
+\*            controllerWaitForLockFree();
+\*            if isOFCFailed(self) then
+\*                FlagOFCWorkerFailover := TRUE;
+\*                goto OFCWorkerFailover;
+\*            else
+\*                await isNIBUp(NIBThreadID);
+\*                op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent, value |-> self];
+\*                transaction := [name |-> "UpdateIRTag", ops |-> <<op1>>];
+\*                X2NIB := X2NIB \o <<transaction>>;
+\*            end if;
         
         
         OFCThreadSendIR:
@@ -1829,7 +1835,12 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 FlagOFCWorkerFailover := TRUE;
                 goto OFCWorkerFailover;
             else
-                IRStatusOFC[nextIRToSent] := IR_SENT;
+                if IRStatusOFC[nextIRToSent] = IR_DONE then
+                   \* This is only useful during OFC failover to prevent redundant IR scheduling
+                   goto OFCRemoveIRFromIRQueueOFC;
+                else
+                    IRStatusOFC[nextIRToSent] := IR_SENT;
+                end if;
             end if;
             
         OFCThreadNotifyNIBIRSent:  
@@ -1855,26 +1866,31 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             
         OFCRemoveIRFromIRQueueOFC:
             controllerWaitForLockFree();
-            if \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent then
+            
                 OFCRemoveIRFromIRQueueOFCLocal:
                     if isOFCFailed(self) then
                         FlagOFCWorkerFailover := TRUE;
                         goto OFCWorkerFailover;
                     else
-                        rowRemove := getFirstIndexWith(nextIRToSent, self, IRQueueOFC);
-                        IRQueueOFC := removeFromSeq(IRQueueOFC, rowRemove);
+                        if \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent then
+                            rowRemove := getFirstIndexWith(nextIRToSent, self, IRQueueOFC);
+                            IRQueueOFC := removeFromSeq(IRQueueOFC, rowRemove);
+                            removeIR := TRUE;
+                        end if;
                     end if;
                 OFCRemoveIRFromIRQueueOFCRemote:
                     if isOFCFailed(self) then
                         FlagOFCWorkerFailover := TRUE;
                         goto OFCWorkerFailover;
                     else
-                        await isNIBUp(NIBThreadID);
-                        op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent];
-                        transaction := [name |-> "RemoveIR", ops |-> <<op1>>];
-                        X2NIB := X2NIB \o <<transaction>>;
+                        if removeIR = TRUE then
+                            await isNIBUp(NIBThreadID);
+                            op1 := [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent];
+                            transaction := [name |-> "RemoveIR", ops |-> <<op1>>];
+                            X2NIB := X2NIB \o <<transaction>>;
+                            removeIR := FALSE;
+                        end if;
                     end if;
-            end if;
     end while;
     
     OFCWorkerFailover:
@@ -2161,7 +2177,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
 \* Process variable stepOfFailure of process controllerSequencer at line 1566 col 29 changed to stepOfFailure_c
 \* Process variable NIBMsg of process OFCNIBEventHandler at line 1748 col 15 changed to NIBMsg_O
 \* Process variable transaction of process controllerWorkerThreads at line 1780 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1781 col 53 changed to op_ir_status_change_
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 1782 col 15 changed to op_ir_status_change_
 VARIABLES switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB, 
           sw_fail_ordering_var, ContProcSet, SwProcSet, swSeqChangedStatus, 
           controller2Switch, switch2Controller, switchStatus, installedIRs, 
@@ -2392,8 +2408,8 @@ VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation,
           isBootStrap_, toBeScheduledIRs, key, op1_, op2, transaction_, 
           nextIR, stepOfFailure_c, NIBMsg_O, isBootStrap, localIRSet, 
           NIBIRSet, nextIRToSent, rowIndex, rowRemove, stepOfFailure, 
-          transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, msg, 
-          op_ir_status_change, op_first_install, transaction
+          transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, removeIR, 
+          msg, op_ir_status_change, op_first_install, transaction
 
 vars == << switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB, 
            sw_fail_ordering_var, ContProcSet, SwProcSet, swSeqChangedStatus, 
@@ -2418,8 +2434,9 @@ vars == << switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB,
            isBootStrap_, toBeScheduledIRs, key, op1_, op2, transaction_, 
            nextIR, stepOfFailure_c, NIBMsg_O, isBootStrap, localIRSet, 
            NIBIRSet, nextIRToSent, rowIndex, rowRemove, stepOfFailure, 
-           transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, msg, 
-           op_ir_status_change, op_first_install, transaction >>
+           transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, 
+           removeIR, msg, op_ir_status_change, op_first_install, transaction
+        >>
 
 ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (( {"proc"} \X {RC_OFC_NIB_FAILURE})) \cup (({"proc"} \X {OFC_FAILOVER})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_MONITOR}))
 
@@ -2543,6 +2560,7 @@ Init == (* Global variables *)
         /\ op1 = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [table |-> ""]]
         /\ IRQueue = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> <<>>]
         /\ op_ir_status_change_ = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [table |-> ""]]
+        /\ removeIR = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> FALSE]
         (* Process controllerMonitoringServer *)
         /\ msg = [self \in ({ofc0} \X {CONT_MONITOR}) |-> [type |-> 0]]
         /\ op_ir_status_change = [self \in ({ofc0} \X {CONT_MONITOR}) |-> [table |-> ""]]
@@ -2570,7 +2588,7 @@ Init == (* Global variables *)
 SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ whichSwitchModel(self[2]) = SW_SIMPLE_MODEL
                              /\ Len(controller2Switch[self[2]]) > 0
-                             /\ isNIBUp(NIBThreadID)
+                             /\ isOFCUp(OFCThreadID)
                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
@@ -2635,8 +2653,8 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure, transaction_c, 
                                              NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, msg, 
-                                             op_ir_status_change, 
+                                             op_ir_status_change_, removeIR, 
+                                             msg, op_ir_status_change, 
                                              op_first_install, transaction >>
 
 swProcess(self) == SwitchSimpleProcess(self)
@@ -2699,7 +2717,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          nextIRToSent, rowIndex, rowRemove, 
                                          stepOfFailure, transaction_c, NIBMsg, 
                                          op1, IRQueue, op_ir_status_change_, 
-                                         msg, op_ir_status_change, 
+                                         removeIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuff"
@@ -2781,7 +2799,8 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       transaction_c, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
-                                                      msg, op_ir_status_change, 
+                                                      removeIR, msg, 
+                                                      op_ir_status_change, 
                                                       op_first_install, 
                                                       transaction >>
 
@@ -2850,8 +2869,8 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure, transaction_c, 
                                              NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, msg, 
-                                             op_ir_status_change, 
+                                             op_ir_status_change_, removeIR, 
+                                             msg, op_ir_status_change, 
                                              op_first_install, transaction >>
 
 SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
@@ -2928,7 +2947,8 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure, transaction_c, 
                                                  NIBMsg, op1, IRQueue, 
-                                                 op_ir_status_change_, msg, 
+                                                 op_ir_status_change_, 
+                                                 removeIR, msg, 
                                                  op_ir_status_change, 
                                                  op_first_install, transaction >>
 
@@ -2993,7 +3013,7 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          nextIRToSent, rowIndex, rowRemove, 
                                          stepOfFailure, transaction_c, NIBMsg, 
                                          op1, IRQueue, op_ir_status_change_, 
-                                         msg, op_ir_status_change, 
+                                         removeIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
@@ -3069,8 +3089,8 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 rowIndex, rowRemove, 
                                                 stepOfFailure, transaction_c, 
                                                 NIBMsg, op1, IRQueue, 
-                                                op_ir_status_change_, msg, 
-                                                op_ir_status_change, 
+                                                op_ir_status_change_, removeIR, 
+                                                msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 ofaModuleProcPacketIn(self) == SwitchOfaProcIn(self)
@@ -3133,7 +3153,7 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure, transaction_c, NIBMsg, 
                                           op1, IRQueue, op_ir_status_change_, 
-                                          msg, op_ir_status_change, 
+                                          removeIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmation"
@@ -3216,7 +3236,8 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       transaction_c, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
-                                                      msg, op_ir_status_change, 
+                                                      removeIR, msg, 
+                                                      op_ir_status_change, 
                                                       op_first_install, 
                                                       transaction >>
 
@@ -3283,8 +3304,8 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure, transaction_c, 
                                              NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, msg, 
-                                             op_ir_status_change, 
+                                             op_ir_status_change_, removeIR, 
+                                             msg, op_ir_status_change, 
                                              op_first_install, transaction >>
 
 SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
@@ -3366,7 +3387,8 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     rowRemove, stepOfFailure, 
                                                     transaction_c, NIBMsg, op1, 
                                                     IRQueue, 
-                                                    op_ir_status_change_, msg, 
+                                                    op_ir_status_change_, 
+                                                    removeIR, msg, 
                                                     op_ir_status_change, 
                                                     op_first_install, 
                                                     transaction >>
@@ -3460,7 +3482,7 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         msg, 
+                                                         removeIR, msg, 
                                                          op_ir_status_change, 
                                                          op_first_install, 
                                                          transaction >>
@@ -3603,7 +3625,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        localIRSet, NIBIRSet, nextIRToSent, 
                                        rowIndex, rowRemove, stepOfFailure, 
                                        transaction_c, NIBMsg, op1, IRQueue, 
-                                       op_ir_status_change_, msg, 
+                                       op_ir_status_change_, removeIR, msg, 
                                        op_ir_status_change, op_first_install, 
                                        transaction >>
 
@@ -3749,7 +3771,8 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               rowRemove, stepOfFailure, 
                                               transaction_c, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
-                                              msg, op_ir_status_change, 
+                                              removeIR, msg, 
+                                              op_ir_status_change, 
                                               op_first_install, transaction >>
 
 swResolveFailure(self) == SwitchResolveFailure(self)
@@ -3813,8 +3836,8 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    NIBMsg_O, isBootStrap, localIRSet, NIBIRSet, 
                                    nextIRToSent, rowIndex, rowRemove, 
                                    stepOfFailure, transaction_c, NIBMsg, op1, 
-                                   IRQueue, op_ir_status_change_, msg, 
-                                   op_ir_status_change, op_first_install, 
+                                   IRQueue, op_ir_status_change_, removeIR, 
+                                   msg, op_ir_status_change, op_first_install, 
                                    transaction >>
 
 ghostUnlockProcess(self) == ghostProc(self)
@@ -3868,7 +3891,7 @@ NIBEventHandling(self) == /\ pc[self] = "NIBEventHandling"
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure, transaction_c, NIBMsg, 
                                           op1, IRQueue, op_ir_status_change_, 
-                                          msg, op_ir_status_change, 
+                                          removeIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 NIBDequeueTransaction(self) == /\ pc[self] = "NIBDequeueTransaction"
@@ -3936,8 +3959,8 @@ NIBDequeueTransaction(self) == /\ pc[self] = "NIBDequeueTransaction"
                                                rowIndex, rowRemove, 
                                                stepOfFailure, transaction_c, 
                                                NIBMsg, op1, IRQueue, 
-                                               op_ir_status_change_, msg, 
-                                               op_ir_status_change, 
+                                               op_ir_status_change_, removeIR, 
+                                               msg, op_ir_status_change, 
                                                op_first_install, transaction >>
 
 NIBProcessTransaction(self) == /\ pc[self] = "NIBProcessTransaction"
@@ -4184,7 +4207,8 @@ NIBProcessTransaction(self) == /\ pc[self] = "NIBProcessTransaction"
                                                rowRemove, stepOfFailure, 
                                                transaction_c, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
-                                               msg, op_ir_status_change, 
+                                               removeIR, msg, 
+                                               op_ir_status_change, 
                                                op_first_install, transaction >>
 
 NIBSendBackIfAny(self) == /\ pc[self] = "NIBSendBackIfAny"
@@ -4252,7 +4276,7 @@ NIBSendBackIfAny(self) == /\ pc[self] = "NIBSendBackIfAny"
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure, transaction_c, NIBMsg, 
                                           op1, IRQueue, op_ir_status_change_, 
-                                          msg, op_ir_status_change, 
+                                          removeIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
@@ -4311,7 +4335,7 @@ NIBReconciliation(self) == /\ pc[self] = "NIBReconciliation"
                                            nextIRToSent, rowIndex, rowRemove, 
                                            stepOfFailure, transaction_c, 
                                            NIBMsg, op1, IRQueue, 
-                                           op_ir_status_change_, msg, 
+                                           op_ir_status_change_, removeIR, msg, 
                                            op_ir_status_change, 
                                            op_first_install, transaction >>
 
@@ -4369,8 +4393,8 @@ NIBFailoverReadOFC(self) == /\ pc[self] = "NIBFailoverReadOFC"
                                             nextIRToSent, rowIndex, rowRemove, 
                                             stepOfFailure, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, msg, 
-                                            op_ir_status_change, 
+                                            op_ir_status_change_, removeIR, 
+                                            msg, op_ir_status_change, 
                                             op_first_install, transaction >>
 
 NIBFailoverReadRC(self) == /\ pc[self] = "NIBFailoverReadRC"
@@ -4425,7 +4449,7 @@ NIBFailoverReadRC(self) == /\ pc[self] = "NIBFailoverReadRC"
                                            nextIRToSent, rowIndex, rowRemove, 
                                            stepOfFailure, transaction_c, 
                                            NIBMsg, op1, IRQueue, 
-                                           op_ir_status_change_, msg, 
+                                           op_ir_status_change_, removeIR, msg, 
                                            op_ir_status_change, 
                                            op_first_install, transaction >>
 
@@ -4497,7 +4521,8 @@ ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure, transaction_c, 
                                                  NIBMsg, op1, IRQueue, 
-                                                 op_ir_status_change_, msg, 
+                                                 op_ir_status_change_, 
+                                                 removeIR, msg, 
                                                  op_ir_status_change, 
                                                  op_first_install, transaction >>
 
@@ -4576,8 +4601,8 @@ RCFailoverResetStates(self) == /\ pc[self] = "RCFailoverResetStates"
                                                rowIndex, rowRemove, 
                                                stepOfFailure, transaction_c, 
                                                NIBMsg, op1, IRQueue, 
-                                               op_ir_status_change_, msg, 
-                                               op_ir_status_change, 
+                                               op_ir_status_change_, removeIR, 
+                                               msg, op_ir_status_change, 
                                                op_first_install, transaction >>
 
 RCReadNIB(self) == /\ pc[self] = "RCReadNIB"
@@ -4623,8 +4648,8 @@ RCReadNIB(self) == /\ pc[self] = "RCReadNIB"
                                    NIBMsg_O, isBootStrap, localIRSet, NIBIRSet, 
                                    nextIRToSent, rowIndex, rowRemove, 
                                    stepOfFailure, transaction_c, NIBMsg, op1, 
-                                   IRQueue, op_ir_status_change_, msg, 
-                                   op_ir_status_change, op_first_install, 
+                                   IRQueue, op_ir_status_change_, removeIR, 
+                                   msg, op_ir_status_change, op_first_install, 
                                    transaction >>
 
 RCBack2Normal(self) == /\ pc[self] = "RCBack2Normal"
@@ -4674,7 +4699,7 @@ RCBack2Normal(self) == /\ pc[self] = "RCBack2Normal"
                                        localIRSet, NIBIRSet, nextIRToSent, 
                                        rowIndex, rowRemove, stepOfFailure, 
                                        transaction_c, NIBMsg, op1, IRQueue, 
-                                       op_ir_status_change_, msg, 
+                                       op_ir_status_change_, removeIR, msg, 
                                        op_ir_status_change, op_first_install, 
                                        transaction >>
 
@@ -4771,7 +4796,8 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                               rowRemove, stepOfFailure, 
                                               transaction_c, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
-                                              msg, op_ir_status_change, 
+                                              removeIR, msg, 
+                                              op_ir_status_change, 
                                               op_first_install, transaction >>
 
 RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
@@ -4846,7 +4872,8 @@ RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
                                                    stepOfFailure, 
                                                    transaction_c, NIBMsg, op1, 
                                                    IRQueue, 
-                                                   op_ir_status_change_, msg, 
+                                                   op_ir_status_change_, 
+                                                   removeIR, msg, 
                                                    op_ir_status_change, 
                                                    op_first_install, 
                                                    transaction >>
@@ -4920,7 +4947,8 @@ RCSendReadTransaction(self) == /\ pc[self] = "RCSendReadTransaction"
                                                rowRemove, stepOfFailure, 
                                                transaction_c, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
-                                               msg, op_ir_status_change, 
+                                               removeIR, msg, 
+                                               op_ir_status_change, 
                                                op_first_install, transaction >>
 
 SequencerProc(self) == /\ pc[self] = "SequencerProc"
@@ -4974,7 +5002,7 @@ SequencerProc(self) == /\ pc[self] = "SequencerProc"
                                        localIRSet, NIBIRSet, nextIRToSent, 
                                        rowIndex, rowRemove, stepOfFailure, 
                                        transaction_c, NIBMsg, op1, IRQueue, 
-                                       op_ir_status_change_, msg, 
+                                       op_ir_status_change_, removeIR, msg, 
                                        op_ir_status_change, op_first_install, 
                                        transaction >>
 
@@ -5052,7 +5080,8 @@ RCComputeNextIR2Schedule(self) == /\ pc[self] = "RCComputeNextIR2Schedule"
                                                   rowRemove, stepOfFailure, 
                                                   transaction_c, NIBMsg, op1, 
                                                   IRQueue, 
-                                                  op_ir_status_change_, msg, 
+                                                  op_ir_status_change_, 
+                                                  removeIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
                                                   transaction >>
@@ -5119,8 +5148,8 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             nextIRToSent, rowIndex, rowRemove, 
                                             stepOfFailure, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, msg, 
-                                            op_ir_status_change, 
+                                            op_ir_status_change_, removeIR, 
+                                            msg, op_ir_status_change, 
                                             op_first_install, transaction >>
 
 RCSendPrepareIR2NIB(self) == /\ pc[self] = "RCSendPrepareIR2NIB"
@@ -5188,7 +5217,8 @@ RCSendPrepareIR2NIB(self) == /\ pc[self] = "RCSendPrepareIR2NIB"
                                              rowRemove, stepOfFailure, 
                                              transaction_c, NIBMsg, op1, 
                                              IRQueue, op_ir_status_change_, 
-                                             msg, op_ir_status_change, 
+                                             removeIR, msg, 
+                                             op_ir_status_change, 
                                              op_first_install, transaction >>
 
 ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateReconciliation"
@@ -5287,7 +5317,7 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           transaction_c, 
                                                           NIBMsg, op1, IRQueue, 
                                                           op_ir_status_change_, 
-                                                          msg, 
+                                                          removeIR, msg, 
                                                           op_ir_status_change, 
                                                           op_first_install, 
                                                           transaction >>
@@ -5349,8 +5379,8 @@ RCSequencerFailover(self) == /\ pc[self] = "RCSequencerFailover"
                                              nextIRToSent, rowIndex, rowRemove, 
                                              stepOfFailure, transaction_c, 
                                              NIBMsg, op1, IRQueue, 
-                                             op_ir_status_change_, msg, 
-                                             op_ir_status_change, 
+                                             op_ir_status_change_, removeIR, 
+                                             msg, op_ir_status_change, 
                                              op_first_install, transaction >>
 
 controllerSequencer(self) == RCSendReadTransaction(self)
@@ -5407,8 +5437,8 @@ OFCFailure(self) == /\ pc[self] = "OFCFailure"
                                     NIBIRSet, nextIRToSent, rowIndex, 
                                     rowRemove, stepOfFailure, transaction_c, 
                                     NIBMsg, op1, IRQueue, op_ir_status_change_, 
-                                    msg, op_ir_status_change, op_first_install, 
-                                    transaction >>
+                                    removeIR, msg, op_ir_status_change, 
+                                    op_first_install, transaction >>
 
 ControlPlaneFailureProc(self) == OFCFailure(self)
 
@@ -5485,8 +5515,8 @@ OFCFailoverResetStates(self) == /\ pc[self] = "OFCFailoverResetStates"
                                                 rowIndex, rowRemove, 
                                                 stepOfFailure, transaction_c, 
                                                 NIBMsg, op1, IRQueue, 
-                                                op_ir_status_change_, msg, 
-                                                op_ir_status_change, 
+                                                op_ir_status_change_, removeIR, 
+                                                msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 OFCReadSwitches(self) == /\ pc[self] = "OFCReadSwitches"
@@ -5541,7 +5571,7 @@ OFCReadSwitches(self) == /\ pc[self] = "OFCReadSwitches"
                                          nextIRToSent, rowIndex, rowRemove, 
                                          stepOfFailure, transaction_c, NIBMsg, 
                                          op1, IRQueue, op_ir_status_change_, 
-                                         msg, op_ir_status_change, 
+                                         removeIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCReadNIB(self) == /\ pc[self] = "OFCReadNIB"
@@ -5588,8 +5618,8 @@ OFCReadNIB(self) == /\ pc[self] = "OFCReadNIB"
                                     NIBIRSet, nextIRToSent, rowIndex, 
                                     rowRemove, stepOfFailure, transaction_c, 
                                     NIBMsg, op1, IRQueue, op_ir_status_change_, 
-                                    msg, op_ir_status_change, op_first_install, 
-                                    transaction >>
+                                    removeIR, msg, op_ir_status_change, 
+                                    op_first_install, transaction >>
 
 OFCBack2Normal(self) == /\ pc[self] = "OFCBack2Normal"
                         /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![OFCThreadID] = NotFailed,
@@ -5640,7 +5670,7 @@ OFCBack2Normal(self) == /\ pc[self] = "OFCBack2Normal"
                                         localIRSet, NIBIRSet, nextIRToSent, 
                                         rowIndex, rowRemove, stepOfFailure, 
                                         transaction_c, NIBMsg, op1, IRQueue, 
-                                        op_ir_status_change_, msg, 
+                                        op_ir_status_change_, removeIR, msg, 
                                         op_ir_status_change, op_first_install, 
                                         transaction >>
 
@@ -5722,7 +5752,8 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                                rowRemove, stepOfFailure, 
                                                transaction_c, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
-                                               msg, op_ir_status_change, 
+                                               removeIR, msg, 
+                                               op_ir_status_change, 
                                                op_first_install, transaction >>
 
 OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
@@ -5796,7 +5827,8 @@ OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
                                                     rowRemove, stepOfFailure, 
                                                     transaction_c, NIBMsg, op1, 
                                                     IRQueue, 
-                                                    op_ir_status_change_, msg, 
+                                                    op_ir_status_change_, 
+                                                    removeIR, msg, 
                                                     op_ir_status_change, 
                                                     op_first_install, 
                                                     transaction >>
@@ -5856,7 +5888,7 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           nextIRToSent, rowIndex, rowRemove, 
                                           stepOfFailure, transaction_c, NIBMsg, 
                                           op1, IRQueue, op_ir_status_change_, 
-                                          msg, op_ir_status_change, 
+                                          removeIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
@@ -5871,7 +5903,9 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                        /\ rowIndex' = [rowIndex EXCEPT ![self] = getFirstIRIndexToRead(self, IRQueueOFC)]
                                        /\ nextIRToSent' = [nextIRToSent EXCEPT ![self] = IRQueueOFC[rowIndex'[self]].IR]
                                        /\ IRQueueOFC' = [IRQueueOFC EXCEPT ![rowIndex'[self]].tag = self]
-                                       /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRQueueIRTag"]
+                                       /\ IF IRStatusOFC[nextIRToSent'[self]] = IR_DONE
+                                             THEN /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFC"]
+                                             ELSE /\ pc' = [pc EXCEPT ![self] = "OFCThreadSendIR"]
                                        /\ UNCHANGED FlagOFCWorkerFailover
                             /\ UNCHANGED << switchLock, controllerLock, 
                                             FirstInstallOFC, FirstInstallNIB, 
@@ -5920,80 +5954,9 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                             isBootStrap, localIRSet, NIBIRSet, 
                                             rowRemove, stepOfFailure, 
                                             transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, msg, 
-                                            op_ir_status_change, 
+                                            IRQueue, op_ir_status_change_, 
+                                            removeIR, msg, op_ir_status_change, 
                                             op_first_install, transaction >>
-
-OFCUpdateIRQueueIRTag(self) == /\ pc[self] = "OFCUpdateIRQueueIRTag"
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                               /\ IF isOFCFailed(self)
-                                     THEN /\ FlagOFCWorkerFailover' = TRUE
-                                          /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
-                                          /\ UNCHANGED << X2NIB, transaction_c, 
-                                                          op1 >>
-                                     ELSE /\ isNIBUp(NIBThreadID)
-                                          /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self], value |-> self]]
-                                          /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "UpdateIRTag", ops |-> <<op1'[self]>>]]
-                                          /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
-                                          /\ pc' = [pc EXCEPT ![self] = "OFCThreadSendIR"]
-                                          /\ UNCHANGED FlagOFCWorkerFailover
-                               /\ UNCHANGED << switchLock, controllerLock, 
-                                               FirstInstallOFC, 
-                                               FirstInstallNIB, 
-                                               sw_fail_ordering_var, 
-                                               ContProcSet, SwProcSet, 
-                                               swSeqChangedStatus, 
-                                               controller2Switch, 
-                                               switch2Controller, switchStatus, 
-                                               installedIRs, NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Installer2OfaBuff, 
-                                               Ofa2InstallerBuff, TCAM, 
-                                               controlMsgCounter, 
-                                               controllerSubmoduleFailNum, 
-                                               controllerSubmoduleFailStat, 
-                                               switchOrdering, dependencyGraph, 
-                                               IR2SW, NIBUpdateForRC, 
-                                               controllerStateRC, IRStatusRC, 
-                                               IRQueueRC, SwSuspensionStatusRC, 
-                                               SetScheduledIRsRC, 
-                                               FlagRCNIBEventHandlerFailover, 
-                                               FlagRCSequencerFailover, 
-                                               RC_READY, idThreadWorkingOnIR, 
-                                               workerThreadRanking, 
-                                               controllerStateOFC, IRStatusOFC, 
-                                               IRQueueOFC, 
-                                               SwSuspensionStatusOFC, 
-                                               SetScheduledIRsOFC, 
-                                               FlagOFCMonitorFailover, 
-                                               FlagOFCNIBEventHandlerFailover, 
-                                               OFCThreadID, NIB2OFC, NIB2RC, 
-                                               FlagNIBFailover, OFC_READY, 
-                                               masterState, controllerStateNIB, 
-                                               IRStatus, SwSuspensionStatus, 
-                                               IRQueueNIB, SetScheduledIRs, 
-                                               X2NIB_len, NIBThreadID, 
-                                               RCThreadID, ingressPkt, 
-                                               ingressIR, egressMsg, ofaInMsg, 
-                                               ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, 
-                                               failedSet, statusResolveMsg, 
-                                               recoveredElem, nextTrans, value, 
-                                               rowRemove_, IR2Remove, 
-                                               send_NIB_back, stepOfFailure_, 
-                                               IRIndex, NIBMsg_, isBootStrap_, 
-                                               toBeScheduledIRs, key, op1_, 
-                                               op2, transaction_, nextIR, 
-                                               stepOfFailure_c, NIBMsg_O, 
-                                               isBootStrap, localIRSet, 
-                                               NIBIRSet, nextIRToSent, 
-                                               rowIndex, rowRemove, 
-                                               stepOfFailure, NIBMsg, IRQueue, 
-                                               op_ir_status_change_, msg, 
-                                               op_ir_status_change, 
-                                               op_first_install, transaction >>
 
 OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
@@ -6002,8 +5965,11 @@ OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
                                THEN /\ FlagOFCWorkerFailover' = TRUE
                                     /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
                                     /\ UNCHANGED IRStatusOFC
-                               ELSE /\ IRStatusOFC' = [IRStatusOFC EXCEPT ![nextIRToSent[self]] = IR_SENT]
-                                    /\ pc' = [pc EXCEPT ![self] = "OFCThreadNotifyNIBIRSent"]
+                               ELSE /\ IF IRStatusOFC[nextIRToSent[self]] = IR_DONE
+                                          THEN /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFC"]
+                                               /\ UNCHANGED IRStatusOFC
+                                          ELSE /\ IRStatusOFC' = [IRStatusOFC EXCEPT ![nextIRToSent[self]] = IR_SENT]
+                                               /\ pc' = [pc EXCEPT ![self] = "OFCThreadNotifyNIBIRSent"]
                                     /\ UNCHANGED FlagOFCWorkerFailover
                          /\ UNCHANGED << switchLock, controllerLock, 
                                          FirstInstallOFC, FirstInstallNIB, 
@@ -6051,7 +6017,7 @@ OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
                                          nextIRToSent, rowIndex, rowRemove, 
                                          stepOfFailure, transaction_c, NIBMsg, 
                                          op1, IRQueue, op_ir_status_change_, 
-                                         msg, op_ir_status_change, 
+                                         removeIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCThreadNotifyNIBIRSent(self) == /\ pc[self] = "OFCThreadNotifyNIBIRSent"
@@ -6128,7 +6094,7 @@ OFCThreadNotifyNIBIRSent(self) == /\ pc[self] = "OFCThreadNotifyNIBIRSent"
                                                   NIBIRSet, nextIRToSent, 
                                                   rowIndex, rowRemove, 
                                                   stepOfFailure, NIBMsg, op1, 
-                                                  IRQueue, msg, 
+                                                  IRQueue, removeIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
                                                   transaction >>
@@ -6223,7 +6189,7 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         transaction_c, NIBMsg, 
                                                         op1, IRQueue, 
                                                         op_ir_status_change_, 
-                                                        msg, 
+                                                        removeIR, msg, 
                                                         op_ir_status_change, 
                                                         op_first_install, 
                                                         transaction >>
@@ -6231,9 +6197,7 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
 OFCRemoveIRFromIRQueueOFC(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC"
                                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                   /\ IF \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent[self]
-                                         THEN /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFCLocal"]
-                                         ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
+                                   /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFCLocal"]
                                    /\ UNCHANGED << switchLock, controllerLock, 
                                                    FirstInstallOFC, 
                                                    FirstInstallNIB, 
@@ -6299,7 +6263,8 @@ OFCRemoveIRFromIRQueueOFC(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC"
                                                    stepOfFailure, 
                                                    transaction_c, NIBMsg, op1, 
                                                    IRQueue, 
-                                                   op_ir_status_change_, msg, 
+                                                   op_ir_status_change_, 
+                                                   removeIR, msg, 
                                                    op_ir_status_change, 
                                                    op_first_install, 
                                                    transaction >>
@@ -6309,9 +6274,16 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                               THEN /\ FlagOFCWorkerFailover' = TRUE
                                                    /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
                                                    /\ UNCHANGED << IRQueueOFC, 
-                                                                   rowRemove >>
-                                              ELSE /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
-                                                   /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
+                                                                   rowRemove, 
+                                                                   removeIR >>
+                                              ELSE /\ IF \E i \in DOMAIN IRQueueOFC: IRQueueOFC[i].IR = nextIRToSent[self]
+                                                         THEN /\ rowRemove' = [rowRemove EXCEPT ![self] = getFirstIndexWith(nextIRToSent[self], self, IRQueueOFC)]
+                                                              /\ IRQueueOFC' = removeFromSeq(IRQueueOFC, rowRemove'[self])
+                                                              /\ removeIR' = [removeIR EXCEPT ![self] = TRUE]
+                                                         ELSE /\ TRUE
+                                                              /\ UNCHANGED << IRQueueOFC, 
+                                                                              rowRemove, 
+                                                                              removeIR >>
                                                    /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFCRemote"]
                                                    /\ UNCHANGED FlagOFCWorkerFailover
                                         /\ UNCHANGED << switchLock, 
@@ -6399,11 +6371,19 @@ OFCRemoveIRFromIRQueueOFCRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOF
                                                     /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
                                                     /\ UNCHANGED << X2NIB, 
                                                                     transaction_c, 
-                                                                    op1 >>
-                                               ELSE /\ isNIBUp(NIBThreadID)
-                                                    /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
-                                                    /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
-                                                    /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
+                                                                    op1, 
+                                                                    removeIR >>
+                                               ELSE /\ IF removeIR[self] = TRUE
+                                                          THEN /\ isNIBUp(NIBThreadID)
+                                                               /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
+                                                               /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
+                                                               /\ X2NIB' = X2NIB \o <<transaction_c'[self]>>
+                                                               /\ removeIR' = [removeIR EXCEPT ![self] = FALSE]
+                                                          ELSE /\ TRUE
+                                                               /\ UNCHANGED << X2NIB, 
+                                                                               transaction_c, 
+                                                                               op1, 
+                                                                               removeIR >>
                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                                     /\ UNCHANGED FlagOFCWorkerFailover
                                          /\ UNCHANGED << switchLock, 
@@ -6542,13 +6522,12 @@ OFCWorkerFailover(self) == /\ pc[self] = "OFCWorkerFailover"
                                            nextIRToSent, rowIndex, rowRemove, 
                                            stepOfFailure, transaction_c, 
                                            NIBMsg, op1, IRQueue, 
-                                           op_ir_status_change_, msg, 
+                                           op_ir_status_change_, removeIR, msg, 
                                            op_ir_status_change, 
                                            op_first_install, transaction >>
 
 controllerWorkerThreads(self) == ControllerThread(self)
                                     \/ OFCThreadGetNextIR(self)
-                                    \/ OFCUpdateIRQueueIRTag(self)
                                     \/ OFCThreadSendIR(self)
                                     \/ OFCThreadNotifyNIBIRSent(self)
                                     \/ ControllerThreadForwardIRInner(self)
@@ -6570,9 +6549,9 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                            /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                            /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                            /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                     "Failure of assertion at line 2070, column 13.")
+                                                     "Failure of assertion at line 2086, column 13.")
                                            /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                     "Failure of assertion at line 2071, column 13.")
+                                                     "Failure of assertion at line 2087, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "OFCMonitorUpdateIRDone"]
                                            /\ UNCHANGED FlagOFCMonitorFailover
                                 /\ UNCHANGED << switchLock, FirstInstallOFC, 
@@ -6632,7 +6611,7 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                                 rowIndex, rowRemove, 
                                                 stepOfFailure, transaction_c, 
                                                 NIBMsg, op1, IRQueue, 
-                                                op_ir_status_change_, 
+                                                op_ir_status_change_, removeIR, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction >>
 
@@ -6640,7 +6619,7 @@ OFCMonitorUpdateIRDone(self) == /\ pc[self] = "OFCMonitorUpdateIRDone"
                                 /\ IF msg[self].type = INSTALLED_SUCCESSFULLY
                                       THEN /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRDone"]
                                       ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 2102, column 13.")
+                                                     "Failure of assertion at line 2118, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                 /\ UNCHANGED << switchLock, controllerLock, 
                                                 FirstInstallOFC, 
@@ -6701,8 +6680,8 @@ OFCMonitorUpdateIRDone(self) == /\ pc[self] = "OFCMonitorUpdateIRDone"
                                                 rowIndex, rowRemove, 
                                                 stepOfFailure, transaction_c, 
                                                 NIBMsg, op1, IRQueue, 
-                                                op_ir_status_change_, msg, 
-                                                op_ir_status_change, 
+                                                op_ir_status_change_, removeIR, 
+                                                msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 OFCUpdateIRDone(self) == /\ pc[self] = "OFCUpdateIRDone"
@@ -6763,7 +6742,7 @@ OFCUpdateIRDone(self) == /\ pc[self] = "OFCUpdateIRDone"
                                          nextIRToSent, rowIndex, rowRemove, 
                                          stepOfFailure, transaction_c, NIBMsg, 
                                          op1, IRQueue, op_ir_status_change_, 
-                                         msg, op_ir_status_change, 
+                                         removeIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
@@ -6830,7 +6809,8 @@ OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
                                             nextIRToSent, rowIndex, rowRemove, 
                                             stepOfFailure, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, msg >>
+                                            op_ir_status_change_, removeIR, 
+                                            msg >>
 
 MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFromQueue"
                                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
@@ -6926,7 +6906,7 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          transaction_c, NIBMsg, 
                                                          op1, IRQueue, 
                                                          op_ir_status_change_, 
-                                                         msg, 
+                                                         removeIR, msg, 
                                                          op_ir_status_change, 
                                                          op_first_install, 
                                                          transaction >>
@@ -6985,8 +6965,8 @@ OFCMonitorFailover(self) == /\ pc[self] = "OFCMonitorFailover"
                                             nextIRToSent, rowIndex, rowRemove, 
                                             stepOfFailure, transaction_c, 
                                             NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, msg, 
-                                            op_ir_status_change, 
+                                            op_ir_status_change_, removeIR, 
+                                            msg, op_ir_status_change, 
                                             op_first_install, transaction >>
 
 controllerMonitoringServer(self) == OFCMonitorCheckIfMastr(self)
@@ -7149,6 +7129,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Sun Apr 11 21:11:21 PDT 2021 by zmy
+\* Last modified Mon Apr 12 11:50:18 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
