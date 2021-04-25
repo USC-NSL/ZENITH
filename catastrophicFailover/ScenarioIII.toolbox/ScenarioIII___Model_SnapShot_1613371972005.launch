@@ -14,14 +14,14 @@
     <intAttribute key="fpBits" value="1"/>
     <intAttribute key="fpIndex" value="0"/>
     <booleanAttribute key="fpIndexRandom" value="false"/>
-    <intAttribute key="maxHeapSize" value="59"/>
+    <intAttribute key="maxHeapSize" value="70"/>
     <intAttribute key="maxSetSize" value="1000000"/>
     <booleanAttribute key="mcMode" value="true"/>
     <stringAttribute key="modelBehaviorInit" value=""/>
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="transaction, RC_READY, egressMsg, FirstInstallNIB, OFCThreadID, nextIRToSent, IRStatus, FlagOFCWorkerFailover, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, NIBIRSet, IR2SW, ofaOutConfirmation, transaction_, SwProcSet, FirstInstallOFC, NIB_READY_FOR_OFC, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, op_ir_status_change_, ContProcSet, op_first_install, controllerStateNIB, Installer2OfaBuff, IRQueue, swSeqChangedStatus, removeIR, controlMsgCounter, switch2Controller, key, TCAM, masterState, sw_fail_ordering_var, IRQueueOFC, msg, stepOfFailure_, Ofa2InstallerBuff, NIB2RC, Ofa2NicAsicBuff, controllerStateOFC, dependencyGraph, failedSet, recoveredElem, NIBThreadID, op_ir_status_change, SwSuspensionStatus, FlagNIBFailover, SwSuspensionStatusOFC, SetScheduledIRsOFC, NIB2OFC, controllerSubmoduleFailNum, OFC_READY, NIBMsg, IRStatusOFC, ingressIR, nextIR, X2NIB_len, NIB_READY_FOR_RC, isBootStrap, pc, notFailedSet, stepOfFailure, op1, op2, workerThreadRanking, transaction_c, NIBMsg_, RCThreadID, NicAsic2OfaBuff, stepOfFailure_c, NIBUpdateForRC, toBeScheduledIRs, FlagRCNIBEventHandlerFailover, isBootStrap_, op1_, controller2Switch, SetScheduledIRs, send_NIB_back, rowIndex, switchLock, controllerStateRC, ingressPkt, FlagOFCMonitorFailover, statusResolveMsg, installerInIR, switchOrdering, NIBMsg_O, X2NIB, statusMsg, IRStatusRC, value, FlagRCSequencerFailover, controllerLock, IR2Remove, IRQueueRC, rowRemove_, localIRSet, IRIndex, SetScheduledIRsRC, SwSuspensionStatusRC, FlagOFCNIBEventHandlerFailover"/>
+    <stringAttribute key="modelBehaviorVars" value="transaction, RC_READY, egressMsg, FirstInstallNIB, IRIndex_, OFCThreadID, nextIRToSent, IRStatus, FlagOFCWorkerFailover, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, NIBIRSet, IR2SW, ofaOutConfirmation, transaction_, SwProcSet, FirstInstallOFC, NIB_READY_FOR_OFC, debug_, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, op_ir_status_change_, ContProcSet, op_first_install, controllerStateNIB, Installer2OfaBuff, IRQueue, swSeqChangedStatus, removeIR, controlMsgCounter, switch2Controller, key, TCAM, masterState, sw_fail_ordering_var, IRQueueOFC, msg, stepOfFailure_, Ofa2InstallerBuff, NIB2RC, Ofa2NicAsicBuff, controllerStateOFC, dependencyGraph, failedSet, recoveredElem, NIBThreadID, OFC2NIB, FlagNIBRCEventhandlerFailover, op_ir_status_change, SwSuspensionStatus, FlagNIBFailover, debug, SwSuspensionStatusOFC, SetScheduledIRsOFC, NIB2OFC, controllerSubmoduleFailNum, OFC_READY, rowRemove_N, NIBMsg, IRStatusOFC, ingressIR, nextIR, X2NIB_len, NIB_READY_FOR_RC, isBootStrap, pc, notFailedSet, stepOfFailure, op1, op2, workerThreadRanking, transaction_c, stepOfFailure_N, NIBMsg_, RCThreadID, NicAsic2OfaBuff, stepOfFailure_c, NIBUpdateForRC, toBeScheduledIRs, FlagRCNIBEventHandlerFailover, isBootStrap_, op1_, value_, RC2NIB, IR2Remove_, controller2Switch, SetScheduledIRs, send_NIB_back, rowIndex, switchLock, controllerStateRC, ingressPkt, value_N, FlagOFCMonitorFailover, statusResolveMsg, installerInIR, switchOrdering, NIBMsg_O, X2NIB, FlagNIBOFCEventhandlerFailover, statusMsg, IRStatusRC, value, nextTrans_, FlagRCSequencerFailover, controllerLock, send_NIB_back_, IR2Remove, IRQueueRC, rowRemove_, localIRSet, IRIndex, SetScheduledIRsRC, SwSuspensionStatusRC, FlagOFCNIBEventHandlerFailover"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -65,7 +65,7 @@
         <listEntry value="RECONCILIATION_REQUEST;;RECONCILIATION_REQUEST;1;0"/>
         <listEntry value="OFA_IN;;OFA_IN;1;0"/>
         <listEntry value="IR_PENDING;;IR_PENDING;1;0"/>
-        <listEntry value="MaxNumIRs;;1;0;0"/>
+        <listEntry value="MaxNumIRs;;2;0;0"/>
         <listEntry value="INSTALLER_UP;;INSTALLER_UP;1;0"/>
         <listEntry value="WATCH_DOG;;WATCH_DOG;1;0"/>
         <listEntry value="INSTALLER_DOWN;;INSTALLER_DOWN;1;0"/>
@@ -105,13 +105,17 @@
         <listEntry value="RC_FAILOVER;;RC_FAILOVER;1;0"/>
         <listEntry value="RC_OFC_NIB_FAILURE;;RC_OFC_NIB_FAILURE;1;0"/>
         <listEntry value="OFC_FAILOVER;;OFC_FAILOVER;1;0"/>
+        <listEntry value="CONT_NIB_FAILOVER;;CONT_NIB_FAILOVER;1;0"/>
+        <listEntry value="OFC_FAILURE;;OFC_FAILURE;1;0"/>
+        <listEntry value="RC_FAILURE;;RC_FAILURE;1;0"/>
+        <listEntry value="NIB_FAILURE;;NIB_FAILURE;1;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
     <listAttribute key="modelParameterDefinitions"/>
     <stringAttribute key="modelParameterModelValues" value="{}"/>
     <stringAttribute key="modelParameterNewDefinitions" value=""/>
     <intAttribute key="modelVersion" value="20191005"/>
-    <intAttribute key="numberOfWorkers" value="2"/>
+    <intAttribute key="numberOfWorkers" value="24"/>
     <booleanAttribute key="recover" value="false"/>
     <stringAttribute key="result.mail.address" value=""/>
     <intAttribute key="simuAril" value="-1"/>
