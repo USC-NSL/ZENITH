@@ -20,7 +20,7 @@ In this bug, IR1 was added to SetScheduledIRs during DAG1 and was never removed 
 SetScheduledIRs only when the flag of IR is either IR_SENT or IR_DONE). During DAG2, RC worker sequencer thinks IR 
 has already been scheduled since it is in SetScheduledIRs and waits for its installation. 
 
-Solution: RC should remove the IRs from SetScheduledIRs upon failure of a switch. 
+Solution: RC should remove the IRs from SetScheduledIRs upon failure and recovery of a switch. 
 ======================================================================================================================
 ======================================================================================================================
 Bug#2: RC TE schedules DAG1({<<IR1 = INSTALL FLOW1, IR2 = INSTALL FLOW2>>}) → sw0 fails → RC Boss Sequencer receives 
