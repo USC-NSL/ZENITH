@@ -1740,7 +1740,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
         controllerWaitForLockFree();
         await controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] = NotFailed /\
                     controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed;
-\*        isBootStrap := TRUE;
+        isBootStrap := FALSE;
         goto RCNIBEventHanderProc;
     end process
  
@@ -5977,6 +5977,7 @@ RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                    /\ controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] = NotFailed /\
                                             controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed
+                                   /\ isBootStrap_' = [isBootStrap_ EXCEPT ![self] = FALSE]
                                    /\ pc' = [pc EXCEPT ![self] = "RCNIBEventHanderProc"]
                                    /\ UNCHANGED << switchLock, controllerLock, 
                                                    FirstInstallOFC, 
@@ -6044,7 +6045,6 @@ RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
                                                    send_NIB_back, 
                                                    stepOfFailure_N, IRIndex, 
                                                    debug, NIBMsg_, 
-                                                   isBootStrap_, 
                                                    toBeScheduledIRs, key, op1_, 
                                                    op2, transaction_, nextIR, 
                                                    stepOfFailure_c, NIBMsg_O, 
@@ -8661,6 +8661,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Sat Apr 24 02:27:24 PDT 2021 by zmy
+\* Last modified Sun Apr 25 19:59:44 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
