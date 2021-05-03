@@ -1963,9 +1963,8 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 \* If NIB is up, OFC can read it directly; 
                 \* otherwise, OFC waits until it comes up
                 await NIB_READY_FOR_OFC \/ isNIBUp(NIBThreadID);
-                \* bug-04-26-2021
-                IRQueueOFC := SelectSeq(IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
-\*                IRQueueOFC := SelectSeq(IRQueueRC, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
+                \* bug-04-26-2021: IRQueueOFC := SelectSeq(IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
+                IRQueueOFC := SelectSeq(IRQueueRC, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
               
                 
                 
@@ -8634,6 +8633,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Sun May 02 21:41:05 PDT 2021 by zmy
+\* Last modified Sun May 02 21:42:16 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
