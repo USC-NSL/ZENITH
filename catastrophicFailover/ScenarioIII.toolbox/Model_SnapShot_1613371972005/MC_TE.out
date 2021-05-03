@@ -2,13 +2,13 @@
 TLC2 Version 2.16 of 31 December 2020 (rev: cdddf55)
 @!@!@ENDMSG 2262 @!@!@
 @!@!@STARTMSG 2187:0 @!@!@
-Running breadth-first search Model-Checking with fp 0 and seed -8630520258833474984 with 24 workers on 4 cores with 1700MB heap and 3822MB offheap memory [pid: 49092] (Mac OS X 10.14.4 x86_64, AdoptOpenJDK 14.0.1 x86_64, OffHeapDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 0 and seed 6848702779827672513 with 24 workers on 4 cores with 2089MB heap and 4696MB offheap memory [pid: 83950] (Mac OS X 10.14.4 x86_64, AdoptOpenJDK 14.0.1 x86_64, OffHeapDiskFPSet, DiskStateQueue).
 @!@!@ENDMSG 2187 @!@!@
 @!@!@STARTMSG 2220:0 @!@!@
 Starting SANY...
 @!@!@ENDMSG 2220 @!@!@
-Parsing file /Users/zmy/Documents/codes/RoutingConsistency/test/catastrophicFailover/ScenarioIII.toolbox/Model_SnapShot_1613371972005/MC.tla
-Parsing file /Users/zmy/Documents/codes/RoutingConsistency/test/catastrophicFailover/ScenarioIII.toolbox/Model_SnapShot_1613371972005/ScenarioIII.tla
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/catastrophicFailover/ScenarioIII.toolbox/Model_SnapShot_1613371972005/MC.tla
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/catastrophicFailover/ScenarioIII.toolbox/Model_SnapShot_1613371972005/ScenarioIII.tla
 Warning: symbols were renamed.
 Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/TLC.tla
 Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/Integers.tla
@@ -26,7 +26,7 @@ Semantic processing of module MC
 SANY finished.
 @!@!@ENDMSG 2219 @!@!@
 @!@!@STARTMSG 2185:0 @!@!@
-Starting... (2021-04-24 02:27:33)
+Starting... (2021-05-02 15:55:16)
 @!@!@ENDMSG 2185 @!@!@
 @!@!@STARTMSG 2212:0 @!@!@
 Implied-temporal checking--satisfiability problem has 1 branches.
@@ -35,86 +35,45 @@ Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
 @!@!@ENDMSG 2189 @!@!@
 @!@!@STARTMSG 2190:0 @!@!@
-Finished computing initial states: 1 distinct state generated at 2021-04-24 02:27:39.
+Finished computing initial states: 1 distinct state generated at 2021-05-02 15:55:48.
 @!@!@ENDMSG 2190 @!@!@
 @!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 134 total distinct states at (2021-04-24 02:27:42)
+Checking temporal properties for the current state space with 202 total distinct states at (2021-05-02 15:55:51)
 @!@!@ENDMSG 2192 @!@!@
 @!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 00s at 2021-04-24 02:27:42
+Finished checking temporal properties in 00s at 2021-05-02 15:55:51
 @!@!@ENDMSG 2267 @!@!@
 @!@!@STARTMSG 2200:0 @!@!@
-Progress(7) at 2021-04-24 02:27:42: 590 states generated (590 s/min), 252 distinct states found (252 ds/min), 118 states left on queue.
+Progress(9) at 2021-05-02 15:55:51: 816 states generated (816 s/min), 277 distinct states found (277 ds/min), 74 states left on queue.
 @!@!@ENDMSG 2200 @!@!@
 @!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 24233 total distinct states at (2021-04-24 02:28:42)
+Checking temporal properties for the current state space with 10567 total distinct states at (2021-05-02 15:56:52)
 @!@!@ENDMSG 2192 @!@!@
 @!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 00s at 2021-04-24 02:28:43
+Finished checking temporal properties in 00s at 2021-05-02 15:56:52
 @!@!@ENDMSG 2267 @!@!@
 @!@!@STARTMSG 2200:0 @!@!@
-Progress(26) at 2021-04-24 02:28:43: 97,098 states generated (96,508 s/min), 28,477 distinct states found (28,225 ds/min), 4,242 states left on queue.
+Progress(32) at 2021-05-02 15:56:52: 45,825 states generated (45,009 s/min), 12,776 distinct states found (12,499 ds/min), 2,206 states left on queue.
 @!@!@ENDMSG 2200 @!@!@
 @!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 57898 total distinct states at (2021-04-24 02:29:43)
+Checking temporal properties for the current state space with 41240 total distinct states at (2021-05-02 15:57:52)
 @!@!@ENDMSG 2192 @!@!@
 @!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 01s at 2021-04-24 02:29:44
+Finished checking temporal properties in 00s at 2021-05-02 15:57:53
 @!@!@ENDMSG 2267 @!@!@
 @!@!@STARTMSG 2200:0 @!@!@
-Progress(31) at 2021-04-24 02:29:44: 240,606 states generated (143,508 s/min), 68,188 distinct states found (39,711 ds/min), 10,289 states left on queue.
+Progress(40) at 2021-05-02 15:57:53: 184,854 states generated (139,029 s/min), 48,265 distinct states found (35,489 ds/min), 7,023 states left on queue.
 @!@!@ENDMSG 2200 @!@!@
 @!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 89762 total distinct states at (2021-04-24 02:30:44)
+Checking temporal properties for the current state space with 71608 total distinct states at (2021-05-02 15:58:53)
 @!@!@ENDMSG 2192 @!@!@
 @!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 02s at 2021-04-24 02:30:47
+Finished checking temporal properties in 01s at 2021-05-02 15:58:55
 @!@!@ENDMSG 2267 @!@!@
 @!@!@STARTMSG 2200:0 @!@!@
-Progress(34) at 2021-04-24 02:30:47: 385,789 states generated (145,183 s/min), 108,219 distinct states found (40,031 ds/min), 18,455 states left on queue.
+Progress(44) at 2021-05-02 15:58:55: 325,354 states generated (140,500 s/min), 81,186 distinct states found (32,921 ds/min), 9,575 states left on queue.
 @!@!@ENDMSG 2200 @!@!@
-@!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 121630 total distinct states at (2021-04-24 02:31:47)
-@!@!@ENDMSG 2192 @!@!@
-@!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 03s at 2021-04-24 02:31:50
-@!@!@ENDMSG 2267 @!@!@
-@!@!@STARTMSG 2200:0 @!@!@
-Progress(36) at 2021-04-24 02:31:50: 536,104 states generated (150,315 s/min), 148,888 distinct states found (40,669 ds/min), 27,256 states left on queue.
-@!@!@ENDMSG 2200 @!@!@
-@!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 150679 total distinct states at (2021-04-24 02:32:50)
-@!@!@ENDMSG 2192 @!@!@
-@!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 03s at 2021-04-24 02:32:53
-@!@!@ENDMSG 2267 @!@!@
-@!@!@STARTMSG 2200:0 @!@!@
-Progress(37) at 2021-04-24 02:32:53: 677,034 states generated (140,930 s/min), 186,315 distinct states found (37,427 ds/min), 35,633 states left on queue.
-@!@!@ENDMSG 2200 @!@!@
-@!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 181311 total distinct states at (2021-04-24 02:33:53)
-@!@!@ENDMSG 2192 @!@!@
-@!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 04s at 2021-04-24 02:33:58
-@!@!@ENDMSG 2267 @!@!@
-@!@!@STARTMSG 2200:0 @!@!@
-Progress(37) at 2021-04-24 02:33:58: 826,908 states generated (149,874 s/min), 225,231 distinct states found (38,916 ds/min), 43,919 states left on queue.
-@!@!@ENDMSG 2200 @!@!@
-@!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 208233 total distinct states at (2021-04-24 02:34:58)
-@!@!@ENDMSG 2192 @!@!@
-@!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 05s at 2021-04-24 02:35:03
-@!@!@ENDMSG 2267 @!@!@
-@!@!@STARTMSG 2200:0 @!@!@
-Progress(38) at 2021-04-24 02:35:03: 961,839 states generated (134,931 s/min), 259,364 distinct states found (34,133 ds/min), 51,129 states left on queue.
-@!@!@ENDMSG 2200 @!@!@
-@!@!@STARTMSG 2192:0 @!@!@
-Checking temporal properties for the current state space with 234419 total distinct states at (2021-04-24 02:36:03)
-@!@!@ENDMSG 2192 @!@!@
-@!@!@STARTMSG 2267:0 @!@!@
-Finished checking temporal properties in 06s at 2021-04-24 02:36:09
-@!@!@ENDMSG 2267 @!@!@
-@!@!@STARTMSG 2200:0 @!@!@
-Progress(39) at 2021-04-24 02:36:09: 1,091,541 states generated (129,702 s/min), 292,751 distinct states found (33,387 ds/min), 58,329 states left on queue.
-@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2127:1 @!@!@
+when writing the disk (StatePoolWriter.run):
+/Users/zmy/Documents/codes/RoutingConsistency/catastrophicFailover/ScenarioIII.toolbox/Model_SnapShot_1613371972005/21-05-02-15-55-08/4 (No such file or directory)
+@!@!@ENDMSG 2127 @!@!@
