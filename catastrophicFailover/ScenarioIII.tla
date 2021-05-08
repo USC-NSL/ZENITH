@@ -1004,7 +1004,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     macro scheduleIRTransaction()
     begin
         assert nextTrans.ops[1].table = NIBT_IR_QUEUE;
-        IRQueueNIB := Append(IRQueueNIB, nextTrans.ops[1].value);
+        if ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans.ops[1].value.IR then
+            IRQueueNIB := Append(IRQueueNIB, nextTrans.ops[1].value);
+        end if;
         assert nextTrans.ops[2].table = NIBT_CONTROLLER_STATE;
         assert Len(nextTrans.ops[2].key) = 2;
         controllerStateNIB[nextTrans.ops[2].key] := nextTrans.ops[2].value;
@@ -1013,7 +1015,9 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     macro ScheduleIRInOneStepTransaction()
     begin
         assert nextTrans.ops[1].table = NIBT_IR_QUEUE;
-        IRQueueNIB := Append(IRQueueNIB, nextTrans.ops[1].value);
+        if ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans.ops[1].value.IR then
+            IRQueueNIB := Append(IRQueueNIB, nextTrans.ops[1].value);
+        end if;
     end macro;
     
     
@@ -1616,7 +1620,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             goto NIBForOFCReconciliation;
         end if; 
         
-        NIBProcessTransaction:   
+        NIBOFCProcessTransaction:   
         if moduleIsUp(self) then
             NIBProcessTransaction();
             debug := 0;
@@ -1625,7 +1629,7 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
             goto NIBForOFCReconciliation;
         end if; 
             
-        NIBSendBackIfAny:   
+        NIBOFCSendBackIfAny:   
         if moduleIsUp(self) then
             if send_NIB_back = "NIB2RC" then
                 await isRCUp(RCThreadID) \/ isRCFailed(RCThreadID);
@@ -1910,13 +1914,13 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     \* ==========================
     
     \* ======== RC failure =====
-    fair process RCFailureProc \in ( {"proc"} \X {RC_FAILURE})
-    begin 
-        RCFailure:
-            controllerWaitForLockFree();
-             controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] := Failed ||
-            controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] := Failed;      
-    end process    
+\*    fair process RCFailureProc \in ( {"proc"} \X {RC_FAILURE})
+\*    begin 
+\*        RCFailure:
+\*            controllerWaitForLockFree();
+\*             controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] := Failed ||
+\*            controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] := Failed;      
+\*    end process    
     \* ==========================
     
     \* ======== OFC failover =====
@@ -1960,8 +1964,8 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
                 OFC_READY := TRUE;
 
             OFCReadNIB:
-                \* If NIB is up, OFC can read it directly; 
-                \* otherwise, OFC waits until it comes up
+                \* If NIB is up, OFC can read it directly.
+                \* If NIB is in reconciliation, NIB_READY_FOR_OFC could be false, therefore OFC should wait.
                 await NIB_READY_FOR_OFC \/ isNIBUp(NIBThreadID);
                 \* bug-04-26-2021: IRQueueOFC := SelectSeq(IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
                 IRQueueOFC := SelectSeq(IRQueueRC, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE);
@@ -2396,26 +2400,26 @@ ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
     end algorithm
 *)
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-9127619cdc4f88afed7c37e8130af8cd (chksum(pcal) = "cb8e9368" /\ chksum(tla) = "9d4abbb1") (chksum(pcal) = "693f78c9" /\ chksum(tla) = "df5ffee9") (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) = "1bcf2871" /\ chksum(tla) = "c11ffdac")
-\* Process variable value of process NIBFailoverProc at line 1508 col 15 changed to value_
-\* Process variable nextTrans of process NIBRCEventHandler at line 1550 col 15 changed to nextTrans_
-\* Process variable value of process NIBRCEventHandler at line 1550 col 42 changed to value_N
-\* Process variable rowRemove of process NIBRCEventHandler at line 1550 col 56 changed to rowRemove_
-\* Process variable IR2Remove of process NIBRCEventHandler at line 1551 col 15 changed to IR2Remove_
-\* Process variable send_NIB_back of process NIBRCEventHandler at line 1551 col 30 changed to send_NIB_back_
-\* Process variable stepOfFailure of process NIBRCEventHandler at line 1551 col 50 changed to stepOfFailure_
-\* Process variable IRIndex of process NIBRCEventHandler at line 1552 col 15 changed to IRIndex_
-\* Process variable debug of process NIBRCEventHandler at line 1552 col 29 changed to debug_
-\* Process variable rowRemove of process NIBOFCEventHandler at line 1602 col 56 changed to rowRemove_N
-\* Process variable stepOfFailure of process NIBOFCEventHandler at line 1603 col 50 changed to stepOfFailure_N
-\* Process variable NIBMsg of process RCNIBEventHandler at line 1700 col 15 changed to NIBMsg_
-\* Process variable isBootStrap of process RCNIBEventHandler at line 1700 col 50 changed to isBootStrap_
-\* Process variable op1 of process controllerSequencer at line 1760 col 48 changed to op1_
-\* Process variable transaction of process controllerSequencer at line 1762 col 17 changed to transaction_
-\* Process variable stepOfFailure of process controllerSequencer at line 1763 col 29 changed to stepOfFailure_c
-\* Process variable transaction of process OFCFailoverProc at line 1925 col 15 changed to transaction_O
-\* Process variable NIBMsg of process OFCNIBEventHandler at line 1987 col 15 changed to NIBMsg_O
-\* Process variable transaction of process controllerWorkerThreads at line 2019 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 2021 col 15 changed to op_ir_status_change_
+\* Process variable value of process NIBFailoverProc at line 1512 col 15 changed to value_
+\* Process variable nextTrans of process NIBRCEventHandler at line 1554 col 15 changed to nextTrans_
+\* Process variable value of process NIBRCEventHandler at line 1554 col 42 changed to value_N
+\* Process variable rowRemove of process NIBRCEventHandler at line 1554 col 56 changed to rowRemove_
+\* Process variable IR2Remove of process NIBRCEventHandler at line 1555 col 15 changed to IR2Remove_
+\* Process variable send_NIB_back of process NIBRCEventHandler at line 1555 col 30 changed to send_NIB_back_
+\* Process variable stepOfFailure of process NIBRCEventHandler at line 1555 col 50 changed to stepOfFailure_
+\* Process variable IRIndex of process NIBRCEventHandler at line 1556 col 15 changed to IRIndex_
+\* Process variable debug of process NIBRCEventHandler at line 1556 col 29 changed to debug_
+\* Process variable rowRemove of process NIBOFCEventHandler at line 1606 col 56 changed to rowRemove_N
+\* Process variable stepOfFailure of process NIBOFCEventHandler at line 1607 col 50 changed to stepOfFailure_N
+\* Process variable NIBMsg of process RCNIBEventHandler at line 1704 col 15 changed to NIBMsg_
+\* Process variable isBootStrap of process RCNIBEventHandler at line 1704 col 50 changed to isBootStrap_
+\* Process variable op1 of process controllerSequencer at line 1764 col 48 changed to op1_
+\* Process variable transaction of process controllerSequencer at line 1766 col 17 changed to transaction_
+\* Process variable stepOfFailure of process controllerSequencer at line 1767 col 29 changed to stepOfFailure_c
+\* Process variable transaction of process OFCFailoverProc at line 1929 col 15 changed to transaction_O
+\* Process variable NIBMsg of process OFCNIBEventHandler at line 1991 col 15 changed to NIBMsg_O
+\* Process variable transaction of process controllerWorkerThreads at line 2023 col 15 changed to transaction_c
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 2025 col 15 changed to op_ir_status_change_
 VARIABLES switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB, 
           sw_fail_ordering_var, ContProcSet, SwProcSet, swSeqChangedStatus, 
           controller2Switch, switch2Controller, switchStatus, installedIRs, 
@@ -2697,7 +2701,7 @@ vars == << switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB,
            IRQueue, op_ir_status_change_, removeIR, msg, op_ir_status_change, 
            op_first_install, transaction >>
 
-ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({"proc"} \X {CONT_NIB_FAILOVER})) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({nib0} \X {CONT_NIB_OFC_EVENT})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (( {"proc"} \X {OFC_FAILURE})) \cup (( {"proc"} \X {NIB_FAILURE})) \cup (( {"proc"} \X {RC_FAILURE})) \cup (({"proc"} \X {OFC_FAILOVER})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_MONITOR}))
+ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({"proc"} \X {CONT_NIB_FAILOVER})) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({nib0} \X {CONT_NIB_OFC_EVENT})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_SEQ})) \cup (( {"proc"} \X {OFC_FAILURE})) \cup (( {"proc"} \X {NIB_FAILURE})) \cup (({"proc"} \X {OFC_FAILOVER})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_MONITOR}))
 
 Init == (* Global variables *)
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
@@ -2864,7 +2868,6 @@ Init == (* Global variables *)
                                         [] self \in ({rc0} \X {CONT_SEQ}) -> "RCSendReadTransaction"
                                         [] self \in ( {"proc"} \X {OFC_FAILURE}) -> "OFCFailure"
                                         [] self \in ( {"proc"} \X {NIB_FAILURE}) -> "NIBFailure"
-                                        [] self \in ( {"proc"} \X {RC_FAILURE}) -> "RCFailure"
                                         [] self \in ({"proc"} \X {OFC_FAILOVER}) -> "OFCFailoverResetStates"
                                         [] self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) -> "OFCNIBEventHanderProc"
                                         [] self \in ({ofc0} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
@@ -2878,7 +2881,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                              /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                              /\ Assert(ingressPkt'[self].type = INSTALL_FLOW, 
-                                       "Failure of assertion at line 1120, column 9.")
+                                       "Failure of assertion at line 1124, column 9.")
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                              /\ installedIRs' = Append(installedIRs, ingressPkt'[self].IR)
                              /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], ingressPkt'[self].IR)]
@@ -2887,7 +2890,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                                                                 IR |-> ingressPkt'[self].IR])
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 841, column 9 of macro called at line 1127, column 9.")
+                                       "Failure of assertion at line 841, column 9 of macro called at line 1131, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -2961,7 +2964,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
                                    \/ ingressIR'[self].type = INSTALL_FLOW, 
-                                   "Failure of assertion at line 1152, column 9.")
+                                   "Failure of assertion at line 1156, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -3133,7 +3136,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
-                                       "Failure of assertion at line 1180, column 9.")
+                                       "Failure of assertion at line 1184, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3205,7 +3208,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 841, column 9 of macro called at line 1189, column 17.")
+                                                      "Failure of assertion at line 841, column 9 of macro called at line 1193, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -3301,9 +3304,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1217, column 9.")
+                                   "Failure of assertion at line 1221, column 9.")
                          /\ Assert(ofaInMsg'[self].IR  \in 1..MaxNumIRs, 
-                                   "Failure of assertion at line 1218, column 9.")
+                                   "Failure of assertion at line 1222, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3370,7 +3373,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                            /\ IF ofaInMsg[self].type = INSTALL_FLOW
                                                  THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInMsg[self].IR)]
                                                  ELSE /\ Assert(FALSE, 
-                                                                "Failure of assertion at line 1231, column 21.")
+                                                                "Failure of assertion at line 1235, column 21.")
                                                       /\ UNCHANGED Ofa2InstallerBuff
                                            /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
                                            /\ UNCHANGED ofaInMsg
@@ -3462,7 +3465,7 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self] \in 1..MaxNumIRs, 
-                                    "Failure of assertion at line 1252, column 9.")
+                                    "Failure of assertion at line 1256, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstallOFC, 
                                           FirstInstallNIB, 
@@ -3631,7 +3634,7 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self] \in 1..MaxNumIRs, 
-                                       "Failure of assertion at line 1284, column 8.")
+                                       "Failure of assertion at line 1288, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3917,7 +3920,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ sw_fail_ordering_var # <<>>
                        /\ self[2] \in Head(sw_fail_ordering_var)
                        /\ Assert((self[2]) \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 595, column 9 of macro called at line 1336, column 9.")
+                                 "Failure of assertion at line 595, column 9 of macro called at line 1340, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{(self[2])})>> \o Tail(sw_fail_ordering_var)
@@ -3926,7 +3929,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ IF failedElem'[self] = "cpu"
                              THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                   /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                            "Failure of assertion at line 668, column 9 of macro called at line 1345, column 17.")
+                                            "Failure of assertion at line 668, column 9 of macro called at line 1349, column 17.")
                                   /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                           ![self[2]].ofa = Failed,
                                                                           ![self[2]].installer = Failed]
@@ -3948,7 +3951,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                              ELSE /\ IF failedElem'[self] = "ofa"
                                         THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                              /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                       "Failure of assertion at line 720, column 9 of macro called at line 1348, column 17.")
+                                                       "Failure of assertion at line 720, column 9 of macro called at line 1352, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                              /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                    THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3964,11 +3967,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                         ELSE /\ IF failedElem'[self] = "installer"
                                                    THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                         /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                  "Failure of assertion at line 764, column 9 of macro called at line 1351, column 17.")
+                                                                  "Failure of assertion at line 764, column 9 of macro called at line 1355, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                               THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                             "Failure of assertion at line 767, column 13 of macro called at line 1351, column 17.")
+                                                                             "Failure of assertion at line 767, column 13 of macro called at line 1355, column 17.")
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                    /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                 swID |-> self[2],
@@ -3983,7 +3986,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                    ELSE /\ IF failedElem'[self] = "nicAsic"
                                                               THEN /\ pc[<<SW_RESOLVE_PROC, self[2]>>] = "SwitchResolveFailure"
                                                                    /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                             "Failure of assertion at line 614, column 9 of macro called at line 1354, column 17.")
+                                                                             "Failure of assertion at line 614, column 9 of macro called at line 1358, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                    /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -3992,7 +3995,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                 num |-> controlMsgCounter'[self[2]]]]
                                                                    /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                               ELSE /\ Assert(FALSE, 
-                                                                             "Failure of assertion at line 1355, column 14.")
+                                                                             "Failure of assertion at line 1359, column 14.")
                                                                    /\ UNCHANGED << swSeqChangedStatus, 
                                                                                    controller2Switch, 
                                                                                    switchStatus, 
@@ -4065,7 +4068,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ IF recoveredElem'[self] = "cpu"
                                     THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                          /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 695, column 9 of macro called at line 1380, column 39.")
+                                                   "Failure of assertion at line 695, column 9 of macro called at line 1384, column 39.")
                                          /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                  ![self[2]].ofa = NotFailed,
                                                                                  ![self[2]].installer = NotFailed]
@@ -4088,7 +4091,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                     ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                THEN /\ nicAsicStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                              "Failure of assertion at line 640, column 9 of macro called at line 1381, column 46.")
+                                                              "Failure of assertion at line 640, column 9 of macro called at line 1385, column 46.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                     /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                     /\ IF switchStatus'[self[2]].ofa = Failed
@@ -4105,7 +4108,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "ofa"
                                                           THEN /\ ofaStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                         "Failure of assertion at line 742, column 9 of macro called at line 1382, column 42.")
+                                                                         "Failure of assertion at line 742, column 9 of macro called at line 1386, column 42.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                      THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -4121,11 +4124,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "installer"
                                                                      THEN /\ installerInStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                    "Failure of assertion at line 786, column 9 of macro called at line 1383, column 48.")
+                                                                                    "Failure of assertion at line 786, column 9 of macro called at line 1387, column 48.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                 THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                               "Failure of assertion at line 789, column 13 of macro called at line 1383, column 48.")
+                                                                                               "Failure of assertion at line 789, column 13 of macro called at line 1387, column 48.")
                                                                                      /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                      /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                 swID |-> self[2],
@@ -4137,7 +4140,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                      controlMsgCounter, 
                                                                                                      statusResolveMsg >>
                                                                      ELSE /\ Assert(FALSE, 
-                                                                                    "Failure of assertion at line 1384, column 14.")
+                                                                                    "Failure of assertion at line 1388, column 14.")
                                                                           /\ UNCHANGED << swSeqChangedStatus, 
                                                                                           switchStatus, 
                                                                                           controlMsgCounter, 
@@ -4228,7 +4231,7 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 841, column 9 of macro called at line 1418, column 9.")
+                             "Failure of assertion at line 841, column 9 of macro called at line 1422, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -4749,12 +4752,12 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                  /\ IF moduleIsUp(self)
                                        THEN /\ IF (nextTrans_[self].name = "PrepareIR")
                                                   THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                 "Failure of assertion at line 997, column 9 of macro called at line 1569, column 13.")
+                                                                 "Failure of assertion at line 997, column 9 of macro called at line 1573, column 13.")
                                                        /\ Assert(Len(nextTrans_[self].ops[1].key) = 2, 
-                                                                 "Failure of assertion at line 998, column 9 of macro called at line 1569, column 13.")
+                                                                 "Failure of assertion at line 998, column 9 of macro called at line 1573, column 13.")
                                                        /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                        /\ Assert(nextTrans_[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                 "Failure of assertion at line 1000, column 9 of macro called at line 1569, column 13.")
+                                                                 "Failure of assertion at line 1000, column 9 of macro called at line 1573, column 13.")
                                                        /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                        /\ UNCHANGED << FirstInstallNIB, 
                                                                        IRStatus, 
@@ -4766,12 +4769,15 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                        IRIndex_ >>
                                                   ELSE /\ IF (nextTrans_[self].name = "ScheduleIR")
                                                              THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                            "Failure of assertion at line 1006, column 9 of macro called at line 1569, column 13.")
-                                                                  /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
+                                                                            "Failure of assertion at line 1006, column 9 of macro called at line 1573, column 13.")
+                                                                  /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].value.IR
+                                                                        THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
+                                                                        ELSE /\ TRUE
+                                                                             /\ UNCHANGED IRQueueNIB
                                                                   /\ Assert(nextTrans_[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                                            "Failure of assertion at line 1008, column 9 of macro called at line 1569, column 13.")
+                                                                            "Failure of assertion at line 1010, column 9 of macro called at line 1573, column 13.")
                                                                   /\ Assert(Len(nextTrans_[self].ops[2].key) = 2, 
-                                                                            "Failure of assertion at line 1009, column 9 of macro called at line 1569, column 13.")
+                                                                            "Failure of assertion at line 1011, column 9 of macro called at line 1573, column 13.")
                                                                   /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                                   /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                                                                  IRQueueNIB |->IRQueueNIB',
@@ -4786,8 +4792,11 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                   IRIndex_ >>
                                                              ELSE /\ IF (nextTrans_[self].name = "RCScheduleIRInOneStep")
                                                                         THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                       "Failure of assertion at line 1015, column 9 of macro called at line 1569, column 13.")
-                                                                             /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
+                                                                                       "Failure of assertion at line 1017, column 9 of macro called at line 1573, column 13.")
+                                                                             /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].value.IR
+                                                                                   THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
+                                                                                   ELSE /\ TRUE
+                                                                                        /\ UNCHANGED IRQueueNIB
                                                                              /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
                                                                                                                             IRQueueNIB |->IRQueueNIB',
                                                                                                                             SetScheduledIRsNIB |-> SetScheduledIRs,
@@ -4844,9 +4853,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                               IRIndex_ >>
                                                                                                          ELSE /\ IF (nextTrans_[self].name = "UpdateControllerState")
                                                                                                                     THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                                                                                   "Failure of assertion at line 1049, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                   "Failure of assertion at line 1053, column 17 of macro called at line 1573, column 13.")
                                                                                                                          /\ Assert(Len(nextTrans_[self].ops[1].key) = 2, 
-                                                                                                                                   "Failure of assertion at line 1050, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                   "Failure of assertion at line 1054, column 17 of macro called at line 1573, column 13.")
                                                                                                                          /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                          /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                          IRStatus, 
@@ -4859,7 +4868,7 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                          IRIndex_ >>
                                                                                                                     ELSE /\ IF (nextTrans_[self].name = "RemoveIR")
                                                                                                                                THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                              "Failure of assertion at line 1053, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                              "Failure of assertion at line 1057, column 17 of macro called at line 1573, column 13.")
                                                                                                                                     /\ IR2Remove_' = [IR2Remove_ EXCEPT ![self] = nextTrans_[self].ops[1].key]
                                                                                                                                     /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove_'[self]
                                                                                                                                           THEN /\ rowRemove_' = [rowRemove_ EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove_'[self], IRQueueNIB)]
@@ -4875,9 +4884,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                     IRIndex_ >>
                                                                                                                                ELSE /\ IF (nextTrans_[self].name = "OFCChangeIRStatus2Sent")
                                                                                                                                           THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                         "Failure of assertion at line 1061, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                         "Failure of assertion at line 1065, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                         "Failure of assertion at line 1062, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                         "Failure of assertion at line 1066, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                /\ IRStatus' = [IRStatus EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
                                                                                                                                                                                               IRQueueNIB |->IRQueueNIB,
@@ -4890,9 +4899,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                IRIndex_ >>
                                                                                                                                           ELSE /\ IF (nextTrans_[self].name = "ChangeSetScheduledIRs")
                                                                                                                                                      THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                                                                                                                    "Failure of assertion at line 1067, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                    "Failure of assertion at line 1071, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                           /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                    "Failure of assertion at line 1068, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                    "Failure of assertion at line 1072, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                           /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                           /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                           IRStatus, 
@@ -4902,14 +4911,14 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                           IRIndex_ >>
                                                                                                                                                      ELSE /\ IF (nextTrans_[self].name = "UpdateIRTag")
                                                                                                                                                                 THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                                                               "Failure of assertion at line 1071, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1075, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                      /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                               "Failure of assertion at line 1072, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1076, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                      /\ Assert(Len(IRQueueNIB) > 0, 
-                                                                                                                                                                               "Failure of assertion at line 1073, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1077, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                      /\ IRIndex_' = [IRIndex_ EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].key]
                                                                                                                                                                      /\ Assert(IRIndex_'[self] # -1, 
-                                                                                                                                                                               "Failure of assertion at line 1075, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1079, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                      /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex_'[self]].tag = nextTrans_[self].ops[1].value]
                                                                                                                                                                      /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                                      IRStatus, 
@@ -4917,12 +4926,12 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                                      send_NIB_back_ >>
                                                                                                                                                                 ELSE /\ IF (nextTrans_[self].name = "FirstInstallIR")
                                                                                                                                                                            THEN /\ Assert(Len(nextTrans_[self].ops) = 2, 
-                                                                                                                                                                                          "Failure of assertion at line 1078, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1082, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                                 /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                          "Failure of assertion at line 1079, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1083, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                                 /\ IRStatus' = [IRStatus EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                                                 /\ Assert(nextTrans_[self].ops[2].table = NIBT_FIRST_INSTALL, 
-                                                                                                                                                                                          "Failure of assertion at line 1081, column 17 of macro called at line 1569, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1085, column 17 of macro called at line 1573, column 13.")
                                                                                                                                                                                 /\ FirstInstallNIB' = [FirstInstallNIB EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                                                                                                                                                 /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
                                                                                                                                                                                                                                IRQueueNIB |->IRQueueNIB,
@@ -5274,7 +5283,7 @@ NIBDequeueOFCTransaction(self) == /\ pc[self] = "NIBDequeueOFCTransaction"
                                         THEN /\ OFC2NIB # <<>>
                                              /\ nextTrans' = [nextTrans EXCEPT ![self] = Head(OFC2NIB)]
                                              /\ OFC2NIB' = Tail(OFC2NIB)
-                                             /\ pc' = [pc EXCEPT ![self] = "NIBProcessTransaction"]
+                                             /\ pc' = [pc EXCEPT ![self] = "NIBOFCProcessTransaction"]
                                              /\ UNCHANGED FlagNIBOFCEventhandlerFailover
                                         ELSE /\ FlagNIBOFCEventhandlerFailover' = TRUE
                                              /\ pc' = [pc EXCEPT ![self] = "NIBForOFCReconciliation"]
@@ -5357,353 +5366,375 @@ NIBDequeueOFCTransaction(self) == /\ pc[self] = "NIBDequeueOFCTransaction"
                                                   op_first_install, 
                                                   transaction >>
 
-NIBProcessTransaction(self) == /\ pc[self] = "NIBProcessTransaction"
-                               /\ IF moduleIsUp(self)
-                                     THEN /\ IF (nextTrans[self].name = "PrepareIR")
-                                                THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                               "Failure of assertion at line 997, column 9 of macro called at line 1621, column 13.")
-                                                     /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
-                                                               "Failure of assertion at line 998, column 9 of macro called at line 1621, column 13.")
-                                                     /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
-                                                     /\ Assert(nextTrans[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                               "Failure of assertion at line 1000, column 9 of macro called at line 1621, column 13.")
-                                                     /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
-                                                     /\ UNCHANGED << FirstInstallNIB, 
-                                                                     IRStatus, 
-                                                                     IRQueueNIB, 
-                                                                     value, 
-                                                                     rowRemove_N, 
-                                                                     IR2Remove, 
-                                                                     send_NIB_back, 
-                                                                     IRIndex >>
-                                                ELSE /\ IF (nextTrans[self].name = "ScheduleIR")
-                                                           THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                          "Failure of assertion at line 1006, column 9 of macro called at line 1621, column 13.")
-                                                                /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
-                                                                /\ Assert(nextTrans[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                                          "Failure of assertion at line 1008, column 9 of macro called at line 1621, column 13.")
-                                                                /\ Assert(Len(nextTrans[self].ops[2].key) = 2, 
-                                                                          "Failure of assertion at line 1009, column 9 of macro called at line 1621, column 13.")
-                                                                /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
-                                                                /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
-                                                                                                           IRQueueNIB |->IRQueueNIB',
-                                                                                                           SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                           SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
-                                                                /\ UNCHANGED << FirstInstallNIB, 
-                                                                                IRStatus, 
-                                                                                SetScheduledIRs, 
-                                                                                rowRemove_N, 
-                                                                                IR2Remove, 
-                                                                                IRIndex >>
-                                                           ELSE /\ IF (nextTrans[self].name = "RCScheduleIRInOneStep")
-                                                                      THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                     "Failure of assertion at line 1015, column 9 of macro called at line 1621, column 13.")
-                                                                           /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
-                                                                           /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
-                                                                                                                      IRQueueNIB |->IRQueueNIB',
-                                                                                                                      SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                      SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                           /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
-                                                                           /\ UNCHANGED << FirstInstallNIB, 
-                                                                                           controllerStateNIB, 
-                                                                                           IRStatus, 
-                                                                                           SetScheduledIRs, 
-                                                                                           rowRemove_N, 
-                                                                                           IR2Remove, 
-                                                                                           IRIndex >>
-                                                                      ELSE /\ IF (nextTrans[self].name = "SeqReadNIBStates")
-                                                                                 THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
-                                                                                                                                 IRQueueNIB |->IRQueueNIB,
-                                                                                                                                 SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                                 SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                                      /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
-                                                                                      /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                      controllerStateNIB, 
-                                                                                                      IRStatus, 
-                                                                                                      IRQueueNIB, 
-                                                                                                      SetScheduledIRs, 
-                                                                                                      rowRemove_N, 
-                                                                                                      IR2Remove, 
-                                                                                                      IRIndex >>
-                                                                                 ELSE /\ IF (nextTrans[self].name = "OFCOverrideIRStatus")
-                                                                                            THEN /\ IRStatus' = nextTrans[self].ops[1]
-                                                                                                 /\ FirstInstallNIB' = nextTrans[self].ops[2]
-                                                                                                 /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
-                                                                                                                                            IRQueueNIB |->IRQueueNIB,
-                                                                                                                                            SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                                            SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                                                 /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
-                                                                                                 /\ UNCHANGED << controllerStateNIB, 
-                                                                                                                 IRQueueNIB, 
-                                                                                                                 SetScheduledIRs, 
-                                                                                                                 rowRemove_N, 
-                                                                                                                 IR2Remove, 
-                                                                                                                 IRIndex >>
-                                                                                            ELSE /\ IF (nextTrans[self].name = "OFCReadNIBStates")
-                                                                                                       THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
-                                                                                                                                                       IRQueueNIB |->IRQueueNIB,
-                                                                                                                                                       SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                                                       SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                                                            /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
-                                                                                                            /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                            controllerStateNIB, 
-                                                                                                                            IRStatus, 
-                                                                                                                            IRQueueNIB, 
-                                                                                                                            SetScheduledIRs, 
-                                                                                                                            rowRemove_N, 
-                                                                                                                            IR2Remove, 
-                                                                                                                            IRIndex >>
-                                                                                                       ELSE /\ IF (nextTrans[self].name = "UpdateControllerState")
-                                                                                                                  THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                                                                                 "Failure of assertion at line 1049, column 17 of macro called at line 1621, column 13.")
-                                                                                                                       /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
-                                                                                                                                 "Failure of assertion at line 1050, column 17 of macro called at line 1621, column 13.")
-                                                                                                                       /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
-                                                                                                                       /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                       IRStatus, 
-                                                                                                                                       IRQueueNIB, 
-                                                                                                                                       SetScheduledIRs, 
-                                                                                                                                       value, 
-                                                                                                                                       rowRemove_N, 
-                                                                                                                                       IR2Remove, 
-                                                                                                                                       send_NIB_back, 
-                                                                                                                                       IRIndex >>
-                                                                                                                  ELSE /\ IF (nextTrans[self].name = "RemoveIR")
-                                                                                                                             THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                            "Failure of assertion at line 1053, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                  /\ IR2Remove' = [IR2Remove EXCEPT ![self] = nextTrans[self].ops[1].key]
-                                                                                                                                  /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove'[self]
-                                                                                                                                        THEN /\ rowRemove_N' = [rowRemove_N EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove'[self], IRQueueNIB)]
-                                                                                                                                             /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove_N'[self])
-                                                                                                                                        ELSE /\ TRUE
-                                                                                                                                             /\ UNCHANGED << IRQueueNIB, 
-                                                                                                                                                             rowRemove_N >>
-                                                                                                                                  /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                                  IRStatus, 
-                                                                                                                                                  SetScheduledIRs, 
-                                                                                                                                                  value, 
-                                                                                                                                                  send_NIB_back, 
-                                                                                                                                                  IRIndex >>
-                                                                                                                             ELSE /\ IF (nextTrans[self].name = "OFCChangeIRStatus2Sent")
-                                                                                                                                        THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                       "Failure of assertion at line 1061, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                             /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                       "Failure of assertion at line 1062, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                             /\ IRStatus' = [IRStatus EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
-                                                                                                                                             /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
-                                                                                                                                                                                        IRQueueNIB |->IRQueueNIB,
-                                                                                                                                                                                        SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                                                                                        SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                                                                                             /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
-                                                                                                                                             /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                                             IRQueueNIB, 
-                                                                                                                                                             SetScheduledIRs, 
-                                                                                                                                                             IRIndex >>
-                                                                                                                                        ELSE /\ IF (nextTrans[self].name = "ChangeSetScheduledIRs")
-                                                                                                                                                   THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                                                                                                                  "Failure of assertion at line 1067, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                        /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                  "Failure of assertion at line 1068, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                        /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
-                                                                                                                                                        /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                                                        IRStatus, 
-                                                                                                                                                                        IRQueueNIB, 
-                                                                                                                                                                        value, 
-                                                                                                                                                                        send_NIB_back, 
-                                                                                                                                                                        IRIndex >>
-                                                                                                                                                   ELSE /\ IF (nextTrans[self].name = "UpdateIRTag")
-                                                                                                                                                              THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                                                             "Failure of assertion at line 1071, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                   /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                             "Failure of assertion at line 1072, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                   /\ Assert(Len(IRQueueNIB) > 0, 
-                                                                                                                                                                             "Failure of assertion at line 1073, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                   /\ IRIndex' = [IRIndex EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].key]
-                                                                                                                                                                   /\ Assert(IRIndex'[self] # -1, 
-                                                                                                                                                                             "Failure of assertion at line 1075, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                   /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex'[self]].tag = nextTrans[self].ops[1].value]
-                                                                                                                                                                   /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                                                                   IRStatus, 
-                                                                                                                                                                                   value, 
-                                                                                                                                                                                   send_NIB_back >>
-                                                                                                                                                              ELSE /\ IF (nextTrans[self].name = "FirstInstallIR")
-                                                                                                                                                                         THEN /\ Assert(Len(nextTrans[self].ops) = 2, 
-                                                                                                                                                                                        "Failure of assertion at line 1078, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                              /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                        "Failure of assertion at line 1079, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                              /\ IRStatus' = [IRStatus EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
-                                                                                                                                                                              /\ Assert(nextTrans[self].ops[2].table = NIBT_FIRST_INSTALL, 
-                                                                                                                                                                                        "Failure of assertion at line 1081, column 17 of macro called at line 1621, column 13.")
-                                                                                                                                                                              /\ FirstInstallNIB' = [FirstInstallNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
-                                                                                                                                                                              /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
-                                                                                                                                                                                                                         IRQueueNIB |->IRQueueNIB,
-                                                                                                                                                                                                                         SetScheduledIRsNIB |-> SetScheduledIRs,
-                                                                                                                                                                                                                         SwSuspensionStatusNIB |-> SwSuspensionStatus]]
-                                                                                                                                                                              /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
-                                                                                                                                                                         ELSE /\ TRUE
-                                                                                                                                                                              /\ UNCHANGED << FirstInstallNIB, 
-                                                                                                                                                                                              IRStatus, 
-                                                                                                                                                                                              value, 
-                                                                                                                                                                                              send_NIB_back >>
-                                                                                                                                                                   /\ UNCHANGED << IRQueueNIB, 
-                                                                                                                                                                                   IRIndex >>
-                                                                                                                                                        /\ UNCHANGED SetScheduledIRs
-                                                                                                                                  /\ UNCHANGED << rowRemove_N, 
-                                                                                                                                                  IR2Remove >>
-                                                                                                                       /\ UNCHANGED controllerStateNIB
-                                          /\ debug' = [debug EXCEPT ![self] = 0]
-                                          /\ pc' = [pc EXCEPT ![self] = "NIBSendBackIfAny"]
-                                          /\ UNCHANGED FlagNIBOFCEventhandlerFailover
-                                     ELSE /\ FlagNIBOFCEventhandlerFailover' = TRUE
-                                          /\ pc' = [pc EXCEPT ![self] = "NIBForOFCReconciliation"]
-                                          /\ UNCHANGED << FirstInstallNIB, 
-                                                          controllerStateNIB, 
-                                                          IRStatus, IRQueueNIB, 
-                                                          SetScheduledIRs, 
-                                                          value, rowRemove_N, 
-                                                          IR2Remove, 
-                                                          send_NIB_back, 
-                                                          IRIndex, debug >>
-                               /\ UNCHANGED << switchLock, controllerLock, 
-                                               FirstInstallOFC, 
-                                               sw_fail_ordering_var, 
-                                               ContProcSet, SwProcSet, 
-                                               swSeqChangedStatus, 
-                                               controller2Switch, 
-                                               switch2Controller, switchStatus, 
-                                               installedIRs, NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Installer2OfaBuff, 
-                                               Ofa2InstallerBuff, TCAM, 
-                                               controlMsgCounter, 
-                                               controllerSubmoduleFailNum, 
-                                               controllerSubmoduleFailStat, 
-                                               switchOrdering, dependencyGraph, 
-                                               IR2SW, NIBUpdateForRC, 
-                                               controllerStateRC, IRStatusRC, 
-                                               IRQueueRC, SwSuspensionStatusRC, 
-                                               SetScheduledIRsRC, 
-                                               FlagRCNIBEventHandlerFailover, 
-                                               FlagRCSequencerFailover, 
-                                               RC_READY, idThreadWorkingOnIR, 
-                                               workerThreadRanking, 
-                                               controllerStateOFC, IRStatusOFC, 
-                                               IRQueueOFC, 
-                                               SwSuspensionStatusOFC, 
-                                               SetScheduledIRsOFC, 
-                                               FlagOFCWorkerFailover, 
-                                               FlagOFCMonitorFailover, 
-                                               FlagOFCNIBEventHandlerFailover, 
-                                               OFCThreadID, OFC_READY, NIB2OFC, 
-                                               NIB2RC, X2NIB, OFC2NIB, RC2NIB, 
-                                               FlagNIBFailover, 
-                                               FlagNIBRCEventhandlerFailover, 
-                                               NIB_READY_FOR_RC, 
-                                               NIB_READY_FOR_OFC, masterState, 
-                                               SwSuspensionStatus, X2NIB_len, 
-                                               NIBThreadID, RCThreadID, 
-                                               ingressPkt, ingressIR, 
-                                               egressMsg, ofaInMsg, 
-                                               ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, 
-                                               failedSet, statusResolveMsg, 
-                                               recoveredElem, value_, 
-                                               nextTrans_, value_N, rowRemove_, 
-                                               IR2Remove_, send_NIB_back_, 
-                                               stepOfFailure_, IRIndex_, 
-                                               debug_, nextTrans, 
-                                               stepOfFailure_N, NIBMsg_, 
-                                               isBootStrap_, toBeScheduledIRs, 
-                                               key, op1_, op2, transaction_, 
-                                               nextIR, stepOfFailure_c, 
-                                               transaction_O, IRQueueTmp, 
-                                               NIBMsg_O, isBootStrap, 
-                                               localIRSet, NIBIRSet, 
-                                               nextIRToSent, rowIndex, 
-                                               rowRemove, stepOfFailure, 
-                                               transaction_c, NIBMsg, op1, 
-                                               IRQueue, op_ir_status_change_, 
-                                               removeIR, msg, 
-                                               op_ir_status_change, 
-                                               op_first_install, transaction >>
+NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
+                                  /\ IF moduleIsUp(self)
+                                        THEN /\ IF (nextTrans[self].name = "PrepareIR")
+                                                   THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
+                                                                  "Failure of assertion at line 997, column 9 of macro called at line 1625, column 13.")
+                                                        /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
+                                                                  "Failure of assertion at line 998, column 9 of macro called at line 1625, column 13.")
+                                                        /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
+                                                        /\ Assert(nextTrans[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
+                                                                  "Failure of assertion at line 1000, column 9 of macro called at line 1625, column 13.")
+                                                        /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
+                                                        /\ UNCHANGED << FirstInstallNIB, 
+                                                                        IRStatus, 
+                                                                        IRQueueNIB, 
+                                                                        value, 
+                                                                        rowRemove_N, 
+                                                                        IR2Remove, 
+                                                                        send_NIB_back, 
+                                                                        IRIndex >>
+                                                   ELSE /\ IF (nextTrans[self].name = "ScheduleIR")
+                                                              THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
+                                                                             "Failure of assertion at line 1006, column 9 of macro called at line 1625, column 13.")
+                                                                   /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].value.IR
+                                                                         THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
+                                                                         ELSE /\ TRUE
+                                                                              /\ UNCHANGED IRQueueNIB
+                                                                   /\ Assert(nextTrans[self].ops[2].table = NIBT_CONTROLLER_STATE, 
+                                                                             "Failure of assertion at line 1010, column 9 of macro called at line 1625, column 13.")
+                                                                   /\ Assert(Len(nextTrans[self].ops[2].key) = 2, 
+                                                                             "Failure of assertion at line 1011, column 9 of macro called at line 1625, column 13.")
+                                                                   /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
+                                                                   /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
+                                                                                                              IRQueueNIB |->IRQueueNIB',
+                                                                                                              SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                              SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                   /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
+                                                                   /\ UNCHANGED << FirstInstallNIB, 
+                                                                                   IRStatus, 
+                                                                                   SetScheduledIRs, 
+                                                                                   rowRemove_N, 
+                                                                                   IR2Remove, 
+                                                                                   IRIndex >>
+                                                              ELSE /\ IF (nextTrans[self].name = "RCScheduleIRInOneStep")
+                                                                         THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
+                                                                                        "Failure of assertion at line 1017, column 9 of macro called at line 1625, column 13.")
+                                                                              /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].value.IR
+                                                                                    THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
+                                                                                    ELSE /\ TRUE
+                                                                                         /\ UNCHANGED IRQueueNIB
+                                                                              /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
+                                                                                                                         IRQueueNIB |->IRQueueNIB',
+                                                                                                                         SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                         SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                              /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
+                                                                              /\ UNCHANGED << FirstInstallNIB, 
+                                                                                              controllerStateNIB, 
+                                                                                              IRStatus, 
+                                                                                              SetScheduledIRs, 
+                                                                                              rowRemove_N, 
+                                                                                              IR2Remove, 
+                                                                                              IRIndex >>
+                                                                         ELSE /\ IF (nextTrans[self].name = "SeqReadNIBStates")
+                                                                                    THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
+                                                                                                                                    IRQueueNIB |->IRQueueNIB,
+                                                                                                                                    SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                                    SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                                         /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
+                                                                                         /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                         controllerStateNIB, 
+                                                                                                         IRStatus, 
+                                                                                                         IRQueueNIB, 
+                                                                                                         SetScheduledIRs, 
+                                                                                                         rowRemove_N, 
+                                                                                                         IR2Remove, 
+                                                                                                         IRIndex >>
+                                                                                    ELSE /\ IF (nextTrans[self].name = "OFCOverrideIRStatus")
+                                                                                               THEN /\ IRStatus' = nextTrans[self].ops[1]
+                                                                                                    /\ FirstInstallNIB' = nextTrans[self].ops[2]
+                                                                                                    /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
+                                                                                                                                               IRQueueNIB |->IRQueueNIB,
+                                                                                                                                               SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                                               SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                                                    /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
+                                                                                                    /\ UNCHANGED << controllerStateNIB, 
+                                                                                                                    IRQueueNIB, 
+                                                                                                                    SetScheduledIRs, 
+                                                                                                                    rowRemove_N, 
+                                                                                                                    IR2Remove, 
+                                                                                                                    IRIndex >>
+                                                                                               ELSE /\ IF (nextTrans[self].name = "OFCReadNIBStates")
+                                                                                                          THEN /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus,
+                                                                                                                                                          IRQueueNIB |->IRQueueNIB,
+                                                                                                                                                          SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                                                          SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                                                               /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2OFC"]
+                                                                                                               /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                               controllerStateNIB, 
+                                                                                                                               IRStatus, 
+                                                                                                                               IRQueueNIB, 
+                                                                                                                               SetScheduledIRs, 
+                                                                                                                               rowRemove_N, 
+                                                                                                                               IR2Remove, 
+                                                                                                                               IRIndex >>
+                                                                                                          ELSE /\ IF (nextTrans[self].name = "UpdateControllerState")
+                                                                                                                     THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
+                                                                                                                                    "Failure of assertion at line 1053, column 17 of macro called at line 1625, column 13.")
+                                                                                                                          /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
+                                                                                                                                    "Failure of assertion at line 1054, column 17 of macro called at line 1625, column 13.")
+                                                                                                                          /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
+                                                                                                                          /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                          IRStatus, 
+                                                                                                                                          IRQueueNIB, 
+                                                                                                                                          SetScheduledIRs, 
+                                                                                                                                          value, 
+                                                                                                                                          rowRemove_N, 
+                                                                                                                                          IR2Remove, 
+                                                                                                                                          send_NIB_back, 
+                                                                                                                                          IRIndex >>
+                                                                                                                     ELSE /\ IF (nextTrans[self].name = "RemoveIR")
+                                                                                                                                THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
+                                                                                                                                               "Failure of assertion at line 1057, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                     /\ IR2Remove' = [IR2Remove EXCEPT ![self] = nextTrans[self].ops[1].key]
+                                                                                                                                     /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove'[self]
+                                                                                                                                           THEN /\ rowRemove_N' = [rowRemove_N EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove'[self], IRQueueNIB)]
+                                                                                                                                                /\ IRQueueNIB' = removeFromSeq(IRQueueNIB, rowRemove_N'[self])
+                                                                                                                                           ELSE /\ TRUE
+                                                                                                                                                /\ UNCHANGED << IRQueueNIB, 
+                                                                                                                                                                rowRemove_N >>
+                                                                                                                                     /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                                     IRStatus, 
+                                                                                                                                                     SetScheduledIRs, 
+                                                                                                                                                     value, 
+                                                                                                                                                     send_NIB_back, 
+                                                                                                                                                     IRIndex >>
+                                                                                                                                ELSE /\ IF (nextTrans[self].name = "OFCChangeIRStatus2Sent")
+                                                                                                                                           THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
+                                                                                                                                                          "Failure of assertion at line 1065, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                /\ Assert(Len(nextTrans[self].ops) = 1, 
+                                                                                                                                                          "Failure of assertion at line 1066, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                /\ IRStatus' = [IRStatus EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
+                                                                                                                                                /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
+                                                                                                                                                                                           IRQueueNIB |->IRQueueNIB,
+                                                                                                                                                                                           SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                                                                                           SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                                                                                                /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
+                                                                                                                                                /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                                                IRQueueNIB, 
+                                                                                                                                                                SetScheduledIRs, 
+                                                                                                                                                                IRIndex >>
+                                                                                                                                           ELSE /\ IF (nextTrans[self].name = "ChangeSetScheduledIRs")
+                                                                                                                                                      THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
+                                                                                                                                                                     "Failure of assertion at line 1071, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                           /\ Assert(Len(nextTrans[self].ops) = 1, 
+                                                                                                                                                                     "Failure of assertion at line 1072, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                           /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
+                                                                                                                                                           /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                                                           IRStatus, 
+                                                                                                                                                                           IRQueueNIB, 
+                                                                                                                                                                           value, 
+                                                                                                                                                                           send_NIB_back, 
+                                                                                                                                                                           IRIndex >>
+                                                                                                                                                      ELSE /\ IF (nextTrans[self].name = "UpdateIRTag")
+                                                                                                                                                                 THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
+                                                                                                                                                                                "Failure of assertion at line 1075, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                      /\ Assert(Len(nextTrans[self].ops) = 1, 
+                                                                                                                                                                                "Failure of assertion at line 1076, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                      /\ Assert(Len(IRQueueNIB) > 0, 
+                                                                                                                                                                                "Failure of assertion at line 1077, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                      /\ IRIndex' = [IRIndex EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].key]
+                                                                                                                                                                      /\ Assert(IRIndex'[self] # -1, 
+                                                                                                                                                                                "Failure of assertion at line 1079, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                      /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex'[self]].tag = nextTrans[self].ops[1].value]
+                                                                                                                                                                      /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                                                                      IRStatus, 
+                                                                                                                                                                                      value, 
+                                                                                                                                                                                      send_NIB_back >>
+                                                                                                                                                                 ELSE /\ IF (nextTrans[self].name = "FirstInstallIR")
+                                                                                                                                                                            THEN /\ Assert(Len(nextTrans[self].ops) = 2, 
+                                                                                                                                                                                           "Failure of assertion at line 1082, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                                 /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
+                                                                                                                                                                                           "Failure of assertion at line 1083, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                                 /\ IRStatus' = [IRStatus EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
+                                                                                                                                                                                 /\ Assert(nextTrans[self].ops[2].table = NIBT_FIRST_INSTALL, 
+                                                                                                                                                                                           "Failure of assertion at line 1085, column 17 of macro called at line 1625, column 13.")
+                                                                                                                                                                                 /\ FirstInstallNIB' = [FirstInstallNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
+                                                                                                                                                                                 /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatus',
+                                                                                                                                                                                                                            IRQueueNIB |->IRQueueNIB,
+                                                                                                                                                                                                                            SetScheduledIRsNIB |-> SetScheduledIRs,
+                                                                                                                                                                                                                            SwSuspensionStatusNIB |-> SwSuspensionStatus]]
+                                                                                                                                                                                 /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = "NIB2RC"]
+                                                                                                                                                                            ELSE /\ TRUE
+                                                                                                                                                                                 /\ UNCHANGED << FirstInstallNIB, 
+                                                                                                                                                                                                 IRStatus, 
+                                                                                                                                                                                                 value, 
+                                                                                                                                                                                                 send_NIB_back >>
+                                                                                                                                                                      /\ UNCHANGED << IRQueueNIB, 
+                                                                                                                                                                                      IRIndex >>
+                                                                                                                                                           /\ UNCHANGED SetScheduledIRs
+                                                                                                                                     /\ UNCHANGED << rowRemove_N, 
+                                                                                                                                                     IR2Remove >>
+                                                                                                                          /\ UNCHANGED controllerStateNIB
+                                             /\ debug' = [debug EXCEPT ![self] = 0]
+                                             /\ pc' = [pc EXCEPT ![self] = "NIBOFCSendBackIfAny"]
+                                             /\ UNCHANGED FlagNIBOFCEventhandlerFailover
+                                        ELSE /\ FlagNIBOFCEventhandlerFailover' = TRUE
+                                             /\ pc' = [pc EXCEPT ![self] = "NIBForOFCReconciliation"]
+                                             /\ UNCHANGED << FirstInstallNIB, 
+                                                             controllerStateNIB, 
+                                                             IRStatus, 
+                                                             IRQueueNIB, 
+                                                             SetScheduledIRs, 
+                                                             value, 
+                                                             rowRemove_N, 
+                                                             IR2Remove, 
+                                                             send_NIB_back, 
+                                                             IRIndex, debug >>
+                                  /\ UNCHANGED << switchLock, controllerLock, 
+                                                  FirstInstallOFC, 
+                                                  sw_fail_ordering_var, 
+                                                  ContProcSet, SwProcSet, 
+                                                  swSeqChangedStatus, 
+                                                  controller2Switch, 
+                                                  switch2Controller, 
+                                                  switchStatus, installedIRs, 
+                                                  NicAsic2OfaBuff, 
+                                                  Ofa2NicAsicBuff, 
+                                                  Installer2OfaBuff, 
+                                                  Ofa2InstallerBuff, TCAM, 
+                                                  controlMsgCounter, 
+                                                  controllerSubmoduleFailNum, 
+                                                  controllerSubmoduleFailStat, 
+                                                  switchOrdering, 
+                                                  dependencyGraph, IR2SW, 
+                                                  NIBUpdateForRC, 
+                                                  controllerStateRC, 
+                                                  IRStatusRC, IRQueueRC, 
+                                                  SwSuspensionStatusRC, 
+                                                  SetScheduledIRsRC, 
+                                                  FlagRCNIBEventHandlerFailover, 
+                                                  FlagRCSequencerFailover, 
+                                                  RC_READY, 
+                                                  idThreadWorkingOnIR, 
+                                                  workerThreadRanking, 
+                                                  controllerStateOFC, 
+                                                  IRStatusOFC, IRQueueOFC, 
+                                                  SwSuspensionStatusOFC, 
+                                                  SetScheduledIRsOFC, 
+                                                  FlagOFCWorkerFailover, 
+                                                  FlagOFCMonitorFailover, 
+                                                  FlagOFCNIBEventHandlerFailover, 
+                                                  OFCThreadID, OFC_READY, 
+                                                  NIB2OFC, NIB2RC, X2NIB, 
+                                                  OFC2NIB, RC2NIB, 
+                                                  FlagNIBFailover, 
+                                                  FlagNIBRCEventhandlerFailover, 
+                                                  NIB_READY_FOR_RC, 
+                                                  NIB_READY_FOR_OFC, 
+                                                  masterState, 
+                                                  SwSuspensionStatus, 
+                                                  X2NIB_len, NIBThreadID, 
+                                                  RCThreadID, ingressPkt, 
+                                                  ingressIR, egressMsg, 
+                                                  ofaInMsg, ofaOutConfirmation, 
+                                                  installerInIR, statusMsg, 
+                                                  notFailedSet, failedElem, 
+                                                  failedSet, statusResolveMsg, 
+                                                  recoveredElem, value_, 
+                                                  nextTrans_, value_N, 
+                                                  rowRemove_, IR2Remove_, 
+                                                  send_NIB_back_, 
+                                                  stepOfFailure_, IRIndex_, 
+                                                  debug_, nextTrans, 
+                                                  stepOfFailure_N, NIBMsg_, 
+                                                  isBootStrap_, 
+                                                  toBeScheduledIRs, key, op1_, 
+                                                  op2, transaction_, nextIR, 
+                                                  stepOfFailure_c, 
+                                                  transaction_O, IRQueueTmp, 
+                                                  NIBMsg_O, isBootStrap, 
+                                                  localIRSet, NIBIRSet, 
+                                                  nextIRToSent, rowIndex, 
+                                                  rowRemove, stepOfFailure, 
+                                                  transaction_c, NIBMsg, op1, 
+                                                  IRQueue, 
+                                                  op_ir_status_change_, 
+                                                  removeIR, msg, 
+                                                  op_ir_status_change, 
+                                                  op_first_install, 
+                                                  transaction >>
 
-NIBSendBackIfAny(self) == /\ pc[self] = "NIBSendBackIfAny"
-                          /\ IF moduleIsUp(self)
-                                THEN /\ IF send_NIB_back[self] = "NIB2RC"
-                                           THEN /\ isRCUp(RCThreadID) \/ isRCFailed(RCThreadID)
-                                                /\ NIB2RC' = Append(NIB2RC, [value |-> value[self]])
-                                                /\ UNCHANGED NIB2OFC
-                                           ELSE /\ IF send_NIB_back[self] = "NIB2OFC"
-                                                      THEN /\ isOFCUp(RCThreadID) \/ isOFCFailed(RCThreadID)
-                                                           /\ NIB2OFC' = Append(NIB2OFC, [value |-> value[self]])
-                                                      ELSE /\ TRUE
-                                                           /\ UNCHANGED NIB2OFC
-                                                /\ UNCHANGED NIB2RC
-                                     /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = ""]
-                                     /\ pc' = [pc EXCEPT ![self] = "NIBHandleOFCTransactions"]
-                                     /\ UNCHANGED FlagNIBOFCEventhandlerFailover
-                                ELSE /\ FlagNIBOFCEventhandlerFailover' = TRUE
-                                     /\ pc' = [pc EXCEPT ![self] = "NIBForOFCReconciliation"]
-                                     /\ UNCHANGED << NIB2OFC, NIB2RC, 
-                                                     send_NIB_back >>
-                          /\ UNCHANGED << switchLock, controllerLock, 
-                                          FirstInstallOFC, FirstInstallNIB, 
-                                          sw_fail_ordering_var, ContProcSet, 
-                                          SwProcSet, swSeqChangedStatus, 
-                                          controller2Switch, switch2Controller, 
-                                          switchStatus, installedIRs, 
-                                          NicAsic2OfaBuff, Ofa2NicAsicBuff, 
-                                          Installer2OfaBuff, Ofa2InstallerBuff, 
-                                          TCAM, controlMsgCounter, 
-                                          controllerSubmoduleFailNum, 
-                                          controllerSubmoduleFailStat, 
-                                          switchOrdering, dependencyGraph, 
-                                          IR2SW, NIBUpdateForRC, 
-                                          controllerStateRC, IRStatusRC, 
-                                          IRQueueRC, SwSuspensionStatusRC, 
-                                          SetScheduledIRsRC, 
-                                          FlagRCNIBEventHandlerFailover, 
-                                          FlagRCSequencerFailover, RC_READY, 
-                                          idThreadWorkingOnIR, 
-                                          workerThreadRanking, 
-                                          controllerStateOFC, IRStatusOFC, 
-                                          IRQueueOFC, SwSuspensionStatusOFC, 
-                                          SetScheduledIRsOFC, 
-                                          FlagOFCWorkerFailover, 
-                                          FlagOFCMonitorFailover, 
-                                          FlagOFCNIBEventHandlerFailover, 
-                                          OFCThreadID, OFC_READY, X2NIB, 
-                                          OFC2NIB, RC2NIB, FlagNIBFailover, 
-                                          FlagNIBRCEventhandlerFailover, 
-                                          NIB_READY_FOR_RC, NIB_READY_FOR_OFC, 
-                                          masterState, controllerStateNIB, 
-                                          IRStatus, SwSuspensionStatus, 
-                                          IRQueueNIB, SetScheduledIRs, 
-                                          X2NIB_len, NIBThreadID, RCThreadID, 
-                                          ingressPkt, ingressIR, egressMsg, 
-                                          ofaInMsg, ofaOutConfirmation, 
-                                          installerInIR, statusMsg, 
-                                          notFailedSet, failedElem, failedSet, 
-                                          statusResolveMsg, recoveredElem, 
-                                          value_, nextTrans_, value_N, 
-                                          rowRemove_, IR2Remove_, 
-                                          send_NIB_back_, stepOfFailure_, 
-                                          IRIndex_, debug_, nextTrans, value, 
-                                          rowRemove_N, IR2Remove, 
-                                          stepOfFailure_N, IRIndex, debug, 
-                                          NIBMsg_, isBootStrap_, 
-                                          toBeScheduledIRs, key, op1_, op2, 
-                                          transaction_, nextIR, 
-                                          stepOfFailure_c, transaction_O, 
-                                          IRQueueTmp, NIBMsg_O, isBootStrap, 
-                                          localIRSet, NIBIRSet, nextIRToSent, 
-                                          rowIndex, rowRemove, stepOfFailure, 
-                                          transaction_c, NIBMsg, op1, IRQueue, 
-                                          op_ir_status_change_, removeIR, msg, 
-                                          op_ir_status_change, 
-                                          op_first_install, transaction >>
+NIBOFCSendBackIfAny(self) == /\ pc[self] = "NIBOFCSendBackIfAny"
+                             /\ IF moduleIsUp(self)
+                                   THEN /\ IF send_NIB_back[self] = "NIB2RC"
+                                              THEN /\ isRCUp(RCThreadID) \/ isRCFailed(RCThreadID)
+                                                   /\ NIB2RC' = Append(NIB2RC, [value |-> value[self]])
+                                                   /\ UNCHANGED NIB2OFC
+                                              ELSE /\ IF send_NIB_back[self] = "NIB2OFC"
+                                                         THEN /\ isOFCUp(RCThreadID) \/ isOFCFailed(RCThreadID)
+                                                              /\ NIB2OFC' = Append(NIB2OFC, [value |-> value[self]])
+                                                         ELSE /\ TRUE
+                                                              /\ UNCHANGED NIB2OFC
+                                                   /\ UNCHANGED NIB2RC
+                                        /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = ""]
+                                        /\ pc' = [pc EXCEPT ![self] = "NIBHandleOFCTransactions"]
+                                        /\ UNCHANGED FlagNIBOFCEventhandlerFailover
+                                   ELSE /\ FlagNIBOFCEventhandlerFailover' = TRUE
+                                        /\ pc' = [pc EXCEPT ![self] = "NIBForOFCReconciliation"]
+                                        /\ UNCHANGED << NIB2OFC, NIB2RC, 
+                                                        send_NIB_back >>
+                             /\ UNCHANGED << switchLock, controllerLock, 
+                                             FirstInstallOFC, FirstInstallNIB, 
+                                             sw_fail_ordering_var, ContProcSet, 
+                                             SwProcSet, swSeqChangedStatus, 
+                                             controller2Switch, 
+                                             switch2Controller, switchStatus, 
+                                             installedIRs, NicAsic2OfaBuff, 
+                                             Ofa2NicAsicBuff, 
+                                             Installer2OfaBuff, 
+                                             Ofa2InstallerBuff, TCAM, 
+                                             controlMsgCounter, 
+                                             controllerSubmoduleFailNum, 
+                                             controllerSubmoduleFailStat, 
+                                             switchOrdering, dependencyGraph, 
+                                             IR2SW, NIBUpdateForRC, 
+                                             controllerStateRC, IRStatusRC, 
+                                             IRQueueRC, SwSuspensionStatusRC, 
+                                             SetScheduledIRsRC, 
+                                             FlagRCNIBEventHandlerFailover, 
+                                             FlagRCSequencerFailover, RC_READY, 
+                                             idThreadWorkingOnIR, 
+                                             workerThreadRanking, 
+                                             controllerStateOFC, IRStatusOFC, 
+                                             IRQueueOFC, SwSuspensionStatusOFC, 
+                                             SetScheduledIRsOFC, 
+                                             FlagOFCWorkerFailover, 
+                                             FlagOFCMonitorFailover, 
+                                             FlagOFCNIBEventHandlerFailover, 
+                                             OFCThreadID, OFC_READY, X2NIB, 
+                                             OFC2NIB, RC2NIB, FlagNIBFailover, 
+                                             FlagNIBRCEventhandlerFailover, 
+                                             NIB_READY_FOR_RC, 
+                                             NIB_READY_FOR_OFC, masterState, 
+                                             controllerStateNIB, IRStatus, 
+                                             SwSuspensionStatus, IRQueueNIB, 
+                                             SetScheduledIRs, X2NIB_len, 
+                                             NIBThreadID, RCThreadID, 
+                                             ingressPkt, ingressIR, egressMsg, 
+                                             ofaInMsg, ofaOutConfirmation, 
+                                             installerInIR, statusMsg, 
+                                             notFailedSet, failedElem, 
+                                             failedSet, statusResolveMsg, 
+                                             recoveredElem, value_, nextTrans_, 
+                                             value_N, rowRemove_, IR2Remove_, 
+                                             send_NIB_back_, stepOfFailure_, 
+                                             IRIndex_, debug_, nextTrans, 
+                                             value, rowRemove_N, IR2Remove, 
+                                             stepOfFailure_N, IRIndex, debug, 
+                                             NIBMsg_, isBootStrap_, 
+                                             toBeScheduledIRs, key, op1_, op2, 
+                                             transaction_, nextIR, 
+                                             stepOfFailure_c, transaction_O, 
+                                             IRQueueTmp, NIBMsg_O, isBootStrap, 
+                                             localIRSet, NIBIRSet, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure, transaction_c, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             msg, op_ir_status_change, 
+                                             op_first_install, transaction >>
 
 NIBForOFCReconciliation(self) == /\ pc[self] = "NIBForOFCReconciliation"
                                  /\ controllerLock = <<NO_LOCK, NO_LOCK>>
@@ -5790,8 +5821,8 @@ NIBForOFCReconciliation(self) == /\ pc[self] = "NIBForOFCReconciliation"
 
 NIBOFCEventHandler(self) == NIBHandleOFCTransactions(self)
                                \/ NIBDequeueOFCTransaction(self)
-                               \/ NIBProcessTransaction(self)
-                               \/ NIBSendBackIfAny(self)
+                               \/ NIBOFCProcessTransaction(self)
+                               \/ NIBOFCSendBackIfAny(self)
                                \/ NIBForOFCReconciliation(self)
 
 RCFailoverResetStates(self) == /\ pc[self] = "RCFailoverResetStates"
@@ -6881,61 +6912,6 @@ NIBFailure(self) == /\ pc[self] = "NIBFailure"
 
 NIBFailureProc(self) == NIBFailure(self)
 
-RCFailure(self) == /\ pc[self] = "RCFailure"
-                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                   /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![<<rc0,CONT_SEQ>>] = Failed,
-                                                                                         ![<<rc0,CONT_RC_NIB_EVENT>>] = Failed]
-                   /\ pc' = [pc EXCEPT ![self] = "Done"]
-                   /\ UNCHANGED << switchLock, controllerLock, FirstInstallOFC, 
-                                   FirstInstallNIB, sw_fail_ordering_var, 
-                                   ContProcSet, SwProcSet, swSeqChangedStatus, 
-                                   controller2Switch, switch2Controller, 
-                                   switchStatus, installedIRs, NicAsic2OfaBuff, 
-                                   Ofa2NicAsicBuff, Installer2OfaBuff, 
-                                   Ofa2InstallerBuff, TCAM, controlMsgCounter, 
-                                   controllerSubmoduleFailNum, switchOrdering, 
-                                   dependencyGraph, IR2SW, NIBUpdateForRC, 
-                                   controllerStateRC, IRStatusRC, IRQueueRC, 
-                                   SwSuspensionStatusRC, SetScheduledIRsRC, 
-                                   FlagRCNIBEventHandlerFailover, 
-                                   FlagRCSequencerFailover, RC_READY, 
-                                   idThreadWorkingOnIR, workerThreadRanking, 
-                                   controllerStateOFC, IRStatusOFC, IRQueueOFC, 
-                                   SwSuspensionStatusOFC, SetScheduledIRsOFC, 
-                                   FlagOFCWorkerFailover, 
-                                   FlagOFCMonitorFailover, 
-                                   FlagOFCNIBEventHandlerFailover, OFCThreadID, 
-                                   OFC_READY, NIB2OFC, NIB2RC, X2NIB, OFC2NIB, 
-                                   RC2NIB, FlagNIBFailover, 
-                                   FlagNIBRCEventhandlerFailover, 
-                                   FlagNIBOFCEventhandlerFailover, 
-                                   NIB_READY_FOR_RC, NIB_READY_FOR_OFC, 
-                                   masterState, controllerStateNIB, IRStatus, 
-                                   SwSuspensionStatus, IRQueueNIB, 
-                                   SetScheduledIRs, X2NIB_len, NIBThreadID, 
-                                   RCThreadID, ingressPkt, ingressIR, 
-                                   egressMsg, ofaInMsg, ofaOutConfirmation, 
-                                   installerInIR, statusMsg, notFailedSet, 
-                                   failedElem, failedSet, statusResolveMsg, 
-                                   recoveredElem, value_, nextTrans_, value_N, 
-                                   rowRemove_, IR2Remove_, send_NIB_back_, 
-                                   stepOfFailure_, IRIndex_, debug_, nextTrans, 
-                                   value, rowRemove_N, IR2Remove, 
-                                   send_NIB_back, stepOfFailure_N, IRIndex, 
-                                   debug, NIBMsg_, isBootStrap_, 
-                                   toBeScheduledIRs, key, op1_, op2, 
-                                   transaction_, nextIR, stepOfFailure_c, 
-                                   transaction_O, IRQueueTmp, NIBMsg_O, 
-                                   isBootStrap, localIRSet, NIBIRSet, 
-                                   nextIRToSent, rowIndex, rowRemove, 
-                                   stepOfFailure, transaction_c, NIBMsg, op1, 
-                                   IRQueue, op_ir_status_change_, removeIR, 
-                                   msg, op_ir_status_change, op_first_install, 
-                                   transaction >>
-
-RCFailureProc(self) == RCFailure(self)
-
 OFCFailoverResetStates(self) == /\ pc[self] = "OFCFailoverResetStates"
                                 /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
@@ -7228,7 +7204,7 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                           /\ IF localIRSet'[self] # NIBIRSet'[self]
                                                 THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE)
                                                      /\ Assert(Len(IRQueueOFC') <= MaxNumIRs, 
-                                                               "Failure of assertion at line 2005, column 21.")
+                                                               "Failure of assertion at line 2009, column 21.")
                                                 ELSE /\ TRUE
                                                      /\ UNCHANGED IRQueueOFC
                                           /\ pc' = [pc EXCEPT ![self] = "OFCNIBEventHanderProc"]
@@ -8102,9 +8078,9 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                            /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                            /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                            /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                     "Failure of assertion at line 2314, column 13.")
+                                                     "Failure of assertion at line 2318, column 13.")
                                            /\ Assert(msg'[self].type \in {RECONCILIATION_RESPONSE, RECEIVED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                     "Failure of assertion at line 2315, column 13.")
+                                                     "Failure of assertion at line 2319, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "OFCMonitorUpdateIRDone"]
                                            /\ UNCHANGED FlagOFCMonitorFailover
                                 /\ UNCHANGED << switchLock, FirstInstallOFC, 
@@ -8182,7 +8158,7 @@ OFCMonitorUpdateIRDone(self) == /\ pc[self] = "OFCMonitorUpdateIRDone"
                                 /\ IF msg[self].type = INSTALLED_SUCCESSFULLY
                                       THEN /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRDone"]
                                       ELSE /\ Assert(FALSE, 
-                                                     "Failure of assertion at line 2346, column 13.")
+                                                     "Failure of assertion at line 2350, column 13.")
                                            /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                 /\ UNCHANGED << switchLock, controllerLock, 
                                                 FirstInstallOFC, 
@@ -8607,7 +8583,6 @@ Next == (\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
            \/ (\E self \in ({rc0} \X {CONT_SEQ}): controllerSequencer(self))
            \/ (\E self \in ( {"proc"} \X {OFC_FAILURE}): OFCFailureProc(self))
            \/ (\E self \in ( {"proc"} \X {NIB_FAILURE}): NIBFailureProc(self))
-           \/ (\E self \in ( {"proc"} \X {RC_FAILURE}): RCFailureProc(self))
            \/ (\E self \in ({"proc"} \X {OFC_FAILOVER}): OFCFailoverProc(self))
            \/ (\E self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}): OFCNIBEventHandler(self))
            \/ (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
@@ -8632,7 +8607,6 @@ Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in ({rc0} \X {CONT_SEQ}) : WF_vars(controllerSequencer(self))
         /\ \A self \in ( {"proc"} \X {OFC_FAILURE}) : WF_vars(OFCFailureProc(self))
         /\ \A self \in ( {"proc"} \X {NIB_FAILURE}) : WF_vars(NIBFailureProc(self))
-        /\ \A self \in ( {"proc"} \X {RC_FAILURE}) : WF_vars(RCFailureProc(self))
         /\ \A self \in ({"proc"} \X {OFC_FAILOVER}) : WF_vars(OFCFailoverProc(self))
         /\ \A self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) : WF_vars(OFCNIBEventHandler(self))
         /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_vars(controllerWorkerThreads(self))
@@ -8751,6 +8725,6 @@ Debug == (Len(X2NIB) < 20)
 
 =============================================================================
 \* Modification History
-\* Last modified Sun May 02 21:43:36 PDT 2021 by zmy
+\* Last modified Sat May 08 16:46:42 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root
