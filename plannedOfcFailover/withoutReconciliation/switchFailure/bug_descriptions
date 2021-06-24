@@ -613,3 +613,43 @@ reconciliation algorithm. This happens because OFC0 monitoring server is termina
 confirmation of the installed IR. As a result of reconciliation, the IR has IR_NONE status instead of IR_SENT. 
 Therefore, the monitoring server assumes the IR is lost due to the failure.
 + Solution: OFC worker should not forward an IR corresponding to a switch with SW_RECONCILE status. 
+
+====================================================================================================================
+====================================================================================================================
+Bug#26 (IR Installed More than Once): RCS Sequencer schedules an IR for sw0 → Failover module receives the failover 
+request and sends FAILOVER_INIT signal to OFC1 → OFC1 failover event handler receives the notification and schedules 
+a ROLE_REQ msg to update it’s role to ROLE_EQUAL → OFC1 worker sends the role request msg → sw0 updates the role and 
+sends back role reply msg → sw0 CPU fails → sw0 CPU recovers → OFC0 OpenFlow event handler processes the failure 
+event and suspends the switch (both locally and in NIB) → OFC0 OF event handler adds the failure event to local and 
+NIB’s event log → OFC0 OF event handler processes the switch recovery event, and since the switch recovery event is 
+the last event for sw0, OFC0 OF event handler changes the flag of sw0 to SW_RECONCILE and schedules a FLOW_STAT_REQ 
+→ NIB event handler receives the IR and adds the IR to the worker local queue → OFC0 OF event handler adds the 
+recovery event to both NIB and local event log → OFC0 worker forwards the FLOW_STAT_REQ →  sw0 receives the 
+FLOW_STAT_REQ and replies with FLOW_STAT_REPLY (here is empty {}) → OFC0 monitoring server receives the FLOW_STAT_REPLY 
+and change the flag of sw0 to SW_RUN (both locally and NIB) → OFC0 worker forwards the IR → sw installs the IR and 
+sends back the confirmation → OFC1 monitoring server processes the ROLE_REPLY msg and changes its internal role to 
+ROLE_EQUAL →  OFC1 failover handler subscribes to the NIB’s IRQueue, pulls the NIB’s IR Queue [IR1] and changes its 
+failover status to FAILOVER_READY → Failover module gets the notification of FAILOVER_READY from OFC1 and sends 
+FAILOVER_TERMINATE to OFC0 → OFC0 failover handler receives FAILOVER_TERMINATE and sends termination signal to the 
+workers and the NIB event handler → OFC0 workers gracefully terminate → After the workers terminated, OFC0 sends 
+termination signal to the monitoring server → OFC0 NIB event handler terminates → OFC0 monitoring server changes the 
+flag of IR1 to IR_NONE since IR1 is not in the reconciliation msg from the switch → OFC0 monitoring server terminates 
+→ After the monitoring server termination, OFC0 sends termination signal to the OF event handler → OFC0 OF event 
+handler terminates → OFC0 failover handler changes its failover status to FAILOVER_TERMINATE_DONE and self terminates 
+→ Failover module changes the roles of OFCs (OFC0 |-> slave, OFC1 |-> master)  → OFC1 failover handler receives the 
+notification of becoming the master and passes the fetched IRs {IR1} to the workers → OFC1 worker forwards the IR {IR1}
+
++ Problem: Upon receiving the FLOW_STAT_REPLY, the monitoring server updates the state of the switch and then, 
+performs the reconciliation. (Update-before-Action). This causes a race condition between OFC workers and the 
+monitoring server on updating the flag of IRs and results in an IR being installed by two OFCs.
+
++ Summary: After the switch recovery, OFC0 performs reconciliation. Monitoring server eventually receives the 
+reconciliation response and updates the state of sw to SW_RUN (Note that OFC worker only forwards an IR corresponding 
+to a switch in SW_RUN mode). However, before monitoring the server performing the reconciliation, the OFC worker changes 
+the flag of IR1 to IR_SENT and forwards the IR. The monitoring server performs the reconciliation and since the 
+reconciliation response is empty, it changes the flag of IR1 to IR_NONE. Finally, the failover happens and OFC0 
+(& all its components) terminate before receiving the confirmation of IR1 (OFC0 thinks the in flight IR is failed). 
+Since the rest of the system is not aware of the IR1 installation, IR1 is installed again.
+
++ Solution: Action-before-Update. OFC Monitoring server should first perform the reconciliation and then update the 
+status of the switch to SW_RUN.
