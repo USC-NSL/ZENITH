@@ -7,7 +7,7 @@
     <intAttribute key="dfidDepth" value="50"/>
     <booleanAttribute key="dfidMode" value="false"/>
     <intAttribute key="distributedFPSetCount" value="0"/>
-    <stringAttribute key="distributedNetworkInterface" value="10.233.235.245"/>
+    <stringAttribute key="distributedNetworkInterface" value="10.0.0.84"/>
     <intAttribute key="distributedNodesCount" value="1"/>
     <stringAttribute key="distributedTLC" value="off"/>
     <stringAttribute key="distributedTLCVMArgs" value=""/>
@@ -21,7 +21,7 @@
     <stringAttribute key="modelBehaviorNext" value=""/>
     <stringAttribute key="modelBehaviorSpec" value="Spec"/>
     <intAttribute key="modelBehaviorSpecType" value="1"/>
-    <stringAttribute key="modelBehaviorVars" value="transaction, topo_change, RC_READY, egressMsg, FirstInstallNIB, IRIndex_, OFCThreadID, nextIRToSent, FlagOFCWorkerFailover, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, transaction_co, IRDoneSet, nxtDAG, NIBIRSet, seqEvent, ofaOutConfirmation, setIRsInDAG, transaction_, SwProcSet, FirstInstallOFC, NIB_READY_FOR_OFC, irID, debug_, removedIR, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, prev_dag, IRQueueTmp, op_ir_status_change_, IRSet, ContProcSet, nxtDAGVertices, op_first_install, controllerStateNIB, Installer2OfaBuff, IRQueue, swSeqChangedStatus, setIRsToReset, removeIR, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, IRQueueOFC, currIRInDAG, stepOfFailure_co, resetIR, msg, stepOfFailure_, DAGID, currSetDownSw, SwSuspensionStatusNIB, Ofa2InstallerBuff, DAGEventQueue, NIB2RC, RCSeqWorkerStatus, Ofa2NicAsicBuff, controllerStateOFC, dependencyGraph, failedSet, recoveredElem, sw_id, NIBThreadID, OFC2NIB, FlagNIBRCEventhandlerFailover, worker, op_ir_status_change, IRStatusNIB, FlagNIBFailover, debug, SwSuspensionStatusOFC, init, SetScheduledIRsOFC, NIB2OFC, irTypeMapping, controllerSubmoduleFailNum, OFC_READY, rowRemove_N, ir2sw, NIBMsg, IRStatusOFC, ingressIR, currIR, nextIR, X2NIB_len, NIB_READY_FOR_RC, isBootStrap, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, op1, workerThreadRanking, transaction_c, stepOfFailure_N, NIBMsg_, RCThreadID, NicAsic2OfaBuff, currDAG, setRemovableIRs, stepOfFailure_c, NIBUpdateForRC, toBeScheduledIRs, FlagRCNIBEventHandlerFailover, isBootStrap_, value_, RC2NIB, IR2Remove_, controller2Switch, SetScheduledIRs, send_NIB_back, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, controllerStateRC, ingressPkt, value_N, FlagOFCMonitorFailover, statusResolveMsg, installerInIR, switchOrdering, NIBMsg_O, X2NIB, FlagNIBOFCEventhandlerFailover, statusMsg, IRStatusRC, DAGState, value, nextTrans_, FlagRCSequencerFailover, controllerLock, send_NIB_back_, IR2Remove, IRQueueRC, rowRemove_, localIRSet, IRIndex, SetScheduledIRsRC, SwSuspensionStatusRC, FlagOFCNIBEventHandlerFailover"/>
+    <stringAttribute key="modelBehaviorVars" value="transaction, topo_change, RC_READY, egressMsg, FirstInstallNIB, IRIndex_, OFCThreadID, nextIRToSent, FlagOFCWorkerFailover, ofaInMsg, rowRemove, idThreadWorkingOnIR, installedIRs, transaction_co, IRDoneSet, nxtDAG, NIBIRSet, ofaOutConfirmation, transaction_, setIRsInDAG, SwProcSet, FirstInstallOFC, NIB_READY_FOR_OFC, irID, obj, debug_, removedIR, failedElem, IRQueueNIB, controllerSubmoduleFailStat, nextTrans, switchStatus, prev_dag, transaction_con, IRQueueTmp, op_ir_status_change_, IRSet, ContProcSet, nxtDAGVertices, op_first_install, controllerStateNIB, Installer2OfaBuff, IRChangeForRC, IRQueue, swSeqChangedStatus, setIRsToReset, removeIR, controlMsgCounter, switch2Controller, topoChangeEvent, prev_dag_id, key, TCAM, masterState, sw_fail_ordering_var, TEEventQueue, IRQueueOFC, currIRInDAG, stepOfFailure_co, resetIR, debug_N, msg, stepOfFailure_, DAGID, currSetDownSw, SwSuspensionStatusNIB, Ofa2InstallerBuff, DAGEventQueue, NIB2RC, Ofa2NicAsicBuff, controllerStateOFC, dependencyGraph, failedSet, recoveredElem, sw_id, NIBThreadID, OFC2NIB, FlagNIBRCEventhandlerFailover, op_ir_status_change, IRStatusNIB, FlagNIBFailover, debug, SwSuspensionStatusOFC, init, SetScheduledIRsOFC, NIB2OFC, irTypeMapping, controllerSubmoduleFailNum, OFC_READY, rowRemove_N, newIRSet, ir2sw, NIBMsg, IRStatusOFC, ingressIR, currIR, nextIR, X2NIB_len, NIB_READY_FOR_RC, isBootStrap, DAGQueue, pc, nxtRCIRID, notFailedSet, stepOfFailure, MaxDAGID, op1, op2, workerThreadRanking, transaction_O, newIR, transaction_c, stepOfFailure_N, NIBMsg_, RCThreadID, NicAsic2OfaBuff, currDAG, setRemovableIRs, stepOfFailure_c, NIBUpdateForRC, toBeScheduledIRs, FlagRCNIBEventHandlerFailover, isBootStrap_, op1_, value_, RC2NIB, IR2Remove_, controller2Switch, SetScheduledIRs, send_NIB_back, rowIndex, idWorkerWorkingOnDAG, monitoringEvent, switchLock, controllerStateRC, ingressPkt, value_N, FlagOFCMonitorFailover, statusResolveMsg, installerInIR, switchOrdering, NIBMsg_O, X2NIB, FlagNIBOFCEventhandlerFailover, statusMsg, IRStatusRC, DAGState, value, RecoveryStatus, nextTrans_, FlagRCSequencerFailover, controllerLock, send_NIB_back_, IR2Remove, IRQueueRC, TopoChangeForRC, rowRemove_, localIRSet, IRIndex, SetScheduledIRsRC, SwSuspensionStatusRC, FlagOFCNIBEventHandlerFailover"/>
     <stringAttribute key="modelComments" value=""/>
     <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
     <listAttribute key="modelCorrectnessInvariants">
@@ -31,7 +31,8 @@
         <listEntry value="0Debug"/>
     </listAttribute>
     <listAttribute key="modelCorrectnessProperties">
-        <listEntry value="1InstallationLivenessProp"/>
+        <listEntry value="0InstallationLivenessProp"/>
+        <listEntry value="1InstallationInvProp"/>
     </listAttribute>
     <intAttribute key="modelEditorOpenTabs" value="14"/>
     <stringAttribute key="modelExpressionEval" value=""/>
@@ -65,7 +66,7 @@
         <listEntry value="RECONCILIATION_REQUEST;;RECONCILIATION_REQUEST;1;0"/>
         <listEntry value="OFA_IN;;OFA_IN;1;0"/>
         <listEntry value="IR_PENDING;;IR_PENDING;1;0"/>
-        <listEntry value="MaxNumIRs;;5;0;0"/>
+        <listEntry value="MaxNumIRs;;3;0;0"/>
         <listEntry value="INSTALLER_UP;;INSTALLER_UP;1;0"/>
         <listEntry value="WATCH_DOG;;WATCH_DOG;1;0"/>
         <listEntry value="INSTALLER_DOWN;;INSTALLER_DOWN;1;0"/>
@@ -118,7 +119,7 @@
         <listEntry value="TOPO_MOD;;TOPO_MOD;1;0"/>
         <listEntry value="CONT_TE;;CONT_TE;1;0"/>
         <listEntry value="SEQ_WORKER_STALE_REMOVED;;SEQ_WORKER_STALE_REMOVED;1;0"/>
-        <listEntry value="IR2SW;;(1 :&gt; s0) @@ (2 :&gt; s1) @@ (3 :&gt; s2) @@ (4 :&gt; s1) @@ (5 :&gt; s2);0;0"/>
+        <listEntry value="IR2SW;;(1 :&gt; s0) @@ (2 :&gt; s1) @@ (3 :&gt; s1);0;0"/>
         <listEntry value="DAG_SUBMIT;;DAG_SUBMIT;1;0"/>
         <listEntry value="SEQ_WORKER_RUN;;SEQ_WORKER_RUN;1;0"/>
         <listEntry value="DAG_STALE;;DAG_STALE;1;0"/>
@@ -127,9 +128,9 @@
         <listEntry value="DAG_UNLOCK;;DAG_UNLOCK;1;0"/>
         <listEntry value="CONT_BOSS_SEQ;;CONT_BOSS_SEQ;1;0"/>
         <listEntry value="DAG_NONE;;DAG_NONE;1;0"/>
-        <listEntry value="MaxNumFlows;;5;0;0"/>
-        <listEntry value="TOPO_DAG_MAPPING;;({} :&gt; [v |-&gt; {1, 2, 3}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;, &lt;&lt;1, 3&gt;&gt;}]) @@ ({s0} :&gt; [v |-&gt; {4, 5}, e |-&gt; {&lt;&lt;5, 4&gt;&gt;}]);0;0"/>
-        <listEntry value="FINAL_DAG;;[v |-&gt; {4, 5}, e |-&gt; {&lt;&lt;5, 4&gt;&gt;}];0;0"/>
+        <listEntry value="MaxNumFlows;;3;0;0"/>
+        <listEntry value="TOPO_DAG_MAPPING;;({} :&gt; [v |-&gt; {1, 2}, e |-&gt; {&lt;&lt;1, 2&gt;&gt;}]) @@ ({s0} :&gt; [v |-&gt; {3}, e |-&gt; {}]);0;0"/>
+        <listEntry value="FINAL_DAG;;[v |-&gt; {3}, e |-&gt; {}];0;0"/>
         <listEntry value="SEQ_WORKER_STALE_SIGNAL;;SEQ_WORKER_STALE_SIGNAL;1;0"/>
     </listAttribute>
     <stringAttribute key="modelParameterContraint" value=""/>
@@ -146,8 +147,8 @@
     <stringAttribute key="specName" value="ScenarioIII"/>
     <stringAttribute key="tlcResourcesProfile" value="local custom"/>
     <listAttribute key="traceExploreExpressions">
-        <listEntry value="0Host == LET n == _TEPosition&#10;        IN IF n = 1 &#10;           THEN &quot;Init&quot;&#10;           ELSE LET this == _TETrace[n].pc&#10;                    prev == _TETrace[n - 1].pc&#10;                IN CHOOSE p \in DOMAIN prev : prev[p] # this[p]"/>
-        <listEntry value="1TRUE"/>
+        <listEntry value="1Host == LET n == _TEPosition&#10;        IN IF n = 1 &#10;           THEN &quot;Init&quot;&#10;           ELSE LET this == _TETrace[n].pc&#10;                    prev == _TETrace[n - 1].pc&#10;                IN CHOOSE p \in DOMAIN prev : prev[p] # this[p]"/>
+        <listEntry value="0TRUE"/>
     </listAttribute>
     <stringAttribute key="view" value=""/>
     <booleanAttribute key="visualizeStateGraph" value="false"/>

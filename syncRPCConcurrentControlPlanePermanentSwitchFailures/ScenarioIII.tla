@@ -354,6 +354,8 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
               FlagRCNIBEventHandlerFailover = FALSE,
               FlagRCSequencerFailover = FALSE,
               RC_READY = FALSE,
+              IRChangeForRC = FALSE,
+              TopoChangeForRC = FALSE,
               (*********************** TE Vars ****************************)
               TEEventQueue = [x \in {rc0} |-> <<>>],
               DAGEventQueue = [x \in {rc0} |-> <<>>],
@@ -363,7 +365,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
               DAGState = [x \in 1..MaxDAGID |-> DAG_NONE],
               nxtRCIRID = MaxNumIRs + 10,
               idWorkerWorkingOnDAG = [x \in 1..MaxDAGID |-> DAG_UNLOCK],
-              RCSeqWorkerStatus = (CONT_WORKER_SEQ :> SEQ_WORKER_RUN),
+\*              RCSeqWorkerStatus = (CONT_WORKER_SEQ :> SEQ_WORKER_RUN),
               IRDoneSet = [x \in {rc0} |-> {}],
               (********************** OFC Vars ****************************)
               \************** Workers ********************
@@ -519,7 +521,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \*************************** switch failure process *****************
         returnSwitchElementsNotFailed(sw) == {x \in DOMAIN switchStatus[sw]: switchStatus[sw][x] = NotFailed}
         \* getSetIRsForSwitch is for verification optimization reasons
-        getSetIRsForSwitch(SID) == {x \in 1..MaxNumIRs: IR2SW[x] = SID}
+        getSetIRsForSwitch(SID) == {x \in 1..MaxNumIRs: ir2sw[x] = SID}
         
         \************************** switch failure recovery *****************
         returnSwitchFailedElements(sw) == {x \in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = Failed
@@ -591,8 +593,8 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         
         getSetIRsCanBeScheduledNextRC(DAG)  == {x \in DAG.v: /\ IRStatusRC[x] = IR_NONE
                                                                   /\ isDependencySatisfiedRC(DAG, x)
-                                                                  /\ SwSuspensionStatusRC[IR2SW[x]] = SW_RUN
-                                                                  /\ x \notin SetScheduledIRsRC[IR2SW[x]]}                                                          
+                                                                  /\ SwSuspensionStatusRC[ir2sw[x]] = SW_RUN
+                                                                  /\ x \notin SetScheduledIRsRC[ir2sw[x]]}                                                          
         removeInstalledIR(IRSet) == IF IRSet = {} 
                                     THEN IRSet
                                     ELSE {ir \in IRSet: IRStatusRC[ir] # IR_DONE}
@@ -603,6 +605,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         isRCReconciliation(id) == controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = InReconciliation
                     /\ controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = InReconciliation
         isDAGStale(id) == DAGState[id] # DAG_SUBMIT
+        isDAGReady(id) == DAGState[id] = DAG_SUBMIT
         allIRsInDAGInstalled(CID, DAG) == ~\E y \in DAG.v: IRStatusRC[y] # IR_DONE
         
         (****************** OFC (openflow controller) ************************)
@@ -637,7 +640,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
                                            /\ monEvent.status.installerStatus = INSTALLER_UP
         
-        getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ IR2SW[x] = SID
+        getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
                                                      /\ IRStatusNIB[x] \notin {IR_DONE, IR_NONE}}
                                                                              
         \*************************** Monitoring Server **********************
@@ -971,21 +974,27 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     begin
         \* controller only proceeds when the following two conditions 
         \* are satified;
-        await controllerLock = <<NO_LOCK, NO_LOCK>>;
+        await controllerLock \in {self, <<NO_LOCK, NO_LOCK>>};
         await switchLock = <<NO_LOCK, NO_LOCK>>;
     end macro
     \* =================================
     
+    \* ========= controller acquire Lock ==========
+    macro controllerAcquireLock()
+    begin
+        controllerWaitForLockFree();
+        controllerLock := self;
+    end macro    
+    \* ============================================
+    
     \* ========= controller release Lock ==========
-    macro controllerReleaseLock(prevLockHolder)
+    macro controllerReleaseLock()
     begin
         \* only the controller process itself can release the controller lock. 
-        await \/ controllerLock = prevLockHolder
-              \/ controllerLock = <<NO_LOCK, NO_LOCK>>;
-        await switchLock = <<NO_LOCK, NO_LOCK>>;
+        controllerWaitForLockFree();
         controllerLock := <<NO_LOCK, NO_LOCK>>;
     end macro
-    \* =================================    
+    \* =================================  
                   
     (*******************************************************************)
     (*                     Controller (Macros)                         *)
@@ -1048,16 +1057,16 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         assert irTypeMapping[s].type \in {INSTALL_FLOW, DELETE_FLOW};
         assert irTypeMapping[s].flow \in 1..MaxNumFlows;
         
-\*        controller2Switch[IR2SW[s]] := Append(controller2Switch[IR2SW[s]], [type |-> INSTALL_FLOW,
+\*        controller2Switch[ir2sw[s]] := Append(controller2Switch[ir2sw[s]], [type |-> INSTALL_FLOW,
 \*                                                                            to |-> IR2SW[s],
 \*                                                                            IR |-> s]);
         controller2Switch[ir2sw[s]] := Append(controller2Switch[ir2sw[s]], [type |-> irTypeMapping[s].type,
                                                                             to |-> ir2sw[s],
                                                                             flow |-> irTypeMapping[s].flow]);
-        if whichSwitchModel(IR2SW[s]) = SW_COMPLEX_MODEL then 
-            switchLock := <<NIC_ASIC_IN, IR2SW[s]>>;
+        if whichSwitchModel(ir2sw[s]) = SW_COMPLEX_MODEL then 
+            switchLock := <<NIC_ASIC_IN, ir2sw[s]>>;
         else
-            switchLock := <<SW_SIMPLE_ID, IR2SW[s]>>;
+            switchLock := <<SW_SIMPLE_ID, ir2sw[s]>>;
         end if;
     end macro;
     \* =================================
@@ -1248,6 +1257,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* This can simulate the scenario where switch detects OFC failure 
         \* after OFC has failed some time.
         await isOFCUp(OFCThreadID);
+        await swCanReceivePackets(self[2]); 
         await Len(controller2Switch[self[2]]) > 0;
         switchWaitForLock();
         ingressPkt := Head(controller2Switch[self[2]]);
@@ -1708,6 +1718,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     begin
     NIBDequeueRCTransaction:
     while TRUE do
+        controllerWaitForLockFree();
         send_NIB_back := "";
         if moduleIsUp(self) then
             await RC2NIB # <<>>;
@@ -1719,6 +1730,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         end if; 
         
         NIBProcessRCTransaction:   
+        controllerWaitForLockFree();
         if moduleIsUp(self) then
             NIBProcessTransaction();
             debug := 0;
@@ -1728,6 +1740,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         end if; 
             
         NIBUpdateRCIfAny:   
+        controllerWaitForLockFree();
         if moduleIsUp(self) then
             if send_NIB_back = "NIB2RC" then
                 await isRCUp(RCThreadID);
@@ -1759,6 +1772,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     begin
     NIBDequeueOFCTransaction:
     while TRUE do
+        controllerWaitForLockFree();
         send_NIB_back := "";
         if moduleIsUp(self) then
             await OFC2NIB # <<>>;
@@ -1769,7 +1783,8 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             goto NIBForOFCReconciliation;
         end if; 
         
-        NIBOFCProcessTransaction:   
+        NIBOFCProcessTransaction:
+        controllerWaitForLockFree();   
         if moduleIsUp(self) then
             NIBProcessTransaction();
             debug := 0;
@@ -1778,7 +1793,8 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             goto NIBForOFCReconciliation;
         end if; 
             
-        NIBOFCSendBackIfAny:   
+        NIBOFCSendBackIfAny:
+        controllerWaitForLockFree();   
         if moduleIsUp(self) then
             if send_NIB_back = "NIB2RC" then
                 await isRCUp(RCThreadID);
@@ -1829,6 +1845,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             RCReadNIB:
                 \* RC reads from NIB assuming that NIB has a dedicated thread for RC failover
                 \* such that RC can get NIB tables immediately
+                controllerWaitForLockFree();
                 await NIB_READY_FOR_RC \/ isNIBUp(NIBThreadID);
                 IRStatusRC := IRStatusNIB;
                 SwSuspensionStatusRC := SwSuspensionStatusNIB;
@@ -1842,6 +1859,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             
             \* Change RC status to up
             RCBack2Normal:
+            controllerWaitForLockFree();
             controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] := NotFailed ||
             controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] := NotFailed;
             NIBUpdateForRC := TRUE;
@@ -1851,15 +1869,16 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     \* ============ RC NIB Event Handler ==========
     fair process RCNIBEventHandler \in ({rc0} \X {CONT_RC_NIB_EVENT})
     variables NIBMsg = [value |-> [x |-> <<>>]], isBootStrap = TRUE, 
-              sw_id = 0;
+              sw_id = 0, transaction = <<>>;
     begin
     \* Read states from NIB
     RCSendReadTransaction:
             \* RC needs NIB to 1) notify OFC and 2) get IRStatus
             \* Therefore, if NIB is Failed, RC will stop scheduling new IRs
+        assert RC_READY = FALSE;
         controllerWaitForLockFree();
         if isRCFailed(self) then
-           FlagRCSequencerFailover := TRUE;
+           FlagRCNIBEventHandlerFailover := TRUE;
            goto RCNIBEventHandlerFailover;
         else
             await isNIBUp(NIBThreadID) \/ isNIBFailed(NIBThreadID);
@@ -1897,15 +1916,22 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                                               sw |-> sw_id, 
                                                               state |-> SW_SUSPEND]);
                     end if;
-                    \* SetScheduledIRsRC is as initialized
                     NIBUpdateForRC := TRUE;
                     isBootStrap := FALSE;
+                    \************************TE and Sequencer are waiting for RC_READY to be TRUE to start***********
+                    \************************Without failover, this is the single place that changes RC_READY to be TRUE 
+                    assert RC_READY = FALSE;
+                    RC_READY := TRUE;
                 \* If local and remote tables are different
                 elsif IRStatusRC # NIBMsg.value.IRStatusNIB 
                     \/ SwSuspensionStatusRC # NIBMsg.value.SwSuspensionStatusNIB then
                     \*************************IR Status Change************************
                     if IRStatusRC # NIBMsg.value.IRStatusNIB then 
-                        IRStatusRC := NIBMsg.value.IRStatusNIB;
+                        \* Only modify IRs with status change
+                        IRStatusRC := [ir \in DOMAIN IRStatusRC |-> IF ir \in DOMAIN NIBMsg.value.IRStatusNIB 
+                                                                       /\ IRStatusRC[ir]# NIBMsg.value.IRStatusNIB[ir]
+                                                                    THEN NIBMsg.value.IRStatusNIB[ir]
+                                                                    ELSE IRStatusRC[ir]];
                         \* remove DONE IR from SetScheduledIRsRC
                         SetScheduledIRsRC := [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
                                             THEN SetScheduledIRsRC[sw]
@@ -1913,6 +1939,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                                     IRStatusRC[ir] # IR_DONE}];
                         \* remove DONE IR from IRQueueRC
                         IRQueueRC := SelectSeq(IRQueueRC, LAMBDA i: IRStatusRC[i.IR] # IR_DONE);
+                        IRChangeForRC := TRUE;
                     end if;
                     \*************************Topology Change************************
                     if SwSuspensionStatusRC # NIBMsg.value.SwSuspensionStatusNIB then 
@@ -1922,6 +1949,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                         TEEventQueue[self[1]] := Append(TEEventQueue[self[1]], [type |-> TOPO_MOD, 
                                                               sw |-> sw_id, 
                                                               state |-> SW_SUSPEND]);
+                        TopoChangeForRC := TRUE;
                     end if;
                     NIBUpdateForRC := TRUE;
                 end if;
@@ -1946,8 +1974,9 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     while TRUE do
         await controllerIsMaster(self[1]);
         await moduleIsUp(self);
+        await RC_READY = TRUE;
         await init = 1 \/ TEEventQueue[self[1]] # <<>>;
-\*        controllerAcquireLock();
+        controllerAcquireLock();
         
         ControllerTEEventProcessing:
             while TEEventQueue[self[1]] # <<>> do 
@@ -1961,7 +1990,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 end if; 
                 TEEventQueue[self[1]] := Tail(TEEventQueue[self[1]]);
             end while;
-\*            controllerReleaseLock();
+            controllerReleaseLock();
         
         ControllerTEComputeDagBasedOnTopo:
             controllerWaitForLockFree();
@@ -1973,10 +2002,20 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 nxtDAGVertices := nxtDAG.dag.v;
                 if init = 0 then
                     DAGState[prev_dag_id] := DAG_STALE;
+                    
+                    \* boss sequencer replacement
+                    TEWaitSequencerTerminate:
+                    if idWorkerWorkingOnDAG[prev_dag_id] # DAG_UNLOCK then
+                            await idWorkerWorkingOnDAG[prev_dag_id] = DAG_UNLOCK;
+                            DAGState[prev_dag_id] := DAG_NONE;
+                    else
+                        DAGState[prev_dag_id] := DAG_NONE;
+                    end if;
+                    \*-------------------------
                 
-                    ControllerTESendDagStaleNotif:
-                        controllerWaitForLockFree();
-                        DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_STALE, id |-> prev_dag_id]);
+\*                    ControllerTESendDagStaleNotif:
+\*                        controllerWaitForLockFree();
+\*                        DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_STALE, id |-> prev_dag_id]);
                 
                     ControllerTEWaitForStaleDAGToBeRemoved:
                         controllerWaitForLockFree();
@@ -1993,7 +2032,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         
         ControllerTERemoveUnnecessaryIRs:
             while setRemovableIRs # {} do
-\*                controllerAcquireLock();
+                controllerAcquireLock();
                 currIR := CHOOSE x \in setRemovableIRs: TRUE;
                 setRemovableIRs := setRemovableIRs \ {currIR};
                 
@@ -2008,54 +2047,55 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                         
                 ControllerTEAddEdge:
                     while setIRsInDAG # {} do
-\*                        controllerAcquireLock();
+                        controllerAcquireLock();
                         currIRInDAG := CHOOSE x \in setIRsInDAG: TRUE;
                         setIRsInDAG := setIRsInDAG \ {currIRInDAG};
                         nxtDAG.dag.e := nxtDAG.dag.e \cup {<<nxtRCIRID, currIRInDAG>>};
                     end while;
                     nxtRCIRID := nxtRCIRID + 1;                
-\*                    controllerAcquireLock();
+                    controllerAcquireLock();
             end while;
-\*            controllerReleaseLock();
+            controllerReleaseLock();
             
         ControllerTESubmitNewDAG:
-\*            controllerReleaseLock();
+            controllerReleaseLock();
             DAGState[nxtDAG.id] := DAG_SUBMIT;
             DAGEventQueue[self[1]] := Append(DAGEventQueue[self[1]], [type |-> DAG_NEW, dag_obj |-> nxtDAG]);      
-    
+            \* boss sequencer replacement
+            DAGQueue[self[1]] := Append(DAGQueue[self[1]], nxtDAG);
     end while;
     end process
     \* =================================
     
-    \* ========= Boss Sequencer ========
-    fair process controllerBossSequencer \in ({rc0} \X {CONT_BOSS_SEQ})
-    variables seqEvent = [type |-> 0], worker = 0;
-    begin
-    ControllerBossSeqProc:
-    while TRUE do
-        await controllerIsMaster(self[1]);
-        await moduleIsUp(self);
-        await DAGEventQueue[self[1]] # <<>>;
-    
-        controllerWaitForLockFree();
-        seqEvent := Head(DAGEventQueue[self[1]]);
-        DAGEventQueue[self[1]] := Tail(DAGEventQueue[self[1]]);
-        assert seqEvent.type \in {DAG_NEW, DAG_STALE};
-        if seqEvent.type = DAG_NEW then
-            DAGQueue[self[1]] := Append(DAGQueue[self[1]], seqEvent.dag_obj);
-        else
-            worker := idWorkerWorkingOnDAG[seqEvent.id];
-            if worker # DAG_UNLOCK then
-                RCSeqWorkerStatus[CONT_WORKER_SEQ] := SEQ_WORKER_STALE_SIGNAL;
-                WaitForRCSeqWorkerTerminate:
-                    await idWorkerWorkingOnDAG[seqEvent.id] = DAG_UNLOCK;
-                    DAGState[seqEvent.id] := DAG_NONE;
-            else
-                DAGState[seqEvent.id] := DAG_NONE;
-            end if;
-        end if;
-    end while;
-    end process
+\*    \* ========= Boss Sequencer ========
+\*    fair process controllerBossSequencer \in ({rc0} \X {CONT_BOSS_SEQ})
+\*    variables seqEvent = [type |-> 0], worker = 0;
+\*    begin
+\*    ControllerBossSeqProc:
+\*    while TRUE do
+\*        await controllerIsMaster(self[1]);
+\*        await moduleIsUp(self);
+\*        await DAGEventQueue[self[1]] # <<>>;
+\*    
+\*        controllerWaitForLockFree();
+\*        seqEvent := Head(DAGEventQueue[self[1]]);
+\*        DAGEventQueue[self[1]] := Tail(DAGEventQueue[self[1]]);
+\*        assert seqEvent.type \in {DAG_NEW, DAG_STALE};
+\*        if seqEvent.type = DAG_NEW then
+\*            DAGQueue[self[1]] := Append(DAGQueue[self[1]], seqEvent.dag_obj);
+\*        else
+\*            worker := idWorkerWorkingOnDAG[seqEvent.id];
+\*            if worker # DAG_UNLOCK then
+\*\*                RCSeqWorkerStatus[CONT_WORKER_SEQ] := SEQ_WORKER_STALE_SIGNAL;
+\*                WaitForRCSeqWorkerTerminate:
+\*                    await idWorkerWorkingOnDAG[seqEvent.id] = DAG_UNLOCK;
+\*                    DAGState[seqEvent.id] := DAG_NONE;
+\*            else
+\*                DAGState[seqEvent.id] := DAG_NONE;
+\*            end if;
+\*        end if;
+\*    end while;
+\*    end process
     \* =================================
     
     \* ======== Worker Sequencers =======
@@ -2081,29 +2121,30 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \* 1) Retrieving the set of valid IRs
         await controllerIsMaster(self[1]);
         await moduleIsUp(self);
+        await RC_READY = TRUE;
         await DAGQueue[self[1]] # <<>>;
         controllerWaitForLockFree();
         currDAG := Head(DAGQueue[self[1]]);
         idWorkerWorkingOnDAG[currDAG.id] := self[2];
+        \* Every time a new DAG comes, the sequencer should try to compute next IRs
+        NIBUpdateForRC := TRUE;
         
 \*        ControllerWorkerSeqScheduleDAG:
         RCWorkerSeqScheduleDAG:
-            while ~allIRsInDAGInstalled(self[1], currDAG.dag) /\ ~isDAGStale(currDAG.id) do
+            while ~allIRsInDAGInstalled(self[1], currDAG.dag) /\ ~isDAGStale(currDAG.id)do
                 controllerWaitForLockFree();
-\*                RCComputeNextIR2Schedule:
-\*                    controllerWaitForLockFree();
                     if isRCFailed(self) then
                         FlagRCSequencerFailover := TRUE;
                         goto RCSequencerFailover;
                     else
+                        await NIBUpdateForRC;
                         toBeScheduledIRs := getSetIRsCanBeScheduledNextRC(currDAG.dag);
-                        NIBUpdateForRC := FALSE;
+\*                        await toBeScheduledIRs # {};
                         if toBeScheduledIRs = {} then
-                              \* stuttering if goto ControllerWorkerSeqScheduleDAG
-\*                            goto RCComputeNextIR2Schedule;
-                            if isDAGStale(currDAG.id) then
+                            if TopoChangeForRC then 
                                 goto RemoveDAGFromQueue;
                             else
+                                NIBUpdateForRC := FALSE;
                                 goto RCWorkerSeqScheduleDAG;
                             end if;
                         end if;
@@ -2124,7 +2165,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                         goto RCSequencerFailover;
                     else
                         nextIR := CHOOSE x \in toBeScheduledIRs: TRUE;
-                        SetScheduledIRsRC[IR2SW[nextIR]] := SetScheduledIRsRC[IR2SW[nextIR]] \cup {nextIR};
+                        SetScheduledIRsRC[ir2sw[nextIR]] := SetScheduledIRsRC[ir2sw[nextIR]] \cup {nextIR};
                         toBeScheduledIRs := toBeScheduledIRs\{nextIR};
                         IRQueueRC := Append(IRQueueRC, [IR |-> nextIR, tag |-> NO_TAG]);
                     end if;     
@@ -2158,13 +2199,18 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             \* Remove DAG from the DAG Queue
             RemoveDAGFromQueue:
                 controllerWaitForLockFree();
+                if TopoChangeForRC then 
+                    \* TE could be slower to update DAG to be STALE 
+                    await isDAGStale(currDAG.id);
+                    TopoChangeForRC := FALSE;    
+                end if;
                 idWorkerWorkingOnDAG[currDAG.id] := DAG_UNLOCK;
-                RCSeqWorkerStatus[self[2]] := SEQ_WORKER_RUN;
+\*                RCSeqWorkerStatus[self[2]] := SEQ_WORKER_RUN;
                 IRSet := currDAG.dag.v;
             
             AddDeleteDAGIRDoneSet:
                 while IRSet # {} /\ allIRsInDAGInstalled(self[1], currDAG.dag) do
-                    controllerWaitForLockFree();
+                    controllerAcquireLock();
                     nextIR := CHOOSE x \in IRSet: TRUE;
                     if irTypeMapping[nextIR].type = INSTALL_FLOW then
                         IRDoneSet[self[1]] := IRDoneSet[self[1]] \cup {nextIR};
@@ -2173,14 +2219,15 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                     end if;
                     IRSet := IRSet \ {nextIR};
                 end while; 
-\*                controllerReleaseLock();
                 if allIRsInDAGInstalled(self[1], currDAG.dag) \/ isDAGStale(currDAG.id) then
-                    RemoveDAGfromDAGQueue: 
+\*                    RemoveDAGfromDAGQueue: 
                         controllerWaitForLockFree();
                         DAGQueue[self[1]] := Tail(DAGQueue[self[1]]);
                 end if;
+                controllerReleaseLock();
+                
     end while;
-        RCSequencerFailover:
+    RCSequencerFailover:
         controllerWaitForLockFree();
         toBeScheduledIRs := {};
         await controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = NotFailed /\
@@ -2190,108 +2237,6 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     end process
     \* ========================== 
     
-    
-    \* ============ Simplified Sequencer ==========
-    \* Sequencer periodically gets all the valid IRs (those with satisfied
-    \* dependencies), run its scheduling mechanism to decide the order of
-    \* scheduling and then, schedule the IR
-\*    fair process controllerSequencer \in ({rc0} \X {CONT_SEQ})
-\*    variables toBeScheduledIRs = {}, key = "", op1 = [table |-> ""], 
-\*                op2 = [table |-> ""],
-\*                transaction = <<>>, 
-\*                nextIR = 0, stepOfFailure = 0;
-\*    begin
-\*    \* Read states from NIB
-\*    RCSendReadTransaction:
-\*            \* RC needs NIB to 1) notify OFC and 2) get IRStatus
-\*            \* Therefore, if NIB is Failed, RC will stop scheduling new IRs
-\*        controllerWaitForLockFree();
-\*        if isRCFailed(self) then
-\*           FlagRCSequencerFailover := TRUE;
-\*           goto RCSequencerFailover;
-\*        else
-\*            await isNIBUp(NIBThreadID);
-\*            transaction := [name |-> "SeqReadNIBStates"];
-\*            RC2NIB := RC2NIB \o <<transaction>>;
-\*        end if;
-\*        
-\*    RCComputeNextIR2Schedule:
-\*    while TRUE do    
-\*        controllerWaitForLockFree();
-\*        if isRCFailed(self) then
-\*            FlagRCSequencerFailover := TRUE;
-\*            goto RCSequencerFailover;
-\*        else
-\*            await NIBUpdateForRC;
-\*            toBeScheduledIRs := getSetIRsCanBeScheduledNextRC(self[1]);
-\*            NIBUpdateForRC := FALSE;
-\*            if toBeScheduledIRs = {} then
-\*                goto RCComputeNextIR2Schedule;
-\*            end if;
-\*        end if;
-\*        
-\*        SchedulerMechanism:
-\*        while TRUE do \* while toBeScheduledIRs # {} do
-\*            controllerWaitForLockFree();
-\*            if isRCFailed(self) then
-\*                FlagRCSequencerFailover := TRUE;
-\*                goto RCSequencerFailover;
-\*            else
-\*                nextIR := CHOOSE x \in toBeScheduledIRs: TRUE;
-\*                SetScheduledIRsRC[IR2SW[nextIR]] := SetScheduledIRsRC[IR2SW[nextIR]] \cup {nextIR};
-\*                toBeScheduledIRs := toBeScheduledIRs\{nextIR};
-\*                IRQueueRC := Append(IRQueueRC, [IR |-> nextIR, tag |-> NO_TAG]);
-\*            end if;     
-\*            
-\*            \* Send RCScheduleIRInOneStep transaction to NIB
-\*            RCSendPrepareIR2NIB:
-\*            controllerWaitForLockFree();
-\*            if isRCFailed(self) then
-\*                FlagRCSequencerFailover := TRUE;
-\*                goto RCSequencerFailover;
-\*            else
-\*                await isNIBUp(NIBThreadID);
-\*                op1 := [table |-> NIBT_IR_QUEUE, key |-> NULL, value |-> [IR |-> nextIR, tag |-> NO_TAG]];
-\*                transaction := [name |-> "RCScheduleIRInOneStep", ops |-> <<op1>>];
-\*                RC2NIB := RC2NIB \o <<transaction>>;  
-\*            
-\*                if toBeScheduledIRs = {} then
-\*                    goto RCComputeNextIR2Schedule;
-\*                end if;
-\*            end if;             
-\*        end while;                                                
-\*    end while;
-\*    
-\*    \* TODO(@mingyang): change the following to transactions. Since we do not consider failures now,
-\*    \* below logic will not be triggered for now.
-\*    ControllerSeqStateReconciliation:
-\*        \* After that the sequencer failed and the watchdog has restarted it.
-\*        \* Sequencer starts by calling the reconciliation function in which
-\*        \* it undoes some of the operations
-\*        
-\*        \* If the state of sequencer before failure is STATUS_START_SCHEDULING,
-\*        \* there is no evidence whether the sequencer has scheduled the IR or not,
-\*        \* therefore, it has to remove the IR from the Scheduled Set, so that 
-\*        \* it would reschedule the IR in the next round.
-\*        \* This may lead to redundant rescheduling. However, the workers in OFC
-\*        \* handle the redundant rescheduling scenario.   
-\*        await controllerIsMaster(self[1]);
-\*        await moduleIsUp(self);
-\*        controllerReleaseLock(self);
-\*        if(controllerStateNIB[self].type = STATUS_START_SCHEDULING) then
-\*            SetScheduledIRs[IR2SW[controllerStateNIB[self].next]] := 
-\*                        SetScheduledIRs[IR2SW[controllerStateNIB[self].next]]\{controllerStateNIB[self].next};
-\*        end if;
-\*        goto RCComputeNextIR2Schedule;
-\*        
-\*    RCSequencerFailover:
-\*        controllerWaitForLockFree();
-\*        toBeScheduledIRs := {};
-\*        await controllerSubmoduleFailStat[<<rc0,CONT_SEQ>>] = NotFailed /\
-\*                    controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed;
-\*        goto RCComputeNextIR2Schedule;
-\*    
-\*    end process
     
     
     (*******************************************************************)
@@ -2328,13 +2273,13 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     \* ==========================
     
     \* ======== NIB failure =====
-\*    fair process NIBFailureProc \in ( {"proc"} \X {NIB_FAILURE})
-\*    begin 
-\*        NIBFailure:
-\*            controllerWaitForLockFree();
-\*            controllerSubmoduleFailStat[<<nib0,CONT_NIB_RC_EVENT>>] := Failed ||
-\*            controllerSubmoduleFailStat[<<nib0,CONT_NIB_OFC_EVENT>>] := Failed;        
-\*    end process    
+    fair process NIBFailureProc \in ( {"proc"} \X {NIB_FAILURE})
+    begin 
+        NIBFailure:
+            controllerWaitForLockFree();
+            controllerSubmoduleFailStat[<<nib0,CONT_NIB_RC_EVENT>>] := Failed ||
+            controllerSubmoduleFailStat[<<nib0,CONT_NIB_OFC_EVENT>>] := Failed;        
+    end process    
     \* ==========================
     
     \* ======== RC failure =====
@@ -2379,6 +2324,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                         
             \* We are assuming a dedicated connection between switch and OFC for failover
             OFCReadSwitches:
+                controllerWaitForLockFree();
                 IRStatusOFC := [x \in 1..MaxNumIRs |-> IF x \in rangeSeq(installedIRs) 
                                                        THEN IR_DONE
                                                        ELSE IRStatusOFC[x]];
@@ -2388,6 +2334,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 OFC_READY := TRUE;
 
             OFCReadNIB:
+                controllerWaitForLockFree();
                 \* If NIB is up, OFC can read it directly.
                 \* If NIB is in reconciliation, NIB_READY_FOR_OFC could be false, therefore OFC should wait.
                 await NIB_READY_FOR_OFC \/ isNIBUp(NIBThreadID);
@@ -2400,6 +2347,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             \* Change RC status to up
             OFCBack2Normal:
 \*                IRStatus := IRStatusOFC;
+                controllerWaitForLockFree();
                 await isNIBUp(NIBThreadID) \/ isNIBReconciliation(NIBThreadID);
                 transaction := [name |-> "OFCOverrideIRStatus", 
                                         ops |-> <<IRStatusOFC, FirstInstallOFC>>];
@@ -2415,7 +2363,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     \* When it fails over, it reads switch status (up/down) from switches directly
     fair process OFCNIBEventHandler \in ({ofc0} \X {CONT_OFC_NIB_EVENT})
     variables NIBMsg = [value |-> [x |-> <<>>]], isBootStrap = TRUE,
-              localIRSet = {}, NIBIRSet = {};
+              localIRSet = {}, NIBIRSet = {}, newIRSet = {}, newIR = -1;
     begin
     OFCNIBEventHanderProc:
         while TRUE do
@@ -2427,11 +2375,19 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 await NIB2OFC # <<>>;
                 NIBMsg := Head(NIB2OFC);
                 NIB2OFC := Tail(NIB2OFC);
+                \* This condition signals the new IR addition, so we need to add the new IR to IRStatusOFC
+                if Cardinality(DOMAIN NIBMsg.value.IRStatusNIB) > Cardinality(DOMAIN IRStatusOFC) then
+                    newIRSet := DOMAIN NIBMsg.value.IRStatusNIB \ DOMAIN IRStatusOFC;
+                    assert Cardinality(newIRSet)=1;
+                    newIR := CHOOSE x \in newIRSet: TRUE;
+                    IRStatusOFC := IRStatusOFC @@ (newIR :> IR_NONE);
+                end if;
                 localIRSet := {IRQueueOFC[i].IR: i \in DOMAIN IRQueueOFC};
                 NIBIRSet := {NIBMsg.value.IRQueueNIB[i].IR: i \in DOMAIN NIBMsg.value.IRQueueNIB};
                 if localIRSet # NIBIRSet then
-                \* enqueue new IRs to be scheduled
-                    IRQueueOFC := SelectSeq(NIBMsg.value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE);
+                    \* enqueue new IRs to be scheduled
+                    \* "i.IR not \in DOMAIN IRStatusOFC" could happen if a new DAG is scheduled
+                    IRQueueOFC := SelectSeq(NIBMsg.value.IRQueueNIB, LAMBDA i: i.IR \notin DOMAIN IRStatusOFC \/ IRStatusOFC[i.IR] = IR_NONE);
                     assert Len(IRQueueOFC) <= MaxNumIRs;
                 end if;
             end if;
@@ -2631,7 +2587,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
          await controllerIsMaster(self[1]);
          await moduleIsUp(self);   
          await swSeqChangedStatus # <<>>; 
-         controllerReleaseLock(self);
+         controllerReleaseLock();
          if (controllerStateNIB[self].type = START_RESET_IR) then
             SwSuspensionStatusOFC[controllerStateNIB[self].sw] := SW_SUSPEND;
          end if;
@@ -2656,15 +2612,15 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         \***** 2.2. type = RECONCILIATION_RESPONCE -> sw's responce to the reconciliation 
         \*****              request. 
         await switch2Controller # <<>>;
+        controllerAcquireLock();
         msg := Head(switch2Controller);
         assert msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY, FLOW_STAT_REPLY};
 
-        
-        if msg.type \in {INSTALLED_SUCCESSFULLY} then
+        if msg.type \in {INSTALLED_SUCCESSFULLY, DELETED_SUCCESSFULLY} then
                 \* If msg type is INSTALLED_SUCCESSFULLY, we have to change the IR status
                 \* to IR_DONE. 
                 irID := getIRIDForFlow(msg.flow, msg.type);
-                assert msg.from = IR2SW[irID];
+                assert msg.from = ir2sw[irID];
                 
                 OFCUpdateIRDone:
                     controllerWaitForLockFree(); 
@@ -2677,6 +2633,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                     end if;
                 \* update NIB
                 OFCUpdateNIBIRDONE:
+                    controllerWaitForLockFree(); 
                     if isOFCFailed(self) then
                         FlagOFCMonitorFailover := TRUE;
                         goto OFCMonitorFailover;
@@ -2688,31 +2645,34 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                                         ops |-> <<op_ir_status_change, op_first_install>>];
                         OFC2NIB := OFC2NIB \o <<transaction>>;
                     end if;
-
-        elsif msg.type \in {DELETED_SUCCESSFULLY} then
-            irID := getRemovedIRID(msg.flow);
-            assert msg.from = IR2SW[removedIR];
+                OFCUpdateIRNone:
+                if msg.type = DELETED_SUCCESSFULLY then
+                    removedIR := getRemovedIRID(msg.flow);
+                    
+                        controllerWaitForLockFree(); 
+                        if isOFCFailed(self) then
+                            FlagOFCMonitorFailover := TRUE;
+                            goto OFCMonitorFailover;
+                        else
+                            IRStatusOFC[removedIR] := IR_NONE; 
+                            FirstInstallOFC[removedIR] := 0;
+                        end if;
+                        
+                    OFCUpdateNIBIRNone:
+                        controllerWaitForLockFree(); 
+                        if isOFCFailed(self) then
+                            FlagOFCMonitorFailover := TRUE;
+                            goto OFCMonitorFailover;
+                        else
+                            await isNIBUp(NIBThreadID);
+                            op_ir_status_change := [table |-> NIBT_IR_STATUS, key |-> removedIR, value |-> IR_NONE];
+                            op_first_install  := [table |-> NIBT_FIRST_INSTALL, key |-> removedIR, value |-> 0];
+                            transaction := [name |-> "FirstInstallIR", 
+                                        ops |-> <<op_ir_status_change, op_first_install>>];
+                            OFC2NIB := OFC2NIB \o <<transaction>>;
+                        end if;    
+                end if;
                 
-            OFCUpdateIRNone:
-                    controllerWaitForLockFree(); 
-                    if isOFCFailed(self) then
-                        FlagOFCMonitorFailover := TRUE;
-                        goto OFCMonitorFailover;
-                    else
-                        IRStatusOFC[irID] := IR_NONE; 
-                    end if;
-                \* update NIB
-            OFCUpdateNIBIRNone:
-                    if isOFCFailed(self) then
-                        FlagOFCMonitorFailover := TRUE;
-                        goto OFCMonitorFailover;
-                    else
-                        await isNIBUp(NIBThreadID);
-                        op_ir_status_change := [table |-> NIBT_IR_STATUS, key |-> irID, value |-> IR_NONE];
-                        transaction := [name |-> "ChangeIRDoneToNone", 
-                                        ops |-> <<op_ir_status_change>>];
-                        OFC2NIB := OFC2NIB \o <<transaction>>;
-                    end if;
         else 
             assert FALSE;
         end if;
@@ -2767,29 +2727,30 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     end algorithm
 *)
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-9127619cdc4f88afed7c37e8130af8cd (chksum(pcal) = "cb8e9368" /\ chksum(tla) = "9d4abbb1") (chksum(pcal) = "693f78c9" /\ chksum(tla) = "df5ffee9") (chksum(pcal) \in STRING /\ chksum(tla) \in STRING) (chksum(pcal) = "1bcf2871" /\ chksum(tla) = "c11ffdac")
-\* Process variable value of process NIBFailoverProc at line 1663 col 15 changed to value_
-\* Process variable nextTrans of process NIBRCEventHandler at line 1705 col 15 changed to nextTrans_
-\* Process variable value of process NIBRCEventHandler at line 1705 col 42 changed to value_N
-\* Process variable rowRemove of process NIBRCEventHandler at line 1705 col 56 changed to rowRemove_
-\* Process variable IR2Remove of process NIBRCEventHandler at line 1706 col 15 changed to IR2Remove_
-\* Process variable send_NIB_back of process NIBRCEventHandler at line 1706 col 30 changed to send_NIB_back_
-\* Process variable stepOfFailure of process NIBRCEventHandler at line 1706 col 50 changed to stepOfFailure_
-\* Process variable IRIndex of process NIBRCEventHandler at line 1707 col 15 changed to IRIndex_
-\* Process variable debug of process NIBRCEventHandler at line 1707 col 29 changed to debug_
-\* Process variable rowRemove of process NIBOFCEventHandler at line 1756 col 56 changed to rowRemove_N
-\* Process variable stepOfFailure of process NIBOFCEventHandler at line 1757 col 50 changed to stepOfFailure_N
-\* Process variable debug of process NIBOFCEventHandler at line 1758 col 29 changed to debug_N
-\* Process variable NIBMsg of process RCNIBEventHandler at line 1853 col 15 changed to NIBMsg_
-\* Process variable isBootStrap of process RCNIBEventHandler at line 1853 col 50 changed to isBootStrap_
-\* Process variable transaction of process controllerSequencer at line 2068 col 17 changed to transaction_
-\* Process variable stepOfFailure of process controllerSequencer at line 2069 col 17 changed to stepOfFailure_c
-\* Process variable op1 of process controllerSequencer at line 2073 col 17 changed to op1_
-\* Process variable transaction of process OFCFailoverProc at line 2353 col 15 changed to transaction_O
-\* Process variable NIBMsg of process OFCNIBEventHandler at line 2417 col 15 changed to NIBMsg_O
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 2448 col 64 changed to stepOfFailure_co
-\* Process variable transaction of process controllerWorkerThreads at line 2449 col 15 changed to transaction_c
-\* Process variable op_ir_status_change of process controllerWorkerThreads at line 2451 col 15 changed to op_ir_status_change_
-\* Process variable transaction of process controllerEventHandler at line 2550 col 47 changed to transaction_co
+\* Process variable value of process NIBFailoverProc at line 1673 col 15 changed to value_
+\* Process variable nextTrans of process NIBRCEventHandler at line 1715 col 15 changed to nextTrans_
+\* Process variable value of process NIBRCEventHandler at line 1715 col 42 changed to value_N
+\* Process variable rowRemove of process NIBRCEventHandler at line 1715 col 56 changed to rowRemove_
+\* Process variable IR2Remove of process NIBRCEventHandler at line 1716 col 15 changed to IR2Remove_
+\* Process variable send_NIB_back of process NIBRCEventHandler at line 1716 col 30 changed to send_NIB_back_
+\* Process variable stepOfFailure of process NIBRCEventHandler at line 1716 col 50 changed to stepOfFailure_
+\* Process variable IRIndex of process NIBRCEventHandler at line 1717 col 15 changed to IRIndex_
+\* Process variable debug of process NIBRCEventHandler at line 1717 col 29 changed to debug_
+\* Process variable rowRemove of process NIBOFCEventHandler at line 1769 col 56 changed to rowRemove_N
+\* Process variable stepOfFailure of process NIBOFCEventHandler at line 1770 col 50 changed to stepOfFailure_N
+\* Process variable debug of process NIBOFCEventHandler at line 1771 col 29 changed to debug_N
+\* Process variable NIBMsg of process RCNIBEventHandler at line 1871 col 15 changed to NIBMsg_
+\* Process variable isBootStrap of process RCNIBEventHandler at line 1871 col 50 changed to isBootStrap_
+\* Process variable transaction of process RCNIBEventHandler at line 1872 col 26 changed to transaction_
+\* Process variable transaction of process controllerSequencer at line 2108 col 17 changed to transaction_c
+\* Process variable stepOfFailure of process controllerSequencer at line 2109 col 17 changed to stepOfFailure_c
+\* Process variable op1 of process controllerSequencer at line 2113 col 17 changed to op1_
+\* Process variable transaction of process OFCFailoverProc at line 2298 col 15 changed to transaction_O
+\* Process variable NIBMsg of process OFCNIBEventHandler at line 2365 col 15 changed to NIBMsg_O
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 2404 col 64 changed to stepOfFailure_co
+\* Process variable transaction of process controllerWorkerThreads at line 2405 col 15 changed to transaction_co
+\* Process variable op_ir_status_change of process controllerWorkerThreads at line 2407 col 15 changed to op_ir_status_change_
+\* Process variable transaction of process controllerEventHandler at line 2506 col 47 changed to transaction_con
 VARIABLES switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB, 
           sw_fail_ordering_var, ContProcSet, SwProcSet, irTypeMapping, 
           swSeqChangedStatus, controller2Switch, switch2Controller, 
@@ -2799,14 +2760,13 @@ VARIABLES switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB,
           controllerSubmoduleFailStat, switchOrdering, dependencyGraph, ir2sw, 
           NIBUpdateForRC, controllerStateRC, IRStatusRC, SwSuspensionStatusRC, 
           IRQueueRC, SetScheduledIRsRC, FlagRCNIBEventHandlerFailover, 
-          FlagRCSequencerFailover, RC_READY, TEEventQueue, DAGEventQueue, 
-          DAGQueue, DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-          idWorkerWorkingOnDAG, RCSeqWorkerStatus, IRDoneSet, 
-          idThreadWorkingOnIR, workerThreadRanking, controllerStateOFC, 
-          IRStatusOFC, IRQueueOFC, SwSuspensionStatusOFC, SetScheduledIRsOFC, 
-          FlagOFCWorkerFailover, FlagOFCMonitorFailover, 
-          FlagOFCNIBEventHandlerFailover, OFCThreadID, OFC_READY, NIB2OFC, 
-          NIB2RC, X2NIB, OFC2NIB, RC2NIB, FlagNIBFailover, 
+          FlagRCSequencerFailover, RC_READY, IRChangeForRC, TopoChangeForRC, 
+          TEEventQueue, DAGEventQueue, DAGQueue, DAGID, MaxDAGID, DAGState, 
+          nxtRCIRID, idWorkerWorkingOnDAG, IRDoneSet, idThreadWorkingOnIR, 
+          workerThreadRanking, controllerStateOFC, IRStatusOFC, IRQueueOFC, 
+          SwSuspensionStatusOFC, SetScheduledIRsOFC, FlagOFCWorkerFailover, 
+          FlagOFCMonitorFailover, FlagOFCNIBEventHandlerFailover, OFCThreadID, 
+          OFC_READY, NIB2OFC, NIB2RC, X2NIB, OFC2NIB, RC2NIB, FlagNIBFailover, 
           FlagNIBRCEventhandlerFailover, FlagNIBOFCEventhandlerFailover, 
           NIB_READY_FOR_RC, NIB_READY_FOR_OFC, masterState, 
           controllerStateNIB, IRStatusNIB, SwSuspensionStatusNIB, IRQueueNIB, 
@@ -2902,7 +2862,7 @@ swCanInstallIRs(sw) == /\ switchStatus[sw].installer = NotFailed
 
 returnSwitchElementsNotFailed(sw) == {x \in DOMAIN switchStatus[sw]: switchStatus[sw][x] = NotFailed}
 
-getSetIRsForSwitch(SID) == {x \in 1..MaxNumIRs: IR2SW[x] = SID}
+getSetIRsForSwitch(SID) == {x \in 1..MaxNumIRs: ir2sw[x] = SID}
 
 
 returnSwitchFailedElements(sw) == {x \in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = Failed
@@ -2974,8 +2934,8 @@ isDependencySatisfiedRC(DAG, ir) == ~\E y \in DAG.v: /\ <<y, ir>> \in DAG.e
 
 getSetIRsCanBeScheduledNextRC(DAG)  == {x \in DAG.v: /\ IRStatusRC[x] = IR_NONE
                                                           /\ isDependencySatisfiedRC(DAG, x)
-                                                          /\ SwSuspensionStatusRC[IR2SW[x]] = SW_RUN
-                                                          /\ x \notin SetScheduledIRsRC[IR2SW[x]]}
+                                                          /\ SwSuspensionStatusRC[ir2sw[x]] = SW_RUN
+                                                          /\ x \notin SetScheduledIRsRC[ir2sw[x]]}
 removeInstalledIR(IRSet) == IF IRSet = {}
                             THEN IRSet
                             ELSE {ir \in IRSet: IRStatusRC[ir] # IR_DONE}
@@ -2986,6 +2946,7 @@ isRCUp(id) == controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = NotFailed
 isRCReconciliation(id) == controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = InReconciliation
             /\ controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = InReconciliation
 isDAGStale(id) == DAGState[id] # DAG_SUBMIT
+isDAGReady(id) == DAGState[id] = DAG_SUBMIT
 allIRsInDAGInstalled(CID, DAG) == ~\E y \in DAG.v: IRStatusRC[y] # IR_DONE
 
 
@@ -3020,7 +2981,7 @@ shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
 canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
                                    /\ monEvent.status.installerStatus = INSTALLER_UP
 
-getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ IR2SW[x] = SID
+getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
                                              /\ IRStatusNIB[x] \notin {IR_DONE, IR_NONE}}
 
 
@@ -3046,16 +3007,16 @@ VARIABLES ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation,
           rowRemove_, IR2Remove_, send_NIB_back_, stepOfFailure_, IRIndex_, 
           debug_, nextTrans, value, rowRemove_N, IR2Remove, send_NIB_back, 
           stepOfFailure_N, IRIndex, debug_N, NIBMsg_, isBootStrap_, sw_id, 
-          topoChangeEvent, currSetDownSw, prev_dag_id, init, nxtDAG, 
-          setRemovableIRs, currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, 
-          prev_dag, seqEvent, worker, toBeScheduledIRs, nextIR, transaction_, 
+          transaction_, topoChangeEvent, currSetDownSw, prev_dag_id, init, 
+          nxtDAG, setRemovableIRs, currIR, currIRInDAG, nxtDAGVertices, 
+          setIRsInDAG, prev_dag, toBeScheduledIRs, nextIR, transaction_c, 
           stepOfFailure_c, currDAG, IRSet, key, op1_, op2, debug, 
           transaction_O, IRQueueTmp, NIBMsg_O, isBootStrap, localIRSet, 
-          NIBIRSet, nextIRToSent, rowIndex, rowRemove, stepOfFailure_co, 
-          transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, removeIR, 
-          monitoringEvent, setIRsToReset, resetIR, stepOfFailure, 
-          transaction_co, topo_change, irID, removedIR, msg, 
-          op_ir_status_change, op_first_install, transaction
+          NIBIRSet, newIRSet, newIR, nextIRToSent, rowIndex, rowRemove, 
+          stepOfFailure_co, transaction_co, NIBMsg, op1, IRQueue, 
+          op_ir_status_change_, removeIR, monitoringEvent, setIRsToReset, 
+          resetIR, stepOfFailure, transaction_con, topo_change, irID, 
+          removedIR, msg, op_ir_status_change, op_first_install, transaction
 
 vars == << switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB, 
            sw_fail_ordering_var, ContProcSet, SwProcSet, irTypeMapping, 
@@ -3067,35 +3028,36 @@ vars == << switchLock, controllerLock, FirstInstallOFC, FirstInstallNIB,
            ir2sw, NIBUpdateForRC, controllerStateRC, IRStatusRC, 
            SwSuspensionStatusRC, IRQueueRC, SetScheduledIRsRC, 
            FlagRCNIBEventHandlerFailover, FlagRCSequencerFailover, RC_READY, 
-           TEEventQueue, DAGEventQueue, DAGQueue, DAGID, MaxDAGID, DAGState, 
-           nxtRCIRID, idWorkerWorkingOnDAG, RCSeqWorkerStatus, IRDoneSet, 
-           idThreadWorkingOnIR, workerThreadRanking, controllerStateOFC, 
-           IRStatusOFC, IRQueueOFC, SwSuspensionStatusOFC, SetScheduledIRsOFC, 
-           FlagOFCWorkerFailover, FlagOFCMonitorFailover, 
-           FlagOFCNIBEventHandlerFailover, OFCThreadID, OFC_READY, NIB2OFC, 
-           NIB2RC, X2NIB, OFC2NIB, RC2NIB, FlagNIBFailover, 
-           FlagNIBRCEventhandlerFailover, FlagNIBOFCEventhandlerFailover, 
-           NIB_READY_FOR_RC, NIB_READY_FOR_OFC, masterState, 
-           controllerStateNIB, IRStatusNIB, SwSuspensionStatusNIB, IRQueueNIB, 
-           SetScheduledIRs, X2NIB_len, NIBThreadID, RCThreadID, pc, 
-           ingressPkt, ingressIR, egressMsg, ofaInMsg, ofaOutConfirmation, 
-           installerInIR, statusMsg, notFailedSet, failedElem, obj, failedSet, 
-           statusResolveMsg, recoveredElem, value_, nextTrans_, value_N, 
-           rowRemove_, IR2Remove_, send_NIB_back_, stepOfFailure_, IRIndex_, 
-           debug_, nextTrans, value, rowRemove_N, IR2Remove, send_NIB_back, 
-           stepOfFailure_N, IRIndex, debug_N, NIBMsg_, isBootStrap_, sw_id, 
+           IRChangeForRC, TopoChangeForRC, TEEventQueue, DAGEventQueue, 
+           DAGQueue, DAGID, MaxDAGID, DAGState, nxtRCIRID, 
+           idWorkerWorkingOnDAG, IRDoneSet, idThreadWorkingOnIR, 
+           workerThreadRanking, controllerStateOFC, IRStatusOFC, IRQueueOFC, 
+           SwSuspensionStatusOFC, SetScheduledIRsOFC, FlagOFCWorkerFailover, 
+           FlagOFCMonitorFailover, FlagOFCNIBEventHandlerFailover, 
+           OFCThreadID, OFC_READY, NIB2OFC, NIB2RC, X2NIB, OFC2NIB, RC2NIB, 
+           FlagNIBFailover, FlagNIBRCEventhandlerFailover, 
+           FlagNIBOFCEventhandlerFailover, NIB_READY_FOR_RC, 
+           NIB_READY_FOR_OFC, masterState, controllerStateNIB, IRStatusNIB, 
+           SwSuspensionStatusNIB, IRQueueNIB, SetScheduledIRs, X2NIB_len, 
+           NIBThreadID, RCThreadID, pc, ingressPkt, ingressIR, egressMsg, 
+           ofaInMsg, ofaOutConfirmation, installerInIR, statusMsg, 
+           notFailedSet, failedElem, obj, failedSet, statusResolveMsg, 
+           recoveredElem, value_, nextTrans_, value_N, rowRemove_, IR2Remove_, 
+           send_NIB_back_, stepOfFailure_, IRIndex_, debug_, nextTrans, value, 
+           rowRemove_N, IR2Remove, send_NIB_back, stepOfFailure_N, IRIndex, 
+           debug_N, NIBMsg_, isBootStrap_, sw_id, transaction_, 
            topoChangeEvent, currSetDownSw, prev_dag_id, init, nxtDAG, 
            setRemovableIRs, currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, 
-           prev_dag, seqEvent, worker, toBeScheduledIRs, nextIR, transaction_, 
-           stepOfFailure_c, currDAG, IRSet, key, op1_, op2, debug, 
-           transaction_O, IRQueueTmp, NIBMsg_O, isBootStrap, localIRSet, 
-           NIBIRSet, nextIRToSent, rowIndex, rowRemove, stepOfFailure_co, 
-           transaction_c, NIBMsg, op1, IRQueue, op_ir_status_change_, 
+           prev_dag, toBeScheduledIRs, nextIR, transaction_c, stepOfFailure_c, 
+           currDAG, IRSet, key, op1_, op2, debug, transaction_O, IRQueueTmp, 
+           NIBMsg_O, isBootStrap, localIRSet, NIBIRSet, newIRSet, newIR, 
+           nextIRToSent, rowIndex, rowRemove, stepOfFailure_co, 
+           transaction_co, NIBMsg, op1, IRQueue, op_ir_status_change_, 
            removeIR, monitoringEvent, setIRsToReset, resetIR, stepOfFailure, 
-           transaction_co, topo_change, irID, removedIR, msg, 
+           transaction_con, topo_change, irID, removedIR, msg, 
            op_ir_status_change, op_first_install, transaction >>
 
-ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({"proc"} \X {CONT_NIB_FAILOVER})) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({nib0} \X {CONT_NIB_OFC_EVENT})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_TE})) \cup (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup (({"proc"} \X {OFC_FAILOVER})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
+ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({NIC_ASIC_IN} \X SW)) \cup (({NIC_ASIC_OUT} \X SW)) \cup (({OFA_IN} \X SW)) \cup (({OFA_OUT} \X SW)) \cup (({INSTALLER} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({GHOST_UNLOCK_PROC} \X SW)) \cup (({"proc"} \X {CONT_NIB_FAILOVER})) \cup (({nib0} \X {CONT_NIB_RC_EVENT})) \cup (({nib0} \X {CONT_NIB_OFC_EVENT})) \cup (({"proc"} \X {RC_FAILOVER})) \cup (({rc0} \X {CONT_RC_NIB_EVENT})) \cup (({rc0} \X {CONT_TE})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup (( {"proc"} \X {NIB_FAILURE})) \cup (({"proc"} \X {OFC_FAILOVER})) \cup (({ofc0} \X {CONT_OFC_NIB_EVENT})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
 
 Init == (* Global variables *)
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
@@ -3142,6 +3104,8 @@ Init == (* Global variables *)
         /\ FlagRCNIBEventHandlerFailover = FALSE
         /\ FlagRCSequencerFailover = FALSE
         /\ RC_READY = FALSE
+        /\ IRChangeForRC = FALSE
+        /\ TopoChangeForRC = FALSE
         /\ TEEventQueue = [x \in {rc0} |-> <<>>]
         /\ DAGEventQueue = [x \in {rc0} |-> <<>>]
         /\ DAGQueue = [x \in {rc0} |-> <<>>]
@@ -3150,7 +3114,6 @@ Init == (* Global variables *)
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
         /\ nxtRCIRID = MaxNumIRs + 10
         /\ idWorkerWorkingOnDAG = [x \in 1..MaxDAGID |-> DAG_UNLOCK]
-        /\ RCSeqWorkerStatus = (CONT_WORKER_SEQ :> SEQ_WORKER_RUN)
         /\ IRDoneSet = [x \in {rc0} |-> {}]
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK]
         /\ workerThreadRanking = (CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]: ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
@@ -3228,6 +3191,7 @@ Init == (* Global variables *)
         /\ NIBMsg_ = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> [value |-> [x |-> <<>>]]]
         /\ isBootStrap_ = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> TRUE]
         /\ sw_id = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> 0]
+        /\ transaction_ = [self \in ({rc0} \X {CONT_RC_NIB_EVENT}) |-> <<>>]
         (* Process controllerTrafficEngineering *)
         /\ topoChangeEvent = [self \in ({rc0} \X {CONT_TE}) |-> [type |-> 0]]
         /\ currSetDownSw = [self \in ({rc0} \X {CONT_TE}) |-> {}]
@@ -3240,13 +3204,10 @@ Init == (* Global variables *)
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setIRsInDAG = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ prev_dag = [self \in ({rc0} \X {CONT_TE}) |-> [e |-> {}, v |-> {}]]
-        (* Process controllerBossSequencer *)
-        /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> [type |-> 0]]
-        /\ worker = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> 0]
         (* Process controllerSequencer *)
         /\ toBeScheduledIRs = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
         /\ nextIR = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
-        /\ transaction_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> <<>>]
+        /\ transaction_c = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> <<>>]
         /\ stepOfFailure_c = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
         /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> [dag |-> 0]]
         /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
@@ -3262,12 +3223,14 @@ Init == (* Global variables *)
         /\ isBootStrap = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> TRUE]
         /\ localIRSet = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> {}]
         /\ NIBIRSet = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> {}]
+        /\ newIRSet = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> {}]
+        /\ newIR = [self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) |-> -1]
         (* Process controllerWorkerThreads *)
         /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ rowRemove = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ stepOfFailure_co = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
-        /\ transaction_c = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> <<>>]
+        /\ transaction_co = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> <<>>]
         /\ NIBMsg = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [value |-> [x |-> <<>>]]]
         /\ op1 = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> [table |-> ""]]
         /\ IRQueue = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> <<>>]
@@ -3278,7 +3241,7 @@ Init == (* Global variables *)
         /\ setIRsToReset = [self \in ({ofc0} \X {CONT_EVENT}) |-> {}]
         /\ resetIR = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
         /\ stepOfFailure = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
-        /\ transaction_co = [self \in ({ofc0} \X {CONT_EVENT}) |-> <<>>]
+        /\ transaction_con = [self \in ({ofc0} \X {CONT_EVENT}) |-> <<>>]
         /\ topo_change = [self \in ({ofc0} \X {CONT_EVENT}) |-> [table |-> ""]]
         (* Process controllerMonitoringServer *)
         /\ irID = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
@@ -3302,8 +3265,8 @@ Init == (* Global variables *)
                                         [] self \in ({"proc"} \X {RC_FAILOVER}) -> "RCFailoverResetStates"
                                         [] self \in ({rc0} \X {CONT_RC_NIB_EVENT}) -> "RCSendReadTransaction"
                                         [] self \in ({rc0} \X {CONT_TE}) -> "ControllerTEProc"
-                                        [] self \in ({rc0} \X {CONT_BOSS_SEQ}) -> "ControllerBossSeqProc"
                                         [] self \in ({rc0} \X {CONT_WORKER_SEQ}) -> "RCWorkerSeqProc"
+                                        [] self \in ( {"proc"} \X {NIB_FAILURE}) -> "NIBFailure"
                                         [] self \in ({"proc"} \X {OFC_FAILOVER}) -> "OFCFailoverResetStates"
                                         [] self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) -> "OFCNIBEventHanderProc"
                                         [] self \in ({ofc0} \X CONTROLLER_THREAD_POOL) -> "OFCThreadGetNextIR"
@@ -3313,6 +3276,7 @@ Init == (* Global variables *)
 SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ whichSwitchModel(self[2]) = SW_SIMPLE_MODEL
                              /\ isOFCUp(OFCThreadID)
+                             /\ swCanReceivePackets(self[2])
                              /\ Len(controller2Switch[self[2]]) > 0
                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                              /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
@@ -3331,7 +3295,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                         /\ UNCHANGED installedIRs
                              /\ Assert(\/ switchLock[2] = self[2]
                                        \/ switchLock[2] = NO_LOCK, 
-                                       "Failure of assertion at line 963, column 9 of macro called at line 1268, column 9.")
+                                       "Failure of assertion at line 966, column 9 of macro called at line 1278, column 9.")
                              /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3352,11 +3316,11 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -3388,25 +3352,26 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             setIRsInDAG, prev_dag, 
+                                             toBeScheduledIRs, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
@@ -3419,7 +3384,7 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                          /\ ingressIR' = [ingressIR EXCEPT ![self] = Head(controller2Switch[self[2]])]
                          /\ Assert(\/ ingressIR'[self].type = RECONCILIATION_REQUEST
                                    \/ ingressIR'[self].type = INSTALL_FLOW, 
-                                   "Failure of assertion at line 1293, column 9.")
+                                   "Failure of assertion at line 1303, column 9.")
                          /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                          /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                          /\ switchLock' = self
@@ -3443,10 +3408,10 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRStatusOFC, 
@@ -3476,22 +3441,23 @@ SwitchRcvPacket(self) == /\ pc[self] = "SwitchRcvPacket"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
@@ -3535,12 +3501,13 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       SetScheduledIRsRC, 
                                                       FlagRCNIBEventHandlerFailover, 
                                                       FlagRCSequencerFailover, 
-                                                      RC_READY, TEEventQueue, 
+                                                      RC_READY, IRChangeForRC, 
+                                                      TopoChangeForRC, 
+                                                      TEEventQueue, 
                                                       DAGEventQueue, DAGQueue, 
                                                       DAGID, MaxDAGID, 
                                                       DAGState, nxtRCIRID, 
                                                       idWorkerWorkingOnDAG, 
-                                                      RCSeqWorkerStatus, 
                                                       IRDoneSet, 
                                                       idThreadWorkingOnIR, 
                                                       workerThreadRanking, 
@@ -3584,6 +3551,7 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       stepOfFailure_N, IRIndex, 
                                                       debug_N, NIBMsg_, 
                                                       isBootStrap_, sw_id, 
+                                                      transaction_, 
                                                       topoChangeEvent, 
                                                       currSetDownSw, 
                                                       prev_dag_id, init, 
@@ -3591,25 +3559,25 @@ SwitchNicAsicInsertToOfaBuff(self) == /\ pc[self] = "SwitchNicAsicInsertToOfaBuf
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
                                                       setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
                                                       toBeScheduledIRs, nextIR, 
-                                                      transaction_, 
+                                                      transaction_c, 
                                                       stepOfFailure_c, currDAG, 
                                                       IRSet, key, op1_, op2, 
                                                       debug, transaction_O, 
                                                       IRQueueTmp, NIBMsg_O, 
                                                       isBootStrap, localIRSet, 
-                                                      NIBIRSet, nextIRToSent, 
+                                                      NIBIRSet, newIRSet, 
+                                                      newIR, nextIRToSent, 
                                                       rowIndex, rowRemove, 
                                                       stepOfFailure_co, 
-                                                      transaction_c, NIBMsg, 
+                                                      transaction_co, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
                                                       removeIR, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, 
-                                                      transaction_co, 
+                                                      transaction_con, 
                                                       topo_change, irID, 
                                                       removedIR, msg, 
                                                       op_ir_status_change, 
@@ -3629,7 +3597,7 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                              /\ Assert(\/ egressMsg'[self].type = INSTALLED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECEIVED_SUCCESSFULLY
                                        \/ egressMsg'[self].type = RECONCILIATION_RESPONSE, 
-                                       "Failure of assertion at line 1321, column 9.")
+                                       "Failure of assertion at line 1331, column 9.")
                              /\ Ofa2NicAsicBuff' = [Ofa2NicAsicBuff EXCEPT ![self[2]] = Tail(Ofa2NicAsicBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchNicAsicSendOutMsg"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3652,11 +3620,11 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -3688,25 +3656,26 @@ SwitchFromOFAPacket(self) == /\ pc[self] = "SwitchFromOFAPacket"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             setIRsInDAG, prev_dag, 
+                                             toBeScheduledIRs, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
@@ -3716,7 +3685,7 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                             /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                                             /\ Assert(\/ switchLock[2] = self[2]
                                                       \/ switchLock[2] = NO_LOCK, 
-                                                      "Failure of assertion at line 963, column 9 of macro called at line 1330, column 17.")
+                                                      "Failure of assertion at line 966, column 9 of macro called at line 1340, column 17.")
                                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                                             /\ switch2Controller' = Append(switch2Controller, egressMsg[self])
                                             /\ pc' = [pc EXCEPT ![self] = "SwitchFromOFAPacket"]
@@ -3750,12 +3719,13 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  IRQueueRC, SetScheduledIRsRC, 
                                                  FlagRCNIBEventHandlerFailover, 
                                                  FlagRCSequencerFailover, 
-                                                 RC_READY, TEEventQueue, 
+                                                 RC_READY, IRChangeForRC, 
+                                                 TopoChangeForRC, TEEventQueue, 
                                                  DAGEventQueue, DAGQueue, 
                                                  DAGID, MaxDAGID, DAGState, 
                                                  nxtRCIRID, 
                                                  idWorkerWorkingOnDAG, 
-                                                 RCSeqWorkerStatus, IRDoneSet, 
+                                                 IRDoneSet, 
                                                  idThreadWorkingOnIR, 
                                                  workerThreadRanking, 
                                                  controllerStateOFC, 
@@ -3796,28 +3766,29 @@ SwitchNicAsicSendOutMsg(self) == /\ pc[self] = "SwitchNicAsicSendOutMsg"
                                                  stepOfFailure_N, IRIndex, 
                                                  debug_N, NIBMsg_, 
                                                  isBootStrap_, sw_id, 
-                                                 topoChangeEvent, 
+                                                 transaction_, topoChangeEvent, 
                                                  currSetDownSw, prev_dag_id, 
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 transaction_, stepOfFailure_c, 
-                                                 currDAG, IRSet, key, op1_, 
-                                                 op2, debug, transaction_O, 
-                                                 IRQueueTmp, NIBMsg_O, 
-                                                 isBootStrap, localIRSet, 
-                                                 NIBIRSet, nextIRToSent, 
+                                                 prev_dag, toBeScheduledIRs, 
+                                                 nextIR, transaction_c, 
+                                                 stepOfFailure_c, currDAG, 
+                                                 IRSet, key, op1_, op2, debug, 
+                                                 transaction_O, IRQueueTmp, 
+                                                 NIBMsg_O, isBootStrap, 
+                                                 localIRSet, NIBIRSet, 
+                                                 newIRSet, newIR, nextIRToSent, 
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure_co, 
-                                                 transaction_c, NIBMsg, op1, 
+                                                 transaction_co, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
                                                  removeIR, monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, transaction_co, 
-                                                 topo_change, irID, removedIR, 
-                                                 msg, op_ir_status_change, 
+                                                 stepOfFailure, 
+                                                 transaction_con, topo_change, 
+                                                 irID, removedIR, msg, 
+                                                 op_ir_status_change, 
                                                  op_first_install, transaction >>
 
 swNicAsicProcPacketOut(self) == SwitchFromOFAPacket(self)
@@ -3831,9 +3802,9 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                          /\ switchLock' = self
                          /\ ofaInMsg' = [ofaInMsg EXCEPT ![self] = Head(NicAsic2OfaBuff[self[2]])]
                          /\ Assert(ofaInMsg'[self].to = self[2], 
-                                   "Failure of assertion at line 1358, column 9.")
+                                   "Failure of assertion at line 1368, column 9.")
                          /\ Assert(ofaInMsg'[self].IR  \in 1..MaxNumIRs, 
-                                   "Failure of assertion at line 1359, column 9.")
+                                   "Failure of assertion at line 1369, column 9.")
                          /\ NicAsic2OfaBuff' = [NicAsic2OfaBuff EXCEPT ![self[2]] = Tail(NicAsic2OfaBuff[self[2]])]
                          /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcessPacket"]
                          /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -3854,10 +3825,10 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRStatusOFC, 
@@ -3887,22 +3858,23 @@ SwitchOfaProcIn(self) == /\ pc[self] = "SwitchOfaProcIn"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
@@ -3914,7 +3886,7 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                            /\ IF ofaInMsg[self].type = INSTALL_FLOW
                                                  THEN /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Append(Ofa2InstallerBuff[self[2]], ofaInMsg[self].IR)]
                                                  ELSE /\ Assert(FALSE, 
-                                                                "Failure of assertion at line 1372, column 21.")
+                                                                "Failure of assertion at line 1382, column 21.")
                                                       /\ UNCHANGED Ofa2InstallerBuff
                                            /\ pc' = [pc EXCEPT ![self] = "SwitchOfaProcIn"]
                                            /\ UNCHANGED ofaInMsg
@@ -3947,12 +3919,12 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
                                                 FlagRCSequencerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 IRStatusOFC, IRQueueOFC, 
@@ -3989,26 +3961,25 @@ SwitchOfaProcessPacket(self) == /\ pc[self] = "SwitchOfaProcessPacket"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
-                                                toBeScheduledIRs, nextIR, 
-                                                transaction_, stepOfFailure_c, 
-                                                currDAG, IRSet, key, op1_, op2, 
-                                                debug, transaction_O, 
-                                                IRQueueTmp, NIBMsg_O, 
-                                                isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, toBeScheduledIRs, 
+                                                nextIR, transaction_c, 
+                                                stepOfFailure_c, currDAG, 
+                                                IRSet, key, op1_, op2, debug, 
+                                                transaction_O, IRQueueTmp, 
+                                                NIBMsg_O, isBootStrap, 
+                                                localIRSet, NIBIRSet, newIRSet, 
+                                                newIR, nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, irID, removedIR, 
                                                 msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
@@ -4025,7 +3996,7 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                           /\ ofaOutConfirmation' = [ofaOutConfirmation EXCEPT ![self] = Head(Installer2OfaBuff[self[2]])]
                           /\ Installer2OfaBuff' = [Installer2OfaBuff EXCEPT ![self[2]] = Tail(Installer2OfaBuff[self[2]])]
                           /\ Assert(ofaOutConfirmation'[self] \in 1..MaxNumIRs, 
-                                    "Failure of assertion at line 1393, column 9.")
+                                    "Failure of assertion at line 1403, column 9.")
                           /\ pc' = [pc EXCEPT ![self] = "SendInstallationConfirmation"]
                           /\ UNCHANGED << controllerLock, FirstInstallOFC, 
                                           FirstInstallNIB, 
@@ -4046,11 +4017,11 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           SetScheduledIRsRC, 
                                           FlagRCNIBEventHandlerFailover, 
                                           FlagRCSequencerFailover, RC_READY, 
+                                          IRChangeForRC, TopoChangeForRC, 
                                           TEEventQueue, DAGEventQueue, 
                                           DAGQueue, DAGID, MaxDAGID, DAGState, 
                                           nxtRCIRID, idWorkerWorkingOnDAG, 
-                                          RCSeqWorkerStatus, IRDoneSet, 
-                                          idThreadWorkingOnIR, 
+                                          IRDoneSet, idThreadWorkingOnIR, 
                                           workerThreadRanking, 
                                           controllerStateOFC, IRStatusOFC, 
                                           IRQueueOFC, SwSuspensionStatusOFC, 
@@ -4079,23 +4050,24 @@ SwitchOfaProcOut(self) == /\ pc[self] = "SwitchOfaProcOut"
                                           rowRemove_N, IR2Remove, 
                                           send_NIB_back, stepOfFailure_N, 
                                           IRIndex, debug_N, NIBMsg_, 
-                                          isBootStrap_, sw_id, topoChangeEvent, 
-                                          currSetDownSw, prev_dag_id, init, 
-                                          nxtDAG, setRemovableIRs, currIR, 
-                                          currIRInDAG, nxtDAGVertices, 
-                                          setIRsInDAG, prev_dag, seqEvent, 
-                                          worker, toBeScheduledIRs, nextIR, 
-                                          transaction_, stepOfFailure_c, 
+                                          isBootStrap_, sw_id, transaction_, 
+                                          topoChangeEvent, currSetDownSw, 
+                                          prev_dag_id, init, nxtDAG, 
+                                          setRemovableIRs, currIR, currIRInDAG, 
+                                          nxtDAGVertices, setIRsInDAG, 
+                                          prev_dag, toBeScheduledIRs, nextIR, 
+                                          transaction_c, stepOfFailure_c, 
                                           currDAG, IRSet, key, op1_, op2, 
                                           debug, transaction_O, IRQueueTmp, 
                                           NIBMsg_O, isBootStrap, localIRSet, 
-                                          NIBIRSet, nextIRToSent, rowIndex, 
-                                          rowRemove, stepOfFailure_co, 
-                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          NIBIRSet, newIRSet, newIR, 
+                                          nextIRToSent, rowIndex, rowRemove, 
+                                          stepOfFailure_co, transaction_co, 
+                                          NIBMsg, op1, IRQueue, 
                                           op_ir_status_change_, removeIR, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, 
-                                          transaction_co, topo_change, irID, 
+                                          transaction_con, topo_change, irID, 
                                           removedIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
@@ -4141,12 +4113,13 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       SetScheduledIRsRC, 
                                                       FlagRCNIBEventHandlerFailover, 
                                                       FlagRCSequencerFailover, 
-                                                      RC_READY, TEEventQueue, 
+                                                      RC_READY, IRChangeForRC, 
+                                                      TopoChangeForRC, 
+                                                      TEEventQueue, 
                                                       DAGEventQueue, DAGQueue, 
                                                       DAGID, MaxDAGID, 
                                                       DAGState, nxtRCIRID, 
                                                       idWorkerWorkingOnDAG, 
-                                                      RCSeqWorkerStatus, 
                                                       IRDoneSet, 
                                                       idThreadWorkingOnIR, 
                                                       workerThreadRanking, 
@@ -4190,6 +4163,7 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       stepOfFailure_N, IRIndex, 
                                                       debug_N, NIBMsg_, 
                                                       isBootStrap_, sw_id, 
+                                                      transaction_, 
                                                       topoChangeEvent, 
                                                       currSetDownSw, 
                                                       prev_dag_id, init, 
@@ -4197,25 +4171,25 @@ SendInstallationConfirmation(self) == /\ pc[self] = "SendInstallationConfirmatio
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
                                                       setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
                                                       toBeScheduledIRs, nextIR, 
-                                                      transaction_, 
+                                                      transaction_c, 
                                                       stepOfFailure_c, currDAG, 
                                                       IRSet, key, op1_, op2, 
                                                       debug, transaction_O, 
                                                       IRQueueTmp, NIBMsg_O, 
                                                       isBootStrap, localIRSet, 
-                                                      NIBIRSet, nextIRToSent, 
+                                                      NIBIRSet, newIRSet, 
+                                                      newIR, nextIRToSent, 
                                                       rowIndex, rowRemove, 
                                                       stepOfFailure_co, 
-                                                      transaction_c, NIBMsg, 
+                                                      transaction_co, NIBMsg, 
                                                       op1, IRQueue, 
                                                       op_ir_status_change_, 
                                                       removeIR, 
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, 
-                                                      transaction_co, 
+                                                      transaction_con, 
                                                       topo_change, irID, 
                                                       removedIR, msg, 
                                                       op_ir_status_change, 
@@ -4233,7 +4207,7 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                              /\ switchLock' = self
                              /\ installerInIR' = [installerInIR EXCEPT ![self] = Head(Ofa2InstallerBuff[self[2]])]
                              /\ Assert(installerInIR'[self] \in 1..MaxNumIRs, 
-                                       "Failure of assertion at line 1425, column 8.")
+                                       "Failure of assertion at line 1435, column 8.")
                              /\ Ofa2InstallerBuff' = [Ofa2InstallerBuff EXCEPT ![self[2]] = Tail(Ofa2InstallerBuff[self[2]])]
                              /\ pc' = [pc EXCEPT ![self] = "SwitchInstallerInsert2TCAM"]
                              /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -4256,11 +4230,11 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -4292,25 +4266,26 @@ SwitchInstallerProc(self) == /\ pc[self] = "SwitchInstallerProc"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             setIRsInDAG, prev_dag, 
+                                             toBeScheduledIRs, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
@@ -4356,12 +4331,13 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     SetScheduledIRsRC, 
                                                     FlagRCNIBEventHandlerFailover, 
                                                     FlagRCSequencerFailover, 
-                                                    RC_READY, TEEventQueue, 
+                                                    RC_READY, IRChangeForRC, 
+                                                    TopoChangeForRC, 
+                                                    TEEventQueue, 
                                                     DAGEventQueue, DAGQueue, 
                                                     DAGID, MaxDAGID, DAGState, 
                                                     nxtRCIRID, 
                                                     idWorkerWorkingOnDAG, 
-                                                    RCSeqWorkerStatus, 
                                                     IRDoneSet, 
                                                     idThreadWorkingOnIR, 
                                                     workerThreadRanking, 
@@ -4404,6 +4380,7 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     stepOfFailure_N, IRIndex, 
                                                     debug_N, NIBMsg_, 
                                                     isBootStrap_, sw_id, 
+                                                    transaction_, 
                                                     topoChangeEvent, 
                                                     currSetDownSw, prev_dag_id, 
                                                     init, nxtDAG, 
@@ -4411,24 +4388,24 @@ SwitchInstallerInsert2TCAM(self) == /\ pc[self] = "SwitchInstallerInsert2TCAM"
                                                     currIRInDAG, 
                                                     nxtDAGVertices, 
                                                     setIRsInDAG, prev_dag, 
-                                                    seqEvent, worker, 
                                                     toBeScheduledIRs, nextIR, 
-                                                    transaction_, 
+                                                    transaction_c, 
                                                     stepOfFailure_c, currDAG, 
                                                     IRSet, key, op1_, op2, 
                                                     debug, transaction_O, 
                                                     IRQueueTmp, NIBMsg_O, 
                                                     isBootStrap, localIRSet, 
-                                                    NIBIRSet, nextIRToSent, 
-                                                    rowIndex, rowRemove, 
+                                                    NIBIRSet, newIRSet, newIR, 
+                                                    nextIRToSent, rowIndex, 
+                                                    rowRemove, 
                                                     stepOfFailure_co, 
-                                                    transaction_c, NIBMsg, op1, 
-                                                    IRQueue, 
+                                                    transaction_co, NIBMsg, 
+                                                    op1, IRQueue, 
                                                     op_ir_status_change_, 
                                                     removeIR, monitoringEvent, 
                                                     setIRsToReset, resetIR, 
                                                     stepOfFailure, 
-                                                    transaction_co, 
+                                                    transaction_con, 
                                                     topo_change, irID, 
                                                     removedIR, msg, 
                                                     op_ir_status_change, 
@@ -4478,13 +4455,14 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          FlagRCNIBEventHandlerFailover, 
                                                          FlagRCSequencerFailover, 
                                                          RC_READY, 
+                                                         IRChangeForRC, 
+                                                         TopoChangeForRC, 
                                                          TEEventQueue, 
                                                          DAGEventQueue, 
                                                          DAGQueue, DAGID, 
                                                          MaxDAGID, DAGState, 
                                                          nxtRCIRID, 
                                                          idWorkerWorkingOnDAG, 
-                                                         RCSeqWorkerStatus, 
                                                          IRDoneSet, 
                                                          idThreadWorkingOnIR, 
                                                          workerThreadRanking, 
@@ -4536,7 +4514,7 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          stepOfFailure_N, 
                                                          IRIndex, debug_N, 
                                                          NIBMsg_, isBootStrap_, 
-                                                         sw_id, 
+                                                         sw_id, transaction_, 
                                                          topoChangeEvent, 
                                                          currSetDownSw, 
                                                          prev_dag_id, init, 
@@ -4545,9 +4523,8 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          currIR, currIRInDAG, 
                                                          nxtDAGVertices, 
                                                          setIRsInDAG, prev_dag, 
-                                                         seqEvent, worker, 
                                                          toBeScheduledIRs, 
-                                                         nextIR, transaction_, 
+                                                         nextIR, transaction_c, 
                                                          stepOfFailure_c, 
                                                          currDAG, IRSet, key, 
                                                          op1_, op2, debug, 
@@ -4555,18 +4532,19 @@ SwitchInstallerSendConfirmation(self) == /\ pc[self] = "SwitchInstallerSendConfi
                                                          IRQueueTmp, NIBMsg_O, 
                                                          isBootStrap, 
                                                          localIRSet, NIBIRSet, 
+                                                         newIRSet, newIR, 
                                                          nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
-                                                         transaction_c, NIBMsg, 
-                                                         op1, IRQueue, 
+                                                         transaction_co, 
+                                                         NIBMsg, op1, IRQueue, 
                                                          op_ir_status_change_, 
                                                          removeIR, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
                                                          stepOfFailure, 
-                                                         transaction_co, 
+                                                         transaction_con, 
                                                          topo_change, irID, 
                                                          removedIR, msg, 
                                                          op_ir_status_change, 
@@ -4587,7 +4565,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = obj'[self].transient,
                                                                    ![self[2]].partial = obj'[self].partial]
                        /\ Assert(obj'[self] \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 667, column 9 of macro called at line 1475, column 9.")
+                                 "Failure of assertion at line 670, column 9 of macro called at line 1485, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{obj'[self]})>> \o Tail(sw_fail_ordering_var)
@@ -4618,7 +4596,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        failedElem' = [failedElem EXCEPT ![self] = elem]
                                   /\ IF failedElem'[self] = "cpu"
                                         THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed, 
-                                                       "Failure of assertion at line 790, column 9 of macro called at line 1495, column 17.")
+                                                       "Failure of assertion at line 793, column 9 of macro called at line 1505, column 17.")
                                              /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = Failed,
                                                                                      ![self[2]].ofa = Failed,
                                                                                      ![self[2]].installer = Failed]
@@ -4639,7 +4617,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                              /\ UNCHANGED controller2Switch
                                         ELSE /\ IF failedElem'[self] = "ofa"
                                                    THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = NotFailed, 
-                                                                  "Failure of assertion at line 842, column 9 of macro called at line 1497, column 17.")
+                                                                  "Failure of assertion at line 845, column 9 of macro called at line 1507, column 17.")
                                                         /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = Failed]
                                                         /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                               THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -4654,11 +4632,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                         /\ UNCHANGED controller2Switch
                                                    ELSE /\ IF failedElem'[self] = "installer"
                                                               THEN /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = NotFailed, 
-                                                                             "Failure of assertion at line 886, column 9 of macro called at line 1499, column 17.")
+                                                                             "Failure of assertion at line 889, column 9 of macro called at line 1509, column 17.")
                                                                    /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = Failed]
                                                                    /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                          THEN /\ Assert(switchStatus'[self[2]].installer = Failed, 
-                                                                                        "Failure of assertion at line 889, column 13 of macro called at line 1499, column 17.")
+                                                                                        "Failure of assertion at line 892, column 13 of macro called at line 1509, column 17.")
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                               /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                            swID |-> self[2],
@@ -4672,7 +4650,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                    /\ UNCHANGED controller2Switch
                                                               ELSE /\ IF failedElem'[self] = "nicAsic"
                                                                          THEN /\ Assert(switchStatus[self[2]].nicAsic = NotFailed, 
-                                                                                        "Failure of assertion at line 736, column 9 of macro called at line 1501, column 17.")
+                                                                                        "Failure of assertion at line 739, column 9 of macro called at line 1511, column 17.")
                                                                               /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = Failed]
                                                                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -4681,7 +4659,7 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                                                                                                            num |-> controlMsgCounter'[self[2]]]]
                                                                               /\ swSeqChangedStatus' = Append(swSeqChangedStatus, statusMsg'[self])
                                                                          ELSE /\ Assert(FALSE, 
-                                                                                        "Failure of assertion at line 1502, column 18.")
+                                                                                        "Failure of assertion at line 1512, column 18.")
                                                                               /\ UNCHANGED << swSeqChangedStatus, 
                                                                                               controller2Switch, 
                                                                                               switchStatus, 
@@ -4705,10 +4683,11 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        IRQueueRC, SetScheduledIRsRC, 
                                        FlagRCNIBEventHandlerFailover, 
                                        FlagRCSequencerFailover, RC_READY, 
+                                       IRChangeForRC, TopoChangeForRC, 
                                        TEEventQueue, DAGEventQueue, DAGQueue, 
                                        DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                       idWorkerWorkingOnDAG, RCSeqWorkerStatus, 
-                                       IRDoneSet, idThreadWorkingOnIR, 
+                                       idWorkerWorkingOnDAG, IRDoneSet, 
+                                       idThreadWorkingOnIR, 
                                        workerThreadRanking, controllerStateOFC, 
                                        IRStatusOFC, IRQueueOFC, 
                                        SwSuspensionStatusOFC, 
@@ -4735,23 +4714,24 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        rowRemove_N, IR2Remove, send_NIB_back, 
                                        stepOfFailure_N, IRIndex, debug_N, 
                                        NIBMsg_, isBootStrap_, sw_id, 
-                                       topoChangeEvent, currSetDownSw, 
-                                       prev_dag_id, init, nxtDAG, 
-                                       setRemovableIRs, currIR, currIRInDAG, 
-                                       nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                       seqEvent, worker, toBeScheduledIRs, 
-                                       nextIR, transaction_, stepOfFailure_c, 
+                                       transaction_, topoChangeEvent, 
+                                       currSetDownSw, prev_dag_id, init, 
+                                       nxtDAG, setRemovableIRs, currIR, 
+                                       currIRInDAG, nxtDAGVertices, 
+                                       setIRsInDAG, prev_dag, toBeScheduledIRs, 
+                                       nextIR, transaction_c, stepOfFailure_c, 
                                        currDAG, IRSet, key, op1_, op2, debug, 
                                        transaction_O, IRQueueTmp, NIBMsg_O, 
                                        isBootStrap, localIRSet, NIBIRSet, 
-                                       nextIRToSent, rowIndex, rowRemove, 
-                                       stepOfFailure_co, transaction_c, NIBMsg, 
-                                       op1, IRQueue, op_ir_status_change_, 
-                                       removeIR, monitoringEvent, 
-                                       setIRsToReset, resetIR, stepOfFailure, 
-                                       transaction_co, topo_change, irID, 
-                                       removedIR, msg, op_ir_status_change, 
-                                       op_first_install, transaction >>
+                                       newIRSet, newIR, nextIRToSent, rowIndex, 
+                                       rowRemove, stepOfFailure_co, 
+                                       transaction_co, NIBMsg, op1, IRQueue, 
+                                       op_ir_status_change_, removeIR, 
+                                       monitoringEvent, setIRsToReset, resetIR, 
+                                       stepOfFailure, transaction_con, 
+                                       topo_change, irID, removedIR, msg, 
+                                       op_ir_status_change, op_first_install, 
+                                       transaction >>
 
 swFailureProc(self) == SwitchFailure(self)
 
@@ -4761,13 +4741,13 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ IF RecoveryStatus[self[2]].partial = 0
                                     THEN /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                   "Failure of assertion at line 703, column 9 of macro called at line 1524, column 13.")
+                                                   "Failure of assertion at line 706, column 9 of macro called at line 1534, column 13.")
                                          /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                   "Failure of assertion at line 704, column 9 of macro called at line 1524, column 13.")
+                                                   "Failure of assertion at line 707, column 9 of macro called at line 1534, column 13.")
                                          /\ Assert(switchStatus[self[2]].ofa = Failed, 
-                                                   "Failure of assertion at line 705, column 9 of macro called at line 1524, column 13.")
+                                                   "Failure of assertion at line 708, column 9 of macro called at line 1534, column 13.")
                                          /\ Assert(switchStatus[self[2]].installer = Failed, 
-                                                   "Failure of assertion at line 706, column 9 of macro called at line 1524, column 13.")
+                                                   "Failure of assertion at line 709, column 9 of macro called at line 1534, column 13.")
                                          /\ nicAsicStartingMode(self[2])
                                          /\ ofaStartingMode(self[2])
                                          /\ installerInStartingMode(self[2])
@@ -4794,7 +4774,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                          /\ IF recoveredElem'[self] = "cpu"
                                                THEN /\ ofaStartingMode(self[2]) /\ installerInStartingMode(self[2])
                                                     /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                                              "Failure of assertion at line 817, column 9 of macro called at line 1532, column 43.")
+                                                              "Failure of assertion at line 820, column 9 of macro called at line 1542, column 43.")
                                                     /\ switchStatus' = [switchStatus EXCEPT ![self[2]].cpu = NotFailed,
                                                                                             ![self[2]].ofa = NotFailed,
                                                                                             ![self[2]].installer = NotFailed]
@@ -4817,7 +4797,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                ELSE /\ IF recoveredElem'[self] = "nicAsic"
                                                           THEN /\ nicAsicStartingMode(self[2])
                                                                /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                                                         "Failure of assertion at line 762, column 9 of macro called at line 1533, column 50.")
+                                                                         "Failure of assertion at line 765, column 9 of macro called at line 1543, column 50.")
                                                                /\ switchStatus' = [switchStatus EXCEPT ![self[2]].nicAsic = NotFailed]
                                                                /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                                                                /\ IF switchStatus'[self[2]].ofa = Failed
@@ -4834,7 +4814,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                           ELSE /\ IF recoveredElem'[self] = "ofa"
                                                                      THEN /\ ofaStartingMode(self[2])
                                                                           /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].ofa = Failed, 
-                                                                                    "Failure of assertion at line 864, column 9 of macro called at line 1534, column 46.")
+                                                                                    "Failure of assertion at line 867, column 9 of macro called at line 1544, column 46.")
                                                                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]].ofa = NotFailed]
                                                                           /\ IF switchStatus'[self[2]].nicAsic = NotFailed
                                                                                 THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
@@ -4850,11 +4830,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                      ELSE /\ IF recoveredElem'[self] = "installer"
                                                                                 THEN /\ installerInStartingMode(self[2])
                                                                                      /\ Assert(switchStatus[self[2]].cpu = NotFailed /\ switchStatus[self[2]].installer = Failed, 
-                                                                                               "Failure of assertion at line 908, column 9 of macro called at line 1535, column 52.")
+                                                                                               "Failure of assertion at line 911, column 9 of macro called at line 1545, column 52.")
                                                                                      /\ switchStatus' = [switchStatus EXCEPT ![self[2]].installer = NotFailed]
                                                                                      /\ IF switchStatus'[self[2]].nicAsic = NotFailed /\ switchStatus'[self[2]].ofa = NotFailed
                                                                                            THEN /\ Assert(switchStatus'[self[2]].installer = NotFailed, 
-                                                                                                          "Failure of assertion at line 911, column 13 of macro called at line 1535, column 52.")
+                                                                                                          "Failure of assertion at line 914, column 13 of macro called at line 1545, column 52.")
                                                                                                 /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                                                                 /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] = [type |-> KEEP_ALIVE,
                                                                                                                                                            swID |-> self[2],
@@ -4866,7 +4846,7 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                                                                                                 controlMsgCounter, 
                                                                                                                 statusResolveMsg >>
                                                                                 ELSE /\ Assert(FALSE, 
-                                                                                               "Failure of assertion at line 1536, column 18.")
+                                                                                               "Failure of assertion at line 1546, column 18.")
                                                                                      /\ UNCHANGED << swSeqChangedStatus, 
                                                                                                      switchStatus, 
                                                                                                      controlMsgCounter, 
@@ -4894,11 +4874,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               SetScheduledIRsRC, 
                                               FlagRCNIBEventHandlerFailover, 
                                               FlagRCSequencerFailover, 
-                                              RC_READY, TEEventQueue, 
+                                              RC_READY, IRChangeForRC, 
+                                              TopoChangeForRC, TEEventQueue, 
                                               DAGEventQueue, DAGQueue, DAGID, 
                                               MaxDAGID, DAGState, nxtRCIRID, 
-                                              idWorkerWorkingOnDAG, 
-                                              RCSeqWorkerStatus, IRDoneSet, 
+                                              idWorkerWorkingOnDAG, IRDoneSet, 
                                               idThreadWorkingOnIR, 
                                               workerThreadRanking, 
                                               controllerStateOFC, IRStatusOFC, 
@@ -4932,24 +4912,24 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               send_NIB_back, stepOfFailure_N, 
                                               IRIndex, debug_N, NIBMsg_, 
                                               isBootStrap_, sw_id, 
-                                              topoChangeEvent, currSetDownSw, 
-                                              prev_dag_id, init, nxtDAG, 
-                                              setRemovableIRs, currIR, 
+                                              transaction_, topoChangeEvent, 
+                                              currSetDownSw, prev_dag_id, init, 
+                                              nxtDAG, setRemovableIRs, currIR, 
                                               currIRInDAG, nxtDAGVertices, 
-                                              setIRsInDAG, prev_dag, seqEvent, 
-                                              worker, toBeScheduledIRs, nextIR, 
-                                              transaction_, stepOfFailure_c, 
+                                              setIRsInDAG, prev_dag, 
+                                              toBeScheduledIRs, nextIR, 
+                                              transaction_c, stepOfFailure_c, 
                                               currDAG, IRSet, key, op1_, op2, 
                                               debug, transaction_O, IRQueueTmp, 
                                               NIBMsg_O, isBootStrap, 
-                                              localIRSet, NIBIRSet, 
-                                              nextIRToSent, rowIndex, 
+                                              localIRSet, NIBIRSet, newIRSet, 
+                                              newIR, nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_co, 
-                                              transaction_c, NIBMsg, op1, 
+                                              transaction_co, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
                                               removeIR, monitoringEvent, 
                                               setIRsToReset, resetIR, 
-                                              stepOfFailure, transaction_co, 
+                                              stepOfFailure, transaction_con, 
                                               topo_change, irID, removedIR, 
                                               msg, op_ir_status_change, 
                                               op_first_install, transaction >>
@@ -4976,7 +4956,7 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                                           ELSE /\ TRUE
                    /\ Assert(\/ switchLock[2] = switchLock[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 963, column 9 of macro called at line 1573, column 9.")
+                             "Failure of assertion at line 966, column 9 of macro called at line 1583, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ pc' = [pc EXCEPT ![self] = "ghostProc"]
                    /\ UNCHANGED << controllerLock, FirstInstallOFC, 
@@ -4995,12 +4975,12 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    SetScheduledIRsRC, 
                                    FlagRCNIBEventHandlerFailover, 
                                    FlagRCSequencerFailover, RC_READY, 
+                                   IRChangeForRC, TopoChangeForRC, 
                                    TEEventQueue, DAGEventQueue, DAGQueue, 
                                    DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                   idWorkerWorkingOnDAG, RCSeqWorkerStatus, 
-                                   IRDoneSet, idThreadWorkingOnIR, 
-                                   workerThreadRanking, controllerStateOFC, 
-                                   IRStatusOFC, IRQueueOFC, 
+                                   idWorkerWorkingOnDAG, IRDoneSet, 
+                                   idThreadWorkingOnIR, workerThreadRanking, 
+                                   controllerStateOFC, IRStatusOFC, IRQueueOFC, 
                                    SwSuspensionStatusOFC, SetScheduledIRsOFC, 
                                    FlagOFCWorkerFailover, 
                                    FlagOFCMonitorFailover, 
@@ -5023,22 +5003,23 @@ ghostProc(self) == /\ pc[self] = "ghostProc"
                                    IRIndex_, debug_, nextTrans, value, 
                                    rowRemove_N, IR2Remove, send_NIB_back, 
                                    stepOfFailure_N, IRIndex, debug_N, NIBMsg_, 
-                                   isBootStrap_, sw_id, topoChangeEvent, 
-                                   currSetDownSw, prev_dag_id, init, nxtDAG, 
-                                   setRemovableIRs, currIR, currIRInDAG, 
-                                   nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                   seqEvent, worker, toBeScheduledIRs, nextIR, 
-                                   transaction_, stepOfFailure_c, currDAG, 
+                                   isBootStrap_, sw_id, transaction_, 
+                                   topoChangeEvent, currSetDownSw, prev_dag_id, 
+                                   init, nxtDAG, setRemovableIRs, currIR, 
+                                   currIRInDAG, nxtDAGVertices, setIRsInDAG, 
+                                   prev_dag, toBeScheduledIRs, nextIR, 
+                                   transaction_c, stepOfFailure_c, currDAG, 
                                    IRSet, key, op1_, op2, debug, transaction_O, 
                                    IRQueueTmp, NIBMsg_O, isBootStrap, 
-                                   localIRSet, NIBIRSet, nextIRToSent, 
-                                   rowIndex, rowRemove, stepOfFailure_co, 
-                                   transaction_c, NIBMsg, op1, IRQueue, 
-                                   op_ir_status_change_, removeIR, 
-                                   monitoringEvent, setIRsToReset, resetIR, 
-                                   stepOfFailure, transaction_co, topo_change, 
-                                   irID, removedIR, msg, op_ir_status_change, 
-                                   op_first_install, transaction >>
+                                   localIRSet, NIBIRSet, newIRSet, newIR, 
+                                   nextIRToSent, rowIndex, rowRemove, 
+                                   stepOfFailure_co, transaction_co, NIBMsg, 
+                                   op1, IRQueue, op_ir_status_change_, 
+                                   removeIR, monitoringEvent, setIRsToReset, 
+                                   resetIR, stepOfFailure, transaction_con, 
+                                   topo_change, irID, removedIR, msg, 
+                                   op_ir_status_change, op_first_install, 
+                                   transaction >>
 
 ghostUnlockProcess(self) == ghostProc(self)
 
@@ -5078,12 +5059,12 @@ NIBFailoverResetStates(self) == /\ pc[self] = "NIBFailoverResetStates"
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
                                                 FlagRCSequencerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 IRStatusOFC, IRQueueOFC, 
@@ -5118,26 +5099,25 @@ NIBFailoverResetStates(self) == /\ pc[self] = "NIBFailoverResetStates"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
-                                                toBeScheduledIRs, nextIR, 
-                                                transaction_, stepOfFailure_c, 
-                                                currDAG, IRSet, key, op1_, op2, 
-                                                debug, transaction_O, 
-                                                IRQueueTmp, NIBMsg_O, 
-                                                isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, toBeScheduledIRs, 
+                                                nextIR, transaction_c, 
+                                                stepOfFailure_c, currDAG, 
+                                                IRSet, key, op1_, op2, debug, 
+                                                transaction_O, IRQueueTmp, 
+                                                NIBMsg_O, isBootStrap, 
+                                                localIRSet, NIBIRSet, newIRSet, 
+                                                newIR, nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, irID, removedIR, 
                                                 msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
@@ -5168,11 +5148,11 @@ NIBFailoverReadOFC(self) == /\ pc[self] = "NIBFailoverReadOFC"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -5202,25 +5182,26 @@ NIBFailoverReadOFC(self) == /\ pc[self] = "NIBFailoverReadOFC"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
@@ -5250,11 +5231,11 @@ NIBFailoverReadRC(self) == /\ pc[self] = "NIBFailoverReadRC"
                                            SetScheduledIRsRC, 
                                            FlagRCNIBEventHandlerFailover, 
                                            FlagRCSequencerFailover, RC_READY, 
+                                           IRChangeForRC, TopoChangeForRC, 
                                            TEEventQueue, DAGEventQueue, 
                                            DAGQueue, DAGID, MaxDAGID, DAGState, 
                                            nxtRCIRID, idWorkerWorkingOnDAG, 
-                                           RCSeqWorkerStatus, IRDoneSet, 
-                                           idThreadWorkingOnIR, 
+                                           IRDoneSet, idThreadWorkingOnIR, 
                                            workerThreadRanking, 
                                            controllerStateOFC, IRStatusOFC, 
                                            IRQueueOFC, SwSuspensionStatusOFC, 
@@ -5282,24 +5263,25 @@ NIBFailoverReadRC(self) == /\ pc[self] = "NIBFailoverReadRC"
                                            rowRemove_N, IR2Remove, 
                                            send_NIB_back, stepOfFailure_N, 
                                            IRIndex, debug_N, NIBMsg_, 
-                                           isBootStrap_, sw_id, 
+                                           isBootStrap_, sw_id, transaction_, 
                                            topoChangeEvent, currSetDownSw, 
                                            prev_dag_id, init, nxtDAG, 
                                            setRemovableIRs, currIR, 
                                            currIRInDAG, nxtDAGVertices, 
-                                           setIRsInDAG, prev_dag, seqEvent, 
-                                           worker, toBeScheduledIRs, nextIR, 
-                                           transaction_, stepOfFailure_c, 
+                                           setIRsInDAG, prev_dag, 
+                                           toBeScheduledIRs, nextIR, 
+                                           transaction_c, stepOfFailure_c, 
                                            currDAG, IRSet, key, op1_, op2, 
                                            debug, transaction_O, IRQueueTmp, 
                                            NIBMsg_O, isBootStrap, localIRSet, 
-                                           NIBIRSet, nextIRToSent, rowIndex, 
-                                           rowRemove, stepOfFailure_co, 
-                                           transaction_c, NIBMsg, op1, IRQueue, 
+                                           NIBIRSet, newIRSet, newIR, 
+                                           nextIRToSent, rowIndex, rowRemove, 
+                                           stepOfFailure_co, transaction_co, 
+                                           NIBMsg, op1, IRQueue, 
                                            op_ir_status_change_, removeIR, 
                                            monitoringEvent, setIRsToReset, 
                                            resetIR, stepOfFailure, 
-                                           transaction_co, topo_change, irID, 
+                                           transaction_con, topo_change, irID, 
                                            removedIR, msg, op_ir_status_change, 
                                            op_first_install, transaction >>
 
@@ -5338,12 +5320,13 @@ ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                                  IRQueueRC, SetScheduledIRsRC, 
                                                  FlagRCNIBEventHandlerFailover, 
                                                  FlagRCSequencerFailover, 
-                                                 RC_READY, TEEventQueue, 
+                                                 RC_READY, IRChangeForRC, 
+                                                 TopoChangeForRC, TEEventQueue, 
                                                  DAGEventQueue, DAGQueue, 
                                                  DAGID, MaxDAGID, DAGState, 
                                                  nxtRCIRID, 
                                                  idWorkerWorkingOnDAG, 
-                                                 RCSeqWorkerStatus, IRDoneSet, 
+                                                 IRDoneSet, 
                                                  idThreadWorkingOnIR, 
                                                  workerThreadRanking, 
                                                  controllerStateOFC, 
@@ -5382,28 +5365,29 @@ ChangeNIBStatusToNormal(self) == /\ pc[self] = "ChangeNIBStatusToNormal"
                                                  stepOfFailure_N, IRIndex, 
                                                  debug_N, NIBMsg_, 
                                                  isBootStrap_, sw_id, 
-                                                 topoChangeEvent, 
+                                                 transaction_, topoChangeEvent, 
                                                  currSetDownSw, prev_dag_id, 
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 transaction_, stepOfFailure_c, 
-                                                 currDAG, IRSet, key, op1_, 
-                                                 op2, debug, transaction_O, 
-                                                 IRQueueTmp, NIBMsg_O, 
-                                                 isBootStrap, localIRSet, 
-                                                 NIBIRSet, nextIRToSent, 
+                                                 prev_dag, toBeScheduledIRs, 
+                                                 nextIR, transaction_c, 
+                                                 stepOfFailure_c, currDAG, 
+                                                 IRSet, key, op1_, op2, debug, 
+                                                 transaction_O, IRQueueTmp, 
+                                                 NIBMsg_O, isBootStrap, 
+                                                 localIRSet, NIBIRSet, 
+                                                 newIRSet, newIR, nextIRToSent, 
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure_co, 
-                                                 transaction_c, NIBMsg, op1, 
+                                                 transaction_co, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
                                                  removeIR, monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, transaction_co, 
-                                                 topo_change, irID, removedIR, 
-                                                 msg, op_ir_status_change, 
+                                                 stepOfFailure, 
+                                                 transaction_con, topo_change, 
+                                                 irID, removedIR, msg, 
+                                                 op_ir_status_change, 
                                                  op_first_install, transaction >>
 
 NIBFailoverProc(self) == NIBFailoverResetStates(self)
@@ -5412,6 +5396,8 @@ NIBFailoverProc(self) == NIBFailoverResetStates(self)
                             \/ ChangeNIBStatusToNormal(self)
 
 NIBDequeueRCTransaction(self) == /\ pc[self] = "NIBDequeueRCTransaction"
+                                 /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                  /\ send_NIB_back_' = [send_NIB_back_ EXCEPT ![self] = ""]
                                  /\ IF moduleIsUp(self)
                                        THEN /\ RC2NIB # <<>>
@@ -5448,12 +5434,13 @@ NIBDequeueRCTransaction(self) == /\ pc[self] = "NIBDequeueRCTransaction"
                                                  IRQueueRC, SetScheduledIRsRC, 
                                                  FlagRCNIBEventHandlerFailover, 
                                                  FlagRCSequencerFailover, 
-                                                 RC_READY, TEEventQueue, 
+                                                 RC_READY, IRChangeForRC, 
+                                                 TopoChangeForRC, TEEventQueue, 
                                                  DAGEventQueue, DAGQueue, 
                                                  DAGID, MaxDAGID, DAGState, 
                                                  nxtRCIRID, 
                                                  idWorkerWorkingOnDAG, 
-                                                 RCSeqWorkerStatus, IRDoneSet, 
+                                                 IRDoneSet, 
                                                  idThreadWorkingOnIR, 
                                                  workerThreadRanking, 
                                                  controllerStateOFC, 
@@ -5490,40 +5477,43 @@ NIBDequeueRCTransaction(self) == /\ pc[self] = "NIBDequeueRCTransaction"
                                                  stepOfFailure_N, IRIndex, 
                                                  debug_N, NIBMsg_, 
                                                  isBootStrap_, sw_id, 
-                                                 topoChangeEvent, 
+                                                 transaction_, topoChangeEvent, 
                                                  currSetDownSw, prev_dag_id, 
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 transaction_, stepOfFailure_c, 
-                                                 currDAG, IRSet, key, op1_, 
-                                                 op2, debug, transaction_O, 
-                                                 IRQueueTmp, NIBMsg_O, 
-                                                 isBootStrap, localIRSet, 
-                                                 NIBIRSet, nextIRToSent, 
+                                                 prev_dag, toBeScheduledIRs, 
+                                                 nextIR, transaction_c, 
+                                                 stepOfFailure_c, currDAG, 
+                                                 IRSet, key, op1_, op2, debug, 
+                                                 transaction_O, IRQueueTmp, 
+                                                 NIBMsg_O, isBootStrap, 
+                                                 localIRSet, NIBIRSet, 
+                                                 newIRSet, newIR, nextIRToSent, 
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure_co, 
-                                                 transaction_c, NIBMsg, op1, 
+                                                 transaction_co, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
                                                  removeIR, monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, transaction_co, 
-                                                 topo_change, irID, removedIR, 
-                                                 msg, op_ir_status_change, 
+                                                 stepOfFailure, 
+                                                 transaction_con, topo_change, 
+                                                 irID, removedIR, msg, 
+                                                 op_ir_status_change, 
                                                  op_first_install, transaction >>
 
 NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
+                                 /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                  /\ IF moduleIsUp(self)
                                        THEN /\ IF (nextTrans_[self].name = "PrepareIR")
                                                   THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                 "Failure of assertion at line 1120, column 9 of macro called at line 1723, column 13.")
+                                                                 "Failure of assertion at line 1129, column 9 of macro called at line 1735, column 13.")
                                                        /\ Assert(Len(nextTrans_[self].ops[1].key) = 2, 
-                                                                 "Failure of assertion at line 1121, column 9 of macro called at line 1723, column 13.")
+                                                                 "Failure of assertion at line 1130, column 9 of macro called at line 1735, column 13.")
                                                        /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                        /\ Assert(nextTrans_[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                 "Failure of assertion at line 1123, column 9 of macro called at line 1723, column 13.")
+                                                                 "Failure of assertion at line 1132, column 9 of macro called at line 1735, column 13.")
                                                        /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                        /\ UNCHANGED << FirstInstallNIB, 
                                                                        IRStatusNIB, 
@@ -5536,15 +5526,15 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                        IRIndex_ >>
                                                   ELSE /\ IF (nextTrans_[self].name = "ScheduleIR")
                                                              THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                            "Failure of assertion at line 1129, column 9 of macro called at line 1723, column 13.")
+                                                                            "Failure of assertion at line 1138, column 9 of macro called at line 1735, column 13.")
                                                                   /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].value.IR
                                                                         THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
                                                                         ELSE /\ TRUE
                                                                              /\ UNCHANGED IRQueueNIB
                                                                   /\ Assert(nextTrans_[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                                            "Failure of assertion at line 1133, column 9 of macro called at line 1723, column 13.")
+                                                                            "Failure of assertion at line 1142, column 9 of macro called at line 1735, column 13.")
                                                                   /\ Assert(Len(nextTrans_[self].ops[2].key) = 2, 
-                                                                            "Failure of assertion at line 1134, column 9 of macro called at line 1723, column 13.")
+                                                                            "Failure of assertion at line 1143, column 9 of macro called at line 1735, column 13.")
                                                                   /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                                   /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB,
                                                                                                                  IRQueueNIB |->IRQueueNIB',
@@ -5560,7 +5550,7 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                   IRIndex_ >>
                                                              ELSE /\ IF (nextTrans_[self].name = "RCScheduleIRInOneStep")
                                                                         THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                       "Failure of assertion at line 1140, column 9 of macro called at line 1723, column 13.")
+                                                                                       "Failure of assertion at line 1149, column 9 of macro called at line 1735, column 13.")
                                                                              /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].value.IR
                                                                                    THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans_[self].ops[1].value)
                                                                                    ELSE /\ TRUE
@@ -5625,9 +5615,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                               IRIndex_ >>
                                                                                                          ELSE /\ IF (nextTrans_[self].name = "UpdateControllerState")
                                                                                                                     THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                                                                                   "Failure of assertion at line 1171, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                   "Failure of assertion at line 1180, column 17 of macro called at line 1735, column 13.")
                                                                                                                          /\ Assert(Len(nextTrans_[self].ops[1].key) = 2, 
-                                                                                                                                   "Failure of assertion at line 1172, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                   "Failure of assertion at line 1181, column 17 of macro called at line 1735, column 13.")
                                                                                                                          /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                          /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                          IRStatusNIB, 
@@ -5641,7 +5631,7 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                          IRIndex_ >>
                                                                                                                     ELSE /\ IF (nextTrans_[self].name = "RemoveIR")
                                                                                                                                THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                              "Failure of assertion at line 1175, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                              "Failure of assertion at line 1184, column 17 of macro called at line 1735, column 13.")
                                                                                                                                     /\ IR2Remove_' = [IR2Remove_ EXCEPT ![self] = nextTrans_[self].ops[1].key]
                                                                                                                                     /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove_'[self]
                                                                                                                                           THEN /\ rowRemove_' = [rowRemove_ EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove_'[self], IRQueueNIB)]
@@ -5658,9 +5648,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                     IRIndex_ >>
                                                                                                                                ELSE /\ IF (nextTrans_[self].name = "OFCChangeIRStatus2Sent")
                                                                                                                                           THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                         "Failure of assertion at line 1183, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                         "Failure of assertion at line 1192, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                         "Failure of assertion at line 1184, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                         "Failure of assertion at line 1193, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                               IRQueueNIB |->IRQueueNIB,
@@ -5674,9 +5664,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                IRIndex_ >>
                                                                                                                                           ELSE /\ IF (nextTrans_[self].name = "ChangeSetScheduledIRs")
                                                                                                                                                      THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                                                                                                                    "Failure of assertion at line 1189, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                    "Failure of assertion at line 1198, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                           /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                    "Failure of assertion at line 1190, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                    "Failure of assertion at line 1199, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                           /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                           /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                           IRStatusNIB, 
@@ -5687,14 +5677,14 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                           IRIndex_ >>
                                                                                                                                                      ELSE /\ IF (nextTrans_[self].name = "UpdateIRTag")
                                                                                                                                                                 THEN /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                                                               "Failure of assertion at line 1193, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1202, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                      /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                               "Failure of assertion at line 1194, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1203, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                      /\ Assert(Len(IRQueueNIB) > 0, 
-                                                                                                                                                                               "Failure of assertion at line 1195, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1204, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                      /\ IRIndex_' = [IRIndex_ EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans_[self].ops[1].key]
                                                                                                                                                                      /\ Assert(IRIndex_'[self] # -1, 
-                                                                                                                                                                               "Failure of assertion at line 1197, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                               "Failure of assertion at line 1206, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                      /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex_'[self]].tag = nextTrans_[self].ops[1].value]
                                                                                                                                                                      /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                                      IRStatusNIB, 
@@ -5703,12 +5693,12 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                                      send_NIB_back_ >>
                                                                                                                                                                 ELSE /\ IF (nextTrans_[self].name = "FirstInstallIR")
                                                                                                                                                                            THEN /\ Assert(Len(nextTrans_[self].ops) = 2, 
-                                                                                                                                                                                          "Failure of assertion at line 1200, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1209, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                                 /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                          "Failure of assertion at line 1201, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1210, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                                 /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                                                 /\ Assert(nextTrans_[self].ops[2].table = NIBT_FIRST_INSTALL, 
-                                                                                                                                                                                          "Failure of assertion at line 1203, column 17 of macro called at line 1723, column 13.")
+                                                                                                                                                                                          "Failure of assertion at line 1212, column 17 of macro called at line 1735, column 13.")
                                                                                                                                                                                 /\ FirstInstallNIB' = [FirstInstallNIB EXCEPT ![nextTrans_[self].ops[2].key] = nextTrans_[self].ops[2].value]
                                                                                                                                                                                 /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                                                                IRQueueNIB |->IRQueueNIB,
@@ -5718,9 +5708,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                                 /\ UNCHANGED SwSuspensionStatusNIB
                                                                                                                                                                            ELSE /\ IF (nextTrans_[self].name = "ChangeIRDoneToNone")
                                                                                                                                                                                       THEN /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                                                     "Failure of assertion at line 1208, column 13 of macro called at line 1723, column 13.")
+                                                                                                                                                                                                     "Failure of assertion at line 1217, column 13 of macro called at line 1735, column 13.")
                                                                                                                                                                                            /\ Assert(nextTrans_[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                                     "Failure of assertion at line 1209, column 13 of macro called at line 1723, column 13.")
+                                                                                                                                                                                                     "Failure of assertion at line 1218, column 13 of macro called at line 1735, column 13.")
                                                                                                                                                                                            /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                                                            /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                                                                           IRQueueNIB |->IRQueueNIB,
@@ -5730,9 +5720,9 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                                                                                                                                                            /\ UNCHANGED SwSuspensionStatusNIB
                                                                                                                                                                                       ELSE /\ IF (nextTrans_[self].name = "SwitchDown")
                                                                                                                                                                                                  THEN /\ Assert(Len(nextTrans_[self].ops) = 1, 
-                                                                                                                                                                                                                "Failure of assertion at line 1214, column 13 of macro called at line 1723, column 13.")
+                                                                                                                                                                                                                "Failure of assertion at line 1223, column 13 of macro called at line 1735, column 13.")
                                                                                                                                                                                                       /\ Assert(nextTrans_[self].ops[1].table = NIBT_SW_STATUS, 
-                                                                                                                                                                                                                "Failure of assertion at line 1215, column 13 of macro called at line 1723, column 13.")
+                                                                                                                                                                                                                "Failure of assertion at line 1224, column 13 of macro called at line 1735, column 13.")
                                                                                                                                                                                                       /\ SwSuspensionStatusNIB' = [SwSuspensionStatusNIB EXCEPT ![nextTrans_[self].ops[1].key] = nextTrans_[self].ops[1].value]
                                                                                                                                                                                                       /\ value_N' = [value_N EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB,
                                                                                                                                                                                                                                                      IRQueueNIB |->IRQueueNIB,
@@ -5792,12 +5782,13 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                  IRQueueRC, SetScheduledIRsRC, 
                                                  FlagRCNIBEventHandlerFailover, 
                                                  FlagRCSequencerFailover, 
-                                                 RC_READY, TEEventQueue, 
+                                                 RC_READY, IRChangeForRC, 
+                                                 TopoChangeForRC, TEEventQueue, 
                                                  DAGEventQueue, DAGQueue, 
                                                  DAGID, MaxDAGID, DAGState, 
                                                  nxtRCIRID, 
                                                  idWorkerWorkingOnDAG, 
-                                                 RCSeqWorkerStatus, IRDoneSet, 
+                                                 IRDoneSet, 
                                                  idThreadWorkingOnIR, 
                                                  workerThreadRanking, 
                                                  controllerStateOFC, 
@@ -5829,31 +5820,34 @@ NIBProcessRCTransaction(self) == /\ pc[self] = "NIBProcessRCTransaction"
                                                  stepOfFailure_N, IRIndex, 
                                                  debug_N, NIBMsg_, 
                                                  isBootStrap_, sw_id, 
-                                                 topoChangeEvent, 
+                                                 transaction_, topoChangeEvent, 
                                                  currSetDownSw, prev_dag_id, 
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 transaction_, stepOfFailure_c, 
-                                                 currDAG, IRSet, key, op1_, 
-                                                 op2, debug, transaction_O, 
-                                                 IRQueueTmp, NIBMsg_O, 
-                                                 isBootStrap, localIRSet, 
-                                                 NIBIRSet, nextIRToSent, 
+                                                 prev_dag, toBeScheduledIRs, 
+                                                 nextIR, transaction_c, 
+                                                 stepOfFailure_c, currDAG, 
+                                                 IRSet, key, op1_, op2, debug, 
+                                                 transaction_O, IRQueueTmp, 
+                                                 NIBMsg_O, isBootStrap, 
+                                                 localIRSet, NIBIRSet, 
+                                                 newIRSet, newIR, nextIRToSent, 
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure_co, 
-                                                 transaction_c, NIBMsg, op1, 
+                                                 transaction_co, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
                                                  removeIR, monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, transaction_co, 
-                                                 topo_change, irID, removedIR, 
-                                                 msg, op_ir_status_change, 
+                                                 stepOfFailure, 
+                                                 transaction_con, topo_change, 
+                                                 irID, removedIR, msg, 
+                                                 op_ir_status_change, 
                                                  op_first_install, transaction >>
 
 NIBUpdateRCIfAny(self) == /\ pc[self] = "NIBUpdateRCIfAny"
+                          /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                           /\ IF moduleIsUp(self)
                                 THEN /\ IF send_NIB_back_[self] = "NIB2RC"
                                            THEN /\ isRCUp(RCThreadID)
@@ -5892,11 +5886,11 @@ NIBUpdateRCIfAny(self) == /\ pc[self] = "NIBUpdateRCIfAny"
                                           SetScheduledIRsRC, 
                                           FlagRCNIBEventHandlerFailover, 
                                           FlagRCSequencerFailover, RC_READY, 
+                                          IRChangeForRC, TopoChangeForRC, 
                                           TEEventQueue, DAGEventQueue, 
                                           DAGQueue, DAGID, MaxDAGID, DAGState, 
                                           nxtRCIRID, idWorkerWorkingOnDAG, 
-                                          RCSeqWorkerStatus, IRDoneSet, 
-                                          idThreadWorkingOnIR, 
+                                          IRDoneSet, idThreadWorkingOnIR, 
                                           workerThreadRanking, 
                                           controllerStateOFC, IRStatusOFC, 
                                           IRQueueOFC, SwSuspensionStatusOFC, 
@@ -5924,28 +5918,29 @@ NIBUpdateRCIfAny(self) == /\ pc[self] = "NIBUpdateRCIfAny"
                                           IR2Remove, send_NIB_back, 
                                           stepOfFailure_N, IRIndex, debug_N, 
                                           NIBMsg_, isBootStrap_, sw_id, 
-                                          topoChangeEvent, currSetDownSw, 
-                                          prev_dag_id, init, nxtDAG, 
-                                          setRemovableIRs, currIR, currIRInDAG, 
-                                          nxtDAGVertices, setIRsInDAG, 
-                                          prev_dag, seqEvent, worker, 
+                                          transaction_, topoChangeEvent, 
+                                          currSetDownSw, prev_dag_id, init, 
+                                          nxtDAG, setRemovableIRs, currIR, 
+                                          currIRInDAG, nxtDAGVertices, 
+                                          setIRsInDAG, prev_dag, 
                                           toBeScheduledIRs, nextIR, 
-                                          transaction_, stepOfFailure_c, 
+                                          transaction_c, stepOfFailure_c, 
                                           currDAG, IRSet, key, op1_, op2, 
                                           debug, transaction_O, IRQueueTmp, 
                                           NIBMsg_O, isBootStrap, localIRSet, 
-                                          NIBIRSet, nextIRToSent, rowIndex, 
-                                          rowRemove, stepOfFailure_co, 
-                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          NIBIRSet, newIRSet, newIR, 
+                                          nextIRToSent, rowIndex, rowRemove, 
+                                          stepOfFailure_co, transaction_co, 
+                                          NIBMsg, op1, IRQueue, 
                                           op_ir_status_change_, removeIR, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, 
-                                          transaction_co, topo_change, irID, 
+                                          transaction_con, topo_change, irID, 
                                           removedIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 NIBForRCReconciliation(self) == /\ pc[self] = "NIBForRCReconciliation"
-                                /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                 /\ controllerSubmoduleFailStat[<<nib0,CONT_NIB_OFC_EVENT>>] = NotFailed /\
                                    controllerSubmoduleFailStat[<<nib0,CONT_NIB_RC_EVENT>>] = NotFailed
@@ -5976,12 +5971,12 @@ NIBForRCReconciliation(self) == /\ pc[self] = "NIBForRCReconciliation"
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
                                                 FlagRCSequencerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 IRStatusOFC, IRQueueOFC, 
@@ -6018,26 +6013,25 @@ NIBForRCReconciliation(self) == /\ pc[self] = "NIBForRCReconciliation"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
-                                                toBeScheduledIRs, nextIR, 
-                                                transaction_, stepOfFailure_c, 
-                                                currDAG, IRSet, key, op1_, op2, 
-                                                debug, transaction_O, 
-                                                IRQueueTmp, NIBMsg_O, 
-                                                isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, toBeScheduledIRs, 
+                                                nextIR, transaction_c, 
+                                                stepOfFailure_c, currDAG, 
+                                                IRSet, key, op1_, op2, debug, 
+                                                transaction_O, IRQueueTmp, 
+                                                NIBMsg_O, isBootStrap, 
+                                                localIRSet, NIBIRSet, newIRSet, 
+                                                newIR, nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, irID, removedIR, 
                                                 msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
@@ -6048,6 +6042,8 @@ NIBRCEventHandler(self) == NIBDequeueRCTransaction(self)
                               \/ NIBForRCReconciliation(self)
 
 NIBDequeueOFCTransaction(self) == /\ pc[self] = "NIBDequeueOFCTransaction"
+                                  /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                   /\ send_NIB_back' = [send_NIB_back EXCEPT ![self] = ""]
                                   /\ IF moduleIsUp(self)
                                         THEN /\ OFC2NIB # <<>>
@@ -6086,12 +6082,13 @@ NIBDequeueOFCTransaction(self) == /\ pc[self] = "NIBDequeueOFCTransaction"
                                                   IRQueueRC, SetScheduledIRsRC, 
                                                   FlagRCNIBEventHandlerFailover, 
                                                   FlagRCSequencerFailover, 
-                                                  RC_READY, TEEventQueue, 
-                                                  DAGEventQueue, DAGQueue, 
-                                                  DAGID, MaxDAGID, DAGState, 
-                                                  nxtRCIRID, 
+                                                  RC_READY, IRChangeForRC, 
+                                                  TopoChangeForRC, 
+                                                  TEEventQueue, DAGEventQueue, 
+                                                  DAGQueue, DAGID, MaxDAGID, 
+                                                  DAGState, nxtRCIRID, 
                                                   idWorkerWorkingOnDAG, 
-                                                  RCSeqWorkerStatus, IRDoneSet, 
+                                                  IRDoneSet, 
                                                   idThreadWorkingOnIR, 
                                                   workerThreadRanking, 
                                                   controllerStateOFC, 
@@ -6129,44 +6126,47 @@ NIBDequeueOFCTransaction(self) == /\ pc[self] = "NIBDequeueOFCTransaction"
                                                   IR2Remove, stepOfFailure_N, 
                                                   IRIndex, debug_N, NIBMsg_, 
                                                   isBootStrap_, sw_id, 
+                                                  transaction_, 
                                                   topoChangeEvent, 
                                                   currSetDownSw, prev_dag_id, 
                                                   init, nxtDAG, 
                                                   setRemovableIRs, currIR, 
                                                   currIRInDAG, nxtDAGVertices, 
                                                   setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
                                                   toBeScheduledIRs, nextIR, 
-                                                  transaction_, 
+                                                  transaction_c, 
                                                   stepOfFailure_c, currDAG, 
                                                   IRSet, key, op1_, op2, debug, 
                                                   transaction_O, IRQueueTmp, 
                                                   NIBMsg_O, isBootStrap, 
                                                   localIRSet, NIBIRSet, 
+                                                  newIRSet, newIR, 
                                                   nextIRToSent, rowIndex, 
                                                   rowRemove, stepOfFailure_co, 
-                                                  transaction_c, NIBMsg, op1, 
+                                                  transaction_co, NIBMsg, op1, 
                                                   IRQueue, 
                                                   op_ir_status_change_, 
                                                   removeIR, monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, 
-                                                  transaction_co, topo_change, 
+                                                  transaction_con, topo_change, 
                                                   irID, removedIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
                                                   transaction >>
 
 NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
+                                  /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                   /\ IF moduleIsUp(self)
                                         THEN /\ IF (nextTrans[self].name = "PrepareIR")
                                                    THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                  "Failure of assertion at line 1120, column 9 of macro called at line 1774, column 13.")
+                                                                  "Failure of assertion at line 1129, column 9 of macro called at line 1789, column 13.")
                                                         /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
-                                                                  "Failure of assertion at line 1121, column 9 of macro called at line 1774, column 13.")
+                                                                  "Failure of assertion at line 1130, column 9 of macro called at line 1789, column 13.")
                                                         /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                         /\ Assert(nextTrans[self].ops[2].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                  "Failure of assertion at line 1123, column 9 of macro called at line 1774, column 13.")
+                                                                  "Failure of assertion at line 1132, column 9 of macro called at line 1789, column 13.")
                                                         /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
                                                         /\ UNCHANGED << FirstInstallNIB, 
                                                                         IRStatusNIB, 
@@ -6179,15 +6179,15 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                         IRIndex >>
                                                    ELSE /\ IF (nextTrans[self].name = "ScheduleIR")
                                                               THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                             "Failure of assertion at line 1129, column 9 of macro called at line 1774, column 13.")
+                                                                             "Failure of assertion at line 1138, column 9 of macro called at line 1789, column 13.")
                                                                    /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].value.IR
                                                                          THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
                                                                          ELSE /\ TRUE
                                                                               /\ UNCHANGED IRQueueNIB
                                                                    /\ Assert(nextTrans[self].ops[2].table = NIBT_CONTROLLER_STATE, 
-                                                                             "Failure of assertion at line 1133, column 9 of macro called at line 1774, column 13.")
+                                                                             "Failure of assertion at line 1142, column 9 of macro called at line 1789, column 13.")
                                                                    /\ Assert(Len(nextTrans[self].ops[2].key) = 2, 
-                                                                             "Failure of assertion at line 1134, column 9 of macro called at line 1774, column 13.")
+                                                                             "Failure of assertion at line 1143, column 9 of macro called at line 1789, column 13.")
                                                                    /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
                                                                    /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB,
                                                                                                               IRQueueNIB |->IRQueueNIB',
@@ -6203,7 +6203,7 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                    IRIndex >>
                                                               ELSE /\ IF (nextTrans[self].name = "RCScheduleIRInOneStep")
                                                                          THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                        "Failure of assertion at line 1140, column 9 of macro called at line 1774, column 13.")
+                                                                                        "Failure of assertion at line 1149, column 9 of macro called at line 1789, column 13.")
                                                                               /\ IF ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].value.IR
                                                                                     THEN /\ IRQueueNIB' = Append(IRQueueNIB, nextTrans[self].ops[1].value)
                                                                                     ELSE /\ TRUE
@@ -6268,9 +6268,9 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                IRIndex >>
                                                                                                           ELSE /\ IF (nextTrans[self].name = "UpdateControllerState")
                                                                                                                      THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_CONTROLLER_STATE, 
-                                                                                                                                    "Failure of assertion at line 1171, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                    "Failure of assertion at line 1180, column 17 of macro called at line 1789, column 13.")
                                                                                                                           /\ Assert(Len(nextTrans[self].ops[1].key) = 2, 
-                                                                                                                                    "Failure of assertion at line 1172, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                    "Failure of assertion at line 1181, column 17 of macro called at line 1789, column 13.")
                                                                                                                           /\ controllerStateNIB' = [controllerStateNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                           /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                           IRStatusNIB, 
@@ -6284,7 +6284,7 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                           IRIndex >>
                                                                                                                      ELSE /\ IF (nextTrans[self].name = "RemoveIR")
                                                                                                                                 THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                               "Failure of assertion at line 1175, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                               "Failure of assertion at line 1184, column 17 of macro called at line 1789, column 13.")
                                                                                                                                      /\ IR2Remove' = [IR2Remove EXCEPT ![self] = nextTrans[self].ops[1].key]
                                                                                                                                      /\ IF \E i \in DOMAIN IRQueueNIB: IRQueueNIB[i].IR = IR2Remove'[self]
                                                                                                                                            THEN /\ rowRemove_N' = [rowRemove_N EXCEPT ![self] = getFirstIndexWithNIB(IR2Remove'[self], IRQueueNIB)]
@@ -6301,9 +6301,9 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                      IRIndex >>
                                                                                                                                 ELSE /\ IF (nextTrans[self].name = "OFCChangeIRStatus2Sent")
                                                                                                                                            THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                          "Failure of assertion at line 1183, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                          "Failure of assertion at line 1192, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                 /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                          "Failure of assertion at line 1184, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                          "Failure of assertion at line 1193, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                 /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                                                 /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                            IRQueueNIB |->IRQueueNIB,
@@ -6317,9 +6317,9 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                                 IRIndex >>
                                                                                                                                            ELSE /\ IF (nextTrans[self].name = "ChangeSetScheduledIRs")
                                                                                                                                                       THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_SET_SCHEDULED_IRS, 
-                                                                                                                                                                     "Failure of assertion at line 1189, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                     "Failure of assertion at line 1198, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                            /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                     "Failure of assertion at line 1190, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                     "Failure of assertion at line 1199, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                            /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                                                            /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                            IRStatusNIB, 
@@ -6330,14 +6330,14 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                                            IRIndex >>
                                                                                                                                                       ELSE /\ IF (nextTrans[self].name = "UpdateIRTag")
                                                                                                                                                                  THEN /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_QUEUE, 
-                                                                                                                                                                                "Failure of assertion at line 1193, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                "Failure of assertion at line 1202, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                       /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                                "Failure of assertion at line 1194, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                "Failure of assertion at line 1203, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                       /\ Assert(Len(IRQueueNIB) > 0, 
-                                                                                                                                                                                "Failure of assertion at line 1195, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                "Failure of assertion at line 1204, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                       /\ IRIndex' = [IRIndex EXCEPT ![self] = CHOOSE x \in DOMAIN IRQueueNIB: IRQueueNIB[x].IR = nextTrans[self].ops[1].key]
                                                                                                                                                                       /\ Assert(IRIndex'[self] # -1, 
-                                                                                                                                                                                "Failure of assertion at line 1197, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                "Failure of assertion at line 1206, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                       /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![IRIndex'[self]].tag = nextTrans[self].ops[1].value]
                                                                                                                                                                       /\ UNCHANGED << FirstInstallNIB, 
                                                                                                                                                                                       IRStatusNIB, 
@@ -6346,12 +6346,12 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                                                       send_NIB_back >>
                                                                                                                                                                  ELSE /\ IF (nextTrans[self].name = "FirstInstallIR")
                                                                                                                                                                             THEN /\ Assert(Len(nextTrans[self].ops) = 2, 
-                                                                                                                                                                                           "Failure of assertion at line 1200, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                           "Failure of assertion at line 1209, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                                  /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                           "Failure of assertion at line 1201, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                           "Failure of assertion at line 1210, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                                  /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                                                                                  /\ Assert(nextTrans[self].ops[2].table = NIBT_FIRST_INSTALL, 
-                                                                                                                                                                                           "Failure of assertion at line 1203, column 17 of macro called at line 1774, column 13.")
+                                                                                                                                                                                           "Failure of assertion at line 1212, column 17 of macro called at line 1789, column 13.")
                                                                                                                                                                                  /\ FirstInstallNIB' = [FirstInstallNIB EXCEPT ![nextTrans[self].ops[2].key] = nextTrans[self].ops[2].value]
                                                                                                                                                                                  /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                                                             IRQueueNIB |->IRQueueNIB,
@@ -6361,9 +6361,9 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                                                  /\ UNCHANGED SwSuspensionStatusNIB
                                                                                                                                                                             ELSE /\ IF (nextTrans[self].name = "ChangeIRDoneToNone")
                                                                                                                                                                                        THEN /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                                                      "Failure of assertion at line 1208, column 13 of macro called at line 1774, column 13.")
+                                                                                                                                                                                                      "Failure of assertion at line 1217, column 13 of macro called at line 1789, column 13.")
                                                                                                                                                                                             /\ Assert(nextTrans[self].ops[1].table = NIBT_IR_STATUS, 
-                                                                                                                                                                                                      "Failure of assertion at line 1209, column 13 of macro called at line 1774, column 13.")
+                                                                                                                                                                                                      "Failure of assertion at line 1218, column 13 of macro called at line 1789, column 13.")
                                                                                                                                                                                             /\ IRStatusNIB' = [IRStatusNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                                                                                             /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB',
                                                                                                                                                                                                                                        IRQueueNIB |->IRQueueNIB,
@@ -6373,9 +6373,9 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                                                                                                                                                             /\ UNCHANGED SwSuspensionStatusNIB
                                                                                                                                                                                        ELSE /\ IF (nextTrans[self].name = "SwitchDown")
                                                                                                                                                                                                   THEN /\ Assert(Len(nextTrans[self].ops) = 1, 
-                                                                                                                                                                                                                 "Failure of assertion at line 1214, column 13 of macro called at line 1774, column 13.")
+                                                                                                                                                                                                                 "Failure of assertion at line 1223, column 13 of macro called at line 1789, column 13.")
                                                                                                                                                                                                        /\ Assert(nextTrans[self].ops[1].table = NIBT_SW_STATUS, 
-                                                                                                                                                                                                                 "Failure of assertion at line 1215, column 13 of macro called at line 1774, column 13.")
+                                                                                                                                                                                                                 "Failure of assertion at line 1224, column 13 of macro called at line 1789, column 13.")
                                                                                                                                                                                                        /\ SwSuspensionStatusNIB' = [SwSuspensionStatusNIB EXCEPT ![nextTrans[self].ops[1].key] = nextTrans[self].ops[1].value]
                                                                                                                                                                                                        /\ value' = [value EXCEPT ![self] = [IRStatusNIB |-> IRStatusNIB,
                                                                                                                                                                                                                                                   IRQueueNIB |->IRQueueNIB,
@@ -6436,12 +6436,13 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                   IRQueueRC, SetScheduledIRsRC, 
                                                   FlagRCNIBEventHandlerFailover, 
                                                   FlagRCSequencerFailover, 
-                                                  RC_READY, TEEventQueue, 
-                                                  DAGEventQueue, DAGQueue, 
-                                                  DAGID, MaxDAGID, DAGState, 
-                                                  nxtRCIRID, 
+                                                  RC_READY, IRChangeForRC, 
+                                                  TopoChangeForRC, 
+                                                  TEEventQueue, DAGEventQueue, 
+                                                  DAGQueue, DAGID, MaxDAGID, 
+                                                  DAGState, nxtRCIRID, 
                                                   idWorkerWorkingOnDAG, 
-                                                  RCSeqWorkerStatus, IRDoneSet, 
+                                                  IRDoneSet, 
                                                   idThreadWorkingOnIR, 
                                                   workerThreadRanking, 
                                                   controllerStateOFC, 
@@ -6475,35 +6476,38 @@ NIBOFCProcessTransaction(self) == /\ pc[self] = "NIBOFCProcessTransaction"
                                                   debug_, nextTrans, 
                                                   stepOfFailure_N, NIBMsg_, 
                                                   isBootStrap_, sw_id, 
+                                                  transaction_, 
                                                   topoChangeEvent, 
                                                   currSetDownSw, prev_dag_id, 
                                                   init, nxtDAG, 
                                                   setRemovableIRs, currIR, 
                                                   currIRInDAG, nxtDAGVertices, 
                                                   setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
                                                   toBeScheduledIRs, nextIR, 
-                                                  transaction_, 
+                                                  transaction_c, 
                                                   stepOfFailure_c, currDAG, 
                                                   IRSet, key, op1_, op2, debug, 
                                                   transaction_O, IRQueueTmp, 
                                                   NIBMsg_O, isBootStrap, 
                                                   localIRSet, NIBIRSet, 
+                                                  newIRSet, newIR, 
                                                   nextIRToSent, rowIndex, 
                                                   rowRemove, stepOfFailure_co, 
-                                                  transaction_c, NIBMsg, op1, 
+                                                  transaction_co, NIBMsg, op1, 
                                                   IRQueue, 
                                                   op_ir_status_change_, 
                                                   removeIR, monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, 
-                                                  transaction_co, topo_change, 
+                                                  transaction_con, topo_change, 
                                                   irID, removedIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
                                                   transaction >>
 
 NIBOFCSendBackIfAny(self) == /\ pc[self] = "NIBOFCSendBackIfAny"
+                             /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                              /\ IF moduleIsUp(self)
                                    THEN /\ IF send_NIB_back[self] = "NIB2RC"
                                               THEN /\ isRCUp(RCThreadID)
@@ -6543,11 +6547,11 @@ NIBOFCSendBackIfAny(self) == /\ pc[self] = "NIBOFCSendBackIfAny"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -6577,29 +6581,30 @@ NIBOFCSendBackIfAny(self) == /\ pc[self] = "NIBOFCSendBackIfAny"
                                              value, rowRemove_N, IR2Remove, 
                                              stepOfFailure_N, IRIndex, debug_N, 
                                              NIBMsg_, isBootStrap_, sw_id, 
-                                             topoChangeEvent, currSetDownSw, 
-                                             prev_dag_id, init, nxtDAG, 
-                                             setRemovableIRs, currIR, 
+                                             transaction_, topoChangeEvent, 
+                                             currSetDownSw, prev_dag_id, init, 
+                                             nxtDAG, setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             setIRsInDAG, prev_dag, 
+                                             toBeScheduledIRs, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
 NIBForOFCReconciliation(self) == /\ pc[self] = "NIBForOFCReconciliation"
-                                 /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                 /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                  /\ controllerSubmoduleFailStat[<<nib0,CONT_NIB_OFC_EVENT>>] = NotFailed /\
                                     controllerSubmoduleFailStat[<<nib0,CONT_NIB_RC_EVENT>>] = NotFailed
@@ -6630,12 +6635,13 @@ NIBForOFCReconciliation(self) == /\ pc[self] = "NIBForOFCReconciliation"
                                                  IRQueueRC, SetScheduledIRsRC, 
                                                  FlagRCNIBEventHandlerFailover, 
                                                  FlagRCSequencerFailover, 
-                                                 RC_READY, TEEventQueue, 
+                                                 RC_READY, IRChangeForRC, 
+                                                 TopoChangeForRC, TEEventQueue, 
                                                  DAGEventQueue, DAGQueue, 
                                                  DAGID, MaxDAGID, DAGState, 
                                                  nxtRCIRID, 
                                                  idWorkerWorkingOnDAG, 
-                                                 RCSeqWorkerStatus, IRDoneSet, 
+                                                 IRDoneSet, 
                                                  idThreadWorkingOnIR, 
                                                  workerThreadRanking, 
                                                  controllerStateOFC, 
@@ -6676,28 +6682,29 @@ NIBForOFCReconciliation(self) == /\ pc[self] = "NIBForOFCReconciliation"
                                                  stepOfFailure_N, IRIndex, 
                                                  debug_N, NIBMsg_, 
                                                  isBootStrap_, sw_id, 
-                                                 topoChangeEvent, 
+                                                 transaction_, topoChangeEvent, 
                                                  currSetDownSw, prev_dag_id, 
                                                  init, nxtDAG, setRemovableIRs, 
                                                  currIR, currIRInDAG, 
                                                  nxtDAGVertices, setIRsInDAG, 
-                                                 prev_dag, seqEvent, worker, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 transaction_, stepOfFailure_c, 
-                                                 currDAG, IRSet, key, op1_, 
-                                                 op2, debug, transaction_O, 
-                                                 IRQueueTmp, NIBMsg_O, 
-                                                 isBootStrap, localIRSet, 
-                                                 NIBIRSet, nextIRToSent, 
+                                                 prev_dag, toBeScheduledIRs, 
+                                                 nextIR, transaction_c, 
+                                                 stepOfFailure_c, currDAG, 
+                                                 IRSet, key, op1_, op2, debug, 
+                                                 transaction_O, IRQueueTmp, 
+                                                 NIBMsg_O, isBootStrap, 
+                                                 localIRSet, NIBIRSet, 
+                                                 newIRSet, newIR, nextIRToSent, 
                                                  rowIndex, rowRemove, 
                                                  stepOfFailure_co, 
-                                                 transaction_c, NIBMsg, op1, 
+                                                 transaction_co, NIBMsg, op1, 
                                                  IRQueue, op_ir_status_change_, 
                                                  removeIR, monitoringEvent, 
                                                  setIRsToReset, resetIR, 
-                                                 stepOfFailure, transaction_co, 
-                                                 topo_change, irID, removedIR, 
-                                                 msg, op_ir_status_change, 
+                                                 stepOfFailure, 
+                                                 transaction_con, topo_change, 
+                                                 irID, removedIR, msg, 
+                                                 op_ir_status_change, 
                                                  op_first_install, transaction >>
 
 NIBOFCEventHandler(self) == NIBDequeueOFCTransaction(self)
@@ -6706,7 +6713,7 @@ NIBOFCEventHandler(self) == NIBDequeueOFCTransaction(self)
                                \/ NIBForOFCReconciliation(self)
 
 RCFailoverResetStates(self) == /\ pc[self] = "RCFailoverResetStates"
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                               /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                /\ controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = Failed /\
                                     controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = Failed
@@ -6741,11 +6748,11 @@ RCFailoverResetStates(self) == /\ pc[self] = "RCFailoverResetStates"
                                                SwSuspensionStatusRC, 
                                                FlagRCNIBEventHandlerFailover, 
                                                FlagRCSequencerFailover, 
+                                               IRChangeForRC, TopoChangeForRC, 
                                                TEEventQueue, DAGEventQueue, 
                                                DAGQueue, DAGID, MaxDAGID, 
                                                DAGState, nxtRCIRID, 
-                                               idWorkerWorkingOnDAG, 
-                                               RCSeqWorkerStatus, IRDoneSet, 
+                                               idWorkerWorkingOnDAG, IRDoneSet, 
                                                idThreadWorkingOnIR, 
                                                workerThreadRanking, 
                                                controllerStateOFC, IRStatusOFC, 
@@ -6780,30 +6787,32 @@ RCFailoverResetStates(self) == /\ pc[self] = "RCFailoverResetStates"
                                                send_NIB_back, stepOfFailure_N, 
                                                IRIndex, debug_N, NIBMsg_, 
                                                isBootStrap_, sw_id, 
-                                               topoChangeEvent, currSetDownSw, 
-                                               prev_dag_id, init, nxtDAG, 
-                                               setRemovableIRs, currIR, 
-                                               currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, seqEvent, 
-                                               worker, toBeScheduledIRs, 
-                                               nextIR, transaction_, 
+                                               transaction_, topoChangeEvent, 
+                                               currSetDownSw, prev_dag_id, 
+                                               init, nxtDAG, setRemovableIRs, 
+                                               currIR, currIRInDAG, 
+                                               nxtDAGVertices, setIRsInDAG, 
+                                               prev_dag, toBeScheduledIRs, 
+                                               nextIR, transaction_c, 
                                                stepOfFailure_c, currDAG, IRSet, 
                                                key, op1_, op2, debug, 
                                                transaction_O, IRQueueTmp, 
                                                NIBMsg_O, isBootStrap, 
-                                               localIRSet, NIBIRSet, 
-                                               nextIRToSent, rowIndex, 
+                                               localIRSet, NIBIRSet, newIRSet, 
+                                               newIR, nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_co, 
-                                               transaction_c, NIBMsg, op1, 
+                                               transaction_co, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
                                                removeIR, monitoringEvent, 
                                                setIRsToReset, resetIR, 
-                                               stepOfFailure, transaction_co, 
+                                               stepOfFailure, transaction_con, 
                                                topo_change, irID, removedIR, 
                                                msg, op_ir_status_change, 
                                                op_first_install, transaction >>
 
 RCReadNIB(self) == /\ pc[self] = "RCReadNIB"
+                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
                    /\ NIB_READY_FOR_RC \/ isNIBUp(NIBThreadID)
                    /\ IRStatusRC' = IRStatusNIB
                    /\ SwSuspensionStatusRC' = SwSuspensionStatusNIB
@@ -6823,12 +6832,13 @@ RCReadNIB(self) == /\ pc[self] = "RCReadNIB"
                                    controllerStateRC, IRQueueRC, 
                                    SetScheduledIRsRC, 
                                    FlagRCNIBEventHandlerFailover, 
-                                   FlagRCSequencerFailover, TEEventQueue, 
+                                   FlagRCSequencerFailover, IRChangeForRC, 
+                                   TopoChangeForRC, TEEventQueue, 
                                    DAGEventQueue, DAGQueue, DAGID, MaxDAGID, 
                                    DAGState, nxtRCIRID, idWorkerWorkingOnDAG, 
-                                   RCSeqWorkerStatus, IRDoneSet, 
-                                   idThreadWorkingOnIR, workerThreadRanking, 
-                                   controllerStateOFC, IRStatusOFC, IRQueueOFC, 
+                                   IRDoneSet, idThreadWorkingOnIR, 
+                                   workerThreadRanking, controllerStateOFC, 
+                                   IRStatusOFC, IRQueueOFC, 
                                    SwSuspensionStatusOFC, SetScheduledIRsOFC, 
                                    FlagOFCWorkerFailover, 
                                    FlagOFCMonitorFailover, 
@@ -6851,24 +6861,27 @@ RCReadNIB(self) == /\ pc[self] = "RCReadNIB"
                                    IRIndex_, debug_, nextTrans, value, 
                                    rowRemove_N, IR2Remove, send_NIB_back, 
                                    stepOfFailure_N, IRIndex, debug_N, NIBMsg_, 
-                                   isBootStrap_, sw_id, topoChangeEvent, 
-                                   currSetDownSw, prev_dag_id, init, nxtDAG, 
-                                   setRemovableIRs, currIR, currIRInDAG, 
-                                   nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                   seqEvent, worker, toBeScheduledIRs, nextIR, 
-                                   transaction_, stepOfFailure_c, currDAG, 
+                                   isBootStrap_, sw_id, transaction_, 
+                                   topoChangeEvent, currSetDownSw, prev_dag_id, 
+                                   init, nxtDAG, setRemovableIRs, currIR, 
+                                   currIRInDAG, nxtDAGVertices, setIRsInDAG, 
+                                   prev_dag, toBeScheduledIRs, nextIR, 
+                                   transaction_c, stepOfFailure_c, currDAG, 
                                    IRSet, key, op1_, op2, debug, transaction_O, 
                                    IRQueueTmp, NIBMsg_O, isBootStrap, 
-                                   localIRSet, NIBIRSet, nextIRToSent, 
-                                   rowIndex, rowRemove, stepOfFailure_co, 
-                                   transaction_c, NIBMsg, op1, IRQueue, 
-                                   op_ir_status_change_, removeIR, 
-                                   monitoringEvent, setIRsToReset, resetIR, 
-                                   stepOfFailure, transaction_co, topo_change, 
-                                   irID, removedIR, msg, op_ir_status_change, 
-                                   op_first_install, transaction >>
+                                   localIRSet, NIBIRSet, newIRSet, newIR, 
+                                   nextIRToSent, rowIndex, rowRemove, 
+                                   stepOfFailure_co, transaction_co, NIBMsg, 
+                                   op1, IRQueue, op_ir_status_change_, 
+                                   removeIR, monitoringEvent, setIRsToReset, 
+                                   resetIR, stepOfFailure, transaction_con, 
+                                   topo_change, irID, removedIR, msg, 
+                                   op_ir_status_change, op_first_install, 
+                                   transaction >>
 
 RCBack2Normal(self) == /\ pc[self] = "RCBack2Normal"
+                       /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                        /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![<<rc0,CONT_WORKER_SEQ>>] = NotFailed,
                                                                                              ![<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed]
                        /\ NIBUpdateForRC' = TRUE
@@ -6890,10 +6903,11 @@ RCBack2Normal(self) == /\ pc[self] = "RCBack2Normal"
                                        SetScheduledIRsRC, 
                                        FlagRCNIBEventHandlerFailover, 
                                        FlagRCSequencerFailover, RC_READY, 
+                                       IRChangeForRC, TopoChangeForRC, 
                                        TEEventQueue, DAGEventQueue, DAGQueue, 
                                        DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                       idWorkerWorkingOnDAG, RCSeqWorkerStatus, 
-                                       IRDoneSet, idThreadWorkingOnIR, 
+                                       idWorkerWorkingOnDAG, IRDoneSet, 
+                                       idThreadWorkingOnIR, 
                                        workerThreadRanking, controllerStateOFC, 
                                        IRStatusOFC, IRQueueOFC, 
                                        SwSuspensionStatusOFC, 
@@ -6921,39 +6935,42 @@ RCBack2Normal(self) == /\ pc[self] = "RCBack2Normal"
                                        rowRemove_N, IR2Remove, send_NIB_back, 
                                        stepOfFailure_N, IRIndex, debug_N, 
                                        NIBMsg_, isBootStrap_, sw_id, 
-                                       topoChangeEvent, currSetDownSw, 
-                                       prev_dag_id, init, nxtDAG, 
-                                       setRemovableIRs, currIR, currIRInDAG, 
-                                       nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                       seqEvent, worker, toBeScheduledIRs, 
-                                       nextIR, transaction_, stepOfFailure_c, 
+                                       transaction_, topoChangeEvent, 
+                                       currSetDownSw, prev_dag_id, init, 
+                                       nxtDAG, setRemovableIRs, currIR, 
+                                       currIRInDAG, nxtDAGVertices, 
+                                       setIRsInDAG, prev_dag, toBeScheduledIRs, 
+                                       nextIR, transaction_c, stepOfFailure_c, 
                                        currDAG, IRSet, key, op1_, op2, debug, 
                                        transaction_O, IRQueueTmp, NIBMsg_O, 
                                        isBootStrap, localIRSet, NIBIRSet, 
-                                       nextIRToSent, rowIndex, rowRemove, 
-                                       stepOfFailure_co, transaction_c, NIBMsg, 
-                                       op1, IRQueue, op_ir_status_change_, 
-                                       removeIR, monitoringEvent, 
-                                       setIRsToReset, resetIR, stepOfFailure, 
-                                       transaction_co, topo_change, irID, 
-                                       removedIR, msg, op_ir_status_change, 
-                                       op_first_install, transaction >>
+                                       newIRSet, newIR, nextIRToSent, rowIndex, 
+                                       rowRemove, stepOfFailure_co, 
+                                       transaction_co, NIBMsg, op1, IRQueue, 
+                                       op_ir_status_change_, removeIR, 
+                                       monitoringEvent, setIRsToReset, resetIR, 
+                                       stepOfFailure, transaction_con, 
+                                       topo_change, irID, removedIR, msg, 
+                                       op_ir_status_change, op_first_install, 
+                                       transaction >>
 
 RCFailoverProc(self) == RCFailoverResetStates(self) \/ RCReadNIB(self)
                            \/ RCBack2Normal(self)
 
 RCSendReadTransaction(self) == /\ pc[self] = "RCSendReadTransaction"
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                               /\ Assert(RC_READY = FALSE, 
+                                         "Failure of assertion at line 1878, column 9.")
+                               /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                /\ IF isRCFailed(self)
-                                     THEN /\ FlagRCSequencerFailover' = TRUE
+                                     THEN /\ FlagRCNIBEventHandlerFailover' = TRUE
                                           /\ pc' = [pc EXCEPT ![self] = "RCNIBEventHandlerFailover"]
-                                          /\ UNCHANGED << RC2NIB, transaction >>
+                                          /\ UNCHANGED << RC2NIB, transaction_ >>
                                      ELSE /\ isNIBUp(NIBThreadID) \/ isNIBFailed(NIBThreadID)
-                                          /\ transaction' = [transaction EXCEPT ![self] = [name |-> "SeqReadNIBStates"]]
-                                          /\ RC2NIB' = RC2NIB \o <<transaction'[self]>>
+                                          /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "SeqReadNIBStates"]]
+                                          /\ RC2NIB' = RC2NIB \o <<transaction_'[self]>>
                                           /\ pc' = [pc EXCEPT ![self] = "RCNIBEventHanderProc"]
-                                          /\ UNCHANGED FlagRCSequencerFailover
+                                          /\ UNCHANGED FlagRCNIBEventHandlerFailover
                                /\ UNCHANGED << switchLock, controllerLock, 
                                                FirstInstallOFC, 
                                                FirstInstallNIB, 
@@ -6976,12 +6993,12 @@ RCSendReadTransaction(self) == /\ pc[self] = "RCSendReadTransaction"
                                                controllerStateRC, IRStatusRC, 
                                                SwSuspensionStatusRC, IRQueueRC, 
                                                SetScheduledIRsRC, 
-                                               FlagRCNIBEventHandlerFailover, 
-                                               RC_READY, TEEventQueue, 
+                                               FlagRCSequencerFailover, 
+                                               RC_READY, IRChangeForRC, 
+                                               TopoChangeForRC, TEEventQueue, 
                                                DAGEventQueue, DAGQueue, DAGID, 
                                                MaxDAGID, DAGState, nxtRCIRID, 
-                                               idWorkerWorkingOnDAG, 
-                                               RCSeqWorkerStatus, IRDoneSet, 
+                                               idWorkerWorkingOnDAG, IRDoneSet, 
                                                idThreadWorkingOnIR, 
                                                workerThreadRanking, 
                                                controllerStateOFC, IRStatusOFC, 
@@ -7021,27 +7038,27 @@ RCSendReadTransaction(self) == /\ pc[self] = "RCSendReadTransaction"
                                                prev_dag_id, init, nxtDAG, 
                                                setRemovableIRs, currIR, 
                                                currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, seqEvent, 
-                                               worker, toBeScheduledIRs, 
-                                               nextIR, transaction_, 
-                                               stepOfFailure_c, currDAG, IRSet, 
-                                               key, op1_, op2, debug, 
-                                               transaction_O, IRQueueTmp, 
-                                               NIBMsg_O, isBootStrap, 
-                                               localIRSet, NIBIRSet, 
+                                               setIRsInDAG, prev_dag, 
+                                               toBeScheduledIRs, nextIR, 
+                                               transaction_c, stepOfFailure_c, 
+                                               currDAG, IRSet, key, op1_, op2, 
+                                               debug, transaction_O, 
+                                               IRQueueTmp, NIBMsg_O, 
+                                               isBootStrap, localIRSet, 
+                                               NIBIRSet, newIRSet, newIR, 
                                                nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_co, 
-                                               transaction_c, NIBMsg, op1, 
+                                               transaction_co, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
                                                removeIR, monitoringEvent, 
                                                setIRsToReset, resetIR, 
-                                               stepOfFailure, transaction_co, 
+                                               stepOfFailure, transaction_con, 
                                                topo_change, irID, removedIR, 
                                                msg, op_ir_status_change, 
-                                               op_first_install >>
+                                               op_first_install, transaction >>
 
 RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
-                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                              /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ IF isRCFailed(self)
                                     THEN /\ FlagRCNIBEventHandlerFailover' = TRUE
@@ -7051,6 +7068,9 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                                          SwSuspensionStatusRC, 
                                                          IRQueueRC, 
                                                          SetScheduledIRsRC, 
+                                                         RC_READY, 
+                                                         IRChangeForRC, 
+                                                         TopoChangeForRC, 
                                                          TEEventQueue, NIB2RC, 
                                                          NIBMsg_, isBootStrap_, 
                                                          sw_id >>
@@ -7073,27 +7093,39 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                                                                sw_id >>
                                                     /\ NIBUpdateForRC' = TRUE
                                                     /\ isBootStrap_' = [isBootStrap_ EXCEPT ![self] = FALSE]
+                                                    /\ Assert(RC_READY = FALSE, 
+                                                              "Failure of assertion at line 1923, column 21.")
+                                                    /\ RC_READY' = TRUE
+                                                    /\ UNCHANGED << IRChangeForRC, 
+                                                                    TopoChangeForRC >>
                                                ELSE /\ IF   IRStatusRC # NIBMsg_'[self].value.IRStatusNIB
                                                           \/ SwSuspensionStatusRC # NIBMsg_'[self].value.SwSuspensionStatusNIB
                                                           THEN /\ IF IRStatusRC # NIBMsg_'[self].value.IRStatusNIB
-                                                                     THEN /\ IRStatusRC' = NIBMsg_'[self].value.IRStatusNIB
+                                                                     THEN /\ IRStatusRC' = [ir \in DOMAIN IRStatusRC |-> IF ir \in DOMAIN NIBMsg_'[self].value.IRStatusNIB
+                                                                                                                            /\ IRStatusRC[ir]# NIBMsg_'[self].value.IRStatusNIB[ir]
+                                                                                                                         THEN NIBMsg_'[self].value.IRStatusNIB[ir]
+                                                                                                                         ELSE IRStatusRC[ir]]
                                                                           /\ SetScheduledIRsRC' =  [sw \in SW |-> IF SetScheduledIRsRC[sw] = {}
                                                                                                   THEN SetScheduledIRsRC[sw]
                                                                                                   ELSE {ir \in SetScheduledIRsRC[sw]:
                                                                                                           IRStatusRC'[ir] # IR_DONE}]
                                                                           /\ IRQueueRC' = SelectSeq(IRQueueRC, LAMBDA i: IRStatusRC'[i.IR] # IR_DONE)
+                                                                          /\ IRChangeForRC' = TRUE
                                                                      ELSE /\ TRUE
                                                                           /\ UNCHANGED << IRStatusRC, 
                                                                                           IRQueueRC, 
-                                                                                          SetScheduledIRsRC >>
+                                                                                          SetScheduledIRsRC, 
+                                                                                          IRChangeForRC >>
                                                                /\ IF SwSuspensionStatusRC # NIBMsg_'[self].value.SwSuspensionStatusNIB
                                                                      THEN /\ sw_id' = [sw_id EXCEPT ![self] = CHOOSE x \in DOMAIN SwSuspensionStatusRC: SwSuspensionStatusRC[x] # NIBMsg_'[self].value.SwSuspensionStatusNIB[x]]
                                                                           /\ SwSuspensionStatusRC' = NIBMsg_'[self].value.SwSuspensionStatusNIB
                                                                           /\ TEEventQueue' = [TEEventQueue EXCEPT ![self[1]] = Append(TEEventQueue[self[1]], [type |-> TOPO_MOD,
                                                                                                                                             sw |-> sw_id'[self],
                                                                                                                                             state |-> SW_SUSPEND])]
+                                                                          /\ TopoChangeForRC' = TRUE
                                                                      ELSE /\ TRUE
                                                                           /\ UNCHANGED << SwSuspensionStatusRC, 
+                                                                                          TopoChangeForRC, 
                                                                                           TEEventQueue, 
                                                                                           sw_id >>
                                                                /\ NIBUpdateForRC' = TRUE
@@ -7103,9 +7135,12 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                                                                SwSuspensionStatusRC, 
                                                                                IRQueueRC, 
                                                                                SetScheduledIRsRC, 
+                                                                               IRChangeForRC, 
+                                                                               TopoChangeForRC, 
                                                                                TEEventQueue, 
                                                                                sw_id >>
-                                                    /\ UNCHANGED isBootStrap_
+                                                    /\ UNCHANGED << RC_READY, 
+                                                                    isBootStrap_ >>
                                          /\ pc' = [pc EXCEPT ![self] = "RCNIBEventHanderProc"]
                                          /\ UNCHANGED FlagRCNIBEventHandlerFailover
                               /\ UNCHANGED << switchLock, controllerLock, 
@@ -7127,11 +7162,9 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                               switchOrdering, dependencyGraph, 
                                               ir2sw, controllerStateRC, 
                                               FlagRCSequencerFailover, 
-                                              RC_READY, DAGEventQueue, 
-                                              DAGQueue, DAGID, MaxDAGID, 
-                                              DAGState, nxtRCIRID, 
-                                              idWorkerWorkingOnDAG, 
-                                              RCSeqWorkerStatus, IRDoneSet, 
+                                              DAGEventQueue, DAGQueue, DAGID, 
+                                              MaxDAGID, DAGState, nxtRCIRID, 
+                                              idWorkerWorkingOnDAG, IRDoneSet, 
                                               idThreadWorkingOnIR, 
                                               workerThreadRanking, 
                                               controllerStateOFC, IRStatusOFC, 
@@ -7165,30 +7198,31 @@ RCNIBEventHanderProc(self) == /\ pc[self] = "RCNIBEventHanderProc"
                                               nextTrans, value, rowRemove_N, 
                                               IR2Remove, send_NIB_back, 
                                               stepOfFailure_N, IRIndex, 
-                                              debug_N, topoChangeEvent, 
-                                              currSetDownSw, prev_dag_id, init, 
-                                              nxtDAG, setRemovableIRs, currIR, 
+                                              debug_N, transaction_, 
+                                              topoChangeEvent, currSetDownSw, 
+                                              prev_dag_id, init, nxtDAG, 
+                                              setRemovableIRs, currIR, 
                                               currIRInDAG, nxtDAGVertices, 
-                                              setIRsInDAG, prev_dag, seqEvent, 
-                                              worker, toBeScheduledIRs, nextIR, 
-                                              transaction_, stepOfFailure_c, 
+                                              setIRsInDAG, prev_dag, 
+                                              toBeScheduledIRs, nextIR, 
+                                              transaction_c, stepOfFailure_c, 
                                               currDAG, IRSet, key, op1_, op2, 
                                               debug, transaction_O, IRQueueTmp, 
                                               NIBMsg_O, isBootStrap, 
-                                              localIRSet, NIBIRSet, 
-                                              nextIRToSent, rowIndex, 
+                                              localIRSet, NIBIRSet, newIRSet, 
+                                              newIR, nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_co, 
-                                              transaction_c, NIBMsg, op1, 
+                                              transaction_co, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
                                               removeIR, monitoringEvent, 
                                               setIRsToReset, resetIR, 
-                                              stepOfFailure, transaction_co, 
+                                              stepOfFailure, transaction_con, 
                                               topo_change, irID, removedIR, 
                                               msg, op_ir_status_change, 
                                               op_first_install, transaction >>
 
 RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
-                                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                    /\ controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = NotFailed /\
                                             controllerSubmoduleFailStat[<<rc0,CONT_RC_NIB_EVENT>>] = NotFailed
@@ -7222,12 +7256,12 @@ RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
                                                    SetScheduledIRsRC, 
                                                    FlagRCNIBEventHandlerFailover, 
                                                    FlagRCSequencerFailover, 
-                                                   RC_READY, TEEventQueue, 
-                                                   DAGEventQueue, DAGQueue, 
-                                                   DAGID, MaxDAGID, DAGState, 
-                                                   nxtRCIRID, 
+                                                   RC_READY, IRChangeForRC, 
+                                                   TopoChangeForRC, 
+                                                   TEEventQueue, DAGEventQueue, 
+                                                   DAGQueue, DAGID, MaxDAGID, 
+                                                   DAGState, nxtRCIRID, 
                                                    idWorkerWorkingOnDAG, 
-                                                   RCSeqWorkerStatus, 
                                                    IRDoneSet, 
                                                    idThreadWorkingOnIR, 
                                                    workerThreadRanking, 
@@ -7270,31 +7304,32 @@ RCNIBEventHandlerFailover(self) == /\ pc[self] = "RCNIBEventHandlerFailover"
                                                    send_NIB_back, 
                                                    stepOfFailure_N, IRIndex, 
                                                    debug_N, NIBMsg_, sw_id, 
+                                                   transaction_, 
                                                    topoChangeEvent, 
                                                    currSetDownSw, prev_dag_id, 
                                                    init, nxtDAG, 
                                                    setRemovableIRs, currIR, 
                                                    currIRInDAG, nxtDAGVertices, 
                                                    setIRsInDAG, prev_dag, 
-                                                   seqEvent, worker, 
                                                    toBeScheduledIRs, nextIR, 
-                                                   transaction_, 
+                                                   transaction_c, 
                                                    stepOfFailure_c, currDAG, 
                                                    IRSet, key, op1_, op2, 
                                                    debug, transaction_O, 
                                                    IRQueueTmp, NIBMsg_O, 
                                                    isBootStrap, localIRSet, 
-                                                   NIBIRSet, nextIRToSent, 
-                                                   rowIndex, rowRemove, 
-                                                   stepOfFailure_co, 
-                                                   transaction_c, NIBMsg, op1, 
+                                                   NIBIRSet, newIRSet, newIR, 
+                                                   nextIRToSent, rowIndex, 
+                                                   rowRemove, stepOfFailure_co, 
+                                                   transaction_co, NIBMsg, op1, 
                                                    IRQueue, 
                                                    op_ir_status_change_, 
                                                    removeIR, monitoringEvent, 
                                                    setIRsToReset, resetIR, 
                                                    stepOfFailure, 
-                                                   transaction_co, topo_change, 
-                                                   irID, removedIR, msg, 
+                                                   transaction_con, 
+                                                   topo_change, irID, 
+                                                   removedIR, msg, 
                                                    op_ir_status_change, 
                                                    op_first_install, 
                                                    transaction >>
@@ -7306,10 +7341,14 @@ RCNIBEventHandler(self) == RCSendReadTransaction(self)
 ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                           /\ controllerIsMaster(self[1])
                           /\ moduleIsUp(self)
+                          /\ RC_READY = TRUE
                           /\ init[self] = 1 \/ TEEventQueue[self[1]] # <<>>
+                          /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                          /\ controllerLock' = self
                           /\ pc' = [pc EXCEPT ![self] = "ControllerTEEventProcessing"]
-                          /\ UNCHANGED << switchLock, controllerLock, 
-                                          FirstInstallOFC, FirstInstallNIB, 
+                          /\ UNCHANGED << switchLock, FirstInstallOFC, 
+                                          FirstInstallNIB, 
                                           sw_fail_ordering_var, ContProcSet, 
                                           SwProcSet, irTypeMapping, 
                                           swSeqChangedStatus, 
@@ -7328,11 +7367,11 @@ ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                                           SetScheduledIRsRC, 
                                           FlagRCNIBEventHandlerFailover, 
                                           FlagRCSequencerFailover, RC_READY, 
+                                          IRChangeForRC, TopoChangeForRC, 
                                           TEEventQueue, DAGEventQueue, 
                                           DAGQueue, DAGID, MaxDAGID, DAGState, 
                                           nxtRCIRID, idWorkerWorkingOnDAG, 
-                                          RCSeqWorkerStatus, IRDoneSet, 
-                                          idThreadWorkingOnIR, 
+                                          IRDoneSet, idThreadWorkingOnIR, 
                                           workerThreadRanking, 
                                           controllerStateOFC, IRStatusOFC, 
                                           IRQueueOFC, SwSuspensionStatusOFC, 
@@ -7362,44 +7401,48 @@ ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                                           rowRemove_N, IR2Remove, 
                                           send_NIB_back, stepOfFailure_N, 
                                           IRIndex, debug_N, NIBMsg_, 
-                                          isBootStrap_, sw_id, topoChangeEvent, 
-                                          currSetDownSw, prev_dag_id, init, 
-                                          nxtDAG, setRemovableIRs, currIR, 
-                                          currIRInDAG, nxtDAGVertices, 
-                                          setIRsInDAG, prev_dag, seqEvent, 
-                                          worker, toBeScheduledIRs, nextIR, 
-                                          transaction_, stepOfFailure_c, 
+                                          isBootStrap_, sw_id, transaction_, 
+                                          topoChangeEvent, currSetDownSw, 
+                                          prev_dag_id, init, nxtDAG, 
+                                          setRemovableIRs, currIR, currIRInDAG, 
+                                          nxtDAGVertices, setIRsInDAG, 
+                                          prev_dag, toBeScheduledIRs, nextIR, 
+                                          transaction_c, stepOfFailure_c, 
                                           currDAG, IRSet, key, op1_, op2, 
                                           debug, transaction_O, IRQueueTmp, 
                                           NIBMsg_O, isBootStrap, localIRSet, 
-                                          NIBIRSet, nextIRToSent, rowIndex, 
-                                          rowRemove, stepOfFailure_co, 
-                                          transaction_c, NIBMsg, op1, IRQueue, 
+                                          NIBIRSet, newIRSet, newIR, 
+                                          nextIRToSent, rowIndex, rowRemove, 
+                                          stepOfFailure_co, transaction_co, 
+                                          NIBMsg, op1, IRQueue, 
                                           op_ir_status_change_, removeIR, 
                                           monitoringEvent, setIRsToReset, 
                                           resetIR, stepOfFailure, 
-                                          transaction_co, topo_change, irID, 
+                                          transaction_con, topo_change, irID, 
                                           removedIR, msg, op_ir_status_change, 
                                           op_first_install, transaction >>
 
 ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                      /\ IF TEEventQueue[self[1]] # <<>>
-                                           THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                           THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                 /\ topoChangeEvent' = [topoChangeEvent EXCEPT ![self] = Head(TEEventQueue[self[1]])]
                                                 /\ Assert(topoChangeEvent'[self].type \in {TOPO_MOD}, 
-                                                          "Failure of assertion at line 1956, column 17.")
+                                                          "Failure of assertion at line 1985, column 17.")
                                                 /\ IF topoChangeEvent'[self].state = SW_SUSPEND
                                                       THEN /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \cup {topoChangeEvent'[self].sw}]
                                                       ELSE /\ currSetDownSw' = [currSetDownSw EXCEPT ![self] = currSetDownSw[self] \ {topoChangeEvent'[self].sw}]
                                                 /\ TEEventQueue' = [TEEventQueue EXCEPT ![self[1]] = Tail(TEEventQueue[self[1]])]
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTEEventProcessing"]
-                                           ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTEComputeDagBasedOnTopo"]
+                                                /\ UNCHANGED controllerLock
+                                           ELSE /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                                /\ pc' = [pc EXCEPT ![self] = "ControllerTEComputeDagBasedOnTopo"]
                                                 /\ UNCHANGED << TEEventQueue, 
                                                                 topoChangeEvent, 
                                                                 currSetDownSw >>
                                      /\ UNCHANGED << switchLock, 
-                                                     controllerLock, 
                                                      FirstInstallOFC, 
                                                      FirstInstallNIB, 
                                                      sw_fail_ordering_var, 
@@ -7428,11 +7471,12 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      SetScheduledIRsRC, 
                                                      FlagRCNIBEventHandlerFailover, 
                                                      FlagRCSequencerFailover, 
-                                                     RC_READY, DAGEventQueue, 
-                                                     DAGQueue, DAGID, MaxDAGID, 
-                                                     DAGState, nxtRCIRID, 
+                                                     RC_READY, IRChangeForRC, 
+                                                     TopoChangeForRC, 
+                                                     DAGEventQueue, DAGQueue, 
+                                                     DAGID, MaxDAGID, DAGState, 
+                                                     nxtRCIRID, 
                                                      idWorkerWorkingOnDAG, 
-                                                     RCSeqWorkerStatus, 
                                                      IRDoneSet, 
                                                      idThreadWorkingOnIR, 
                                                      workerThreadRanking, 
@@ -7477,29 +7521,30 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      stepOfFailure_N, IRIndex, 
                                                      debug_N, NIBMsg_, 
                                                      isBootStrap_, sw_id, 
-                                                     prev_dag_id, init, nxtDAG, 
+                                                     transaction_, prev_dag_id, 
+                                                     init, nxtDAG, 
                                                      setRemovableIRs, currIR, 
                                                      currIRInDAG, 
                                                      nxtDAGVertices, 
                                                      setIRsInDAG, prev_dag, 
-                                                     seqEvent, worker, 
                                                      toBeScheduledIRs, nextIR, 
-                                                     transaction_, 
+                                                     transaction_c, 
                                                      stepOfFailure_c, currDAG, 
                                                      IRSet, key, op1_, op2, 
                                                      debug, transaction_O, 
                                                      IRQueueTmp, NIBMsg_O, 
                                                      isBootStrap, localIRSet, 
-                                                     NIBIRSet, nextIRToSent, 
-                                                     rowIndex, rowRemove, 
+                                                     NIBIRSet, newIRSet, newIR, 
+                                                     nextIRToSent, rowIndex, 
+                                                     rowRemove, 
                                                      stepOfFailure_co, 
-                                                     transaction_c, NIBMsg, 
+                                                     transaction_co, NIBMsg, 
                                                      op1, IRQueue, 
                                                      op_ir_status_change_, 
                                                      removeIR, monitoringEvent, 
                                                      setIRsToReset, resetIR, 
                                                      stepOfFailure, 
-                                                     transaction_co, 
+                                                     transaction_con, 
                                                      topo_change, irID, 
                                                      removedIR, msg, 
                                                      op_ir_status_change, 
@@ -7507,7 +7552,7 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      transaction >>
 
 ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDagBasedOnTopo"
-                                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                           /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                            /\ DAGID' = (DAGID % MaxDAGID) + 1
                                            /\ nxtDAG' = [nxtDAG EXCEPT ![self] = [id |-> DAGID', dag |-> TOPO_DAG_MAPPING[currSetDownSw[self]]]]
@@ -7521,7 +7566,7 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                  ELSE /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
                                                       /\ IF init[self] = 0
                                                             THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
+                                                                 /\ pc' = [pc EXCEPT ![self] = "TEWaitSequencerTerminate"]
                                                                  /\ UNCHANGED << prev_dag_id, 
                                                                                  init, 
                                                                                  prev_dag >>
@@ -7564,12 +7609,13 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            FlagRCNIBEventHandlerFailover, 
                                                            FlagRCSequencerFailover, 
                                                            RC_READY, 
+                                                           IRChangeForRC, 
+                                                           TopoChangeForRC, 
                                                            TEEventQueue, 
                                                            DAGEventQueue, 
                                                            DAGQueue, MaxDAGID, 
                                                            nxtRCIRID, 
                                                            idWorkerWorkingOnDAG, 
-                                                           RCSeqWorkerStatus, 
                                                            IRDoneSet, 
                                                            idThreadWorkingOnIR, 
                                                            workerThreadRanking, 
@@ -7624,15 +7670,15 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            IRIndex, debug_N, 
                                                            NIBMsg_, 
                                                            isBootStrap_, sw_id, 
+                                                           transaction_, 
                                                            topoChangeEvent, 
                                                            currSetDownSw, 
                                                            setRemovableIRs, 
                                                            currIR, currIRInDAG, 
                                                            setIRsInDAG, 
-                                                           seqEvent, worker, 
                                                            toBeScheduledIRs, 
                                                            nextIR, 
-                                                           transaction_, 
+                                                           transaction_c, 
                                                            stepOfFailure_c, 
                                                            currDAG, IRSet, key, 
                                                            op1_, op2, debug, 
@@ -7641,11 +7687,11 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            NIBMsg_O, 
                                                            isBootStrap, 
                                                            localIRSet, 
-                                                           NIBIRSet, 
-                                                           nextIRToSent, 
+                                                           NIBIRSet, newIRSet, 
+                                                           newIR, nextIRToSent, 
                                                            rowIndex, rowRemove, 
                                                            stepOfFailure_co, 
-                                                           transaction_c, 
+                                                           transaction_co, 
                                                            NIBMsg, op1, 
                                                            IRQueue, 
                                                            op_ir_status_change_, 
@@ -7654,135 +7700,125 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            setIRsToReset, 
                                                            resetIR, 
                                                            stepOfFailure, 
-                                                           transaction_co, 
+                                                           transaction_con, 
                                                            topo_change, irID, 
                                                            removedIR, msg, 
                                                            op_ir_status_change, 
                                                            op_first_install, 
                                                            transaction >>
 
-ControllerTESendDagStaleNotif(self) == /\ pc[self] = "ControllerTESendDagStaleNotif"
-                                       /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                       /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Append(DAGEventQueue[self[1]], [type |-> DAG_STALE, id |-> prev_dag_id[self]])]
-                                       /\ pc' = [pc EXCEPT ![self] = "ControllerTEWaitForStaleDAGToBeRemoved"]
-                                       /\ UNCHANGED << switchLock, 
-                                                       controllerLock, 
-                                                       FirstInstallOFC, 
-                                                       FirstInstallNIB, 
-                                                       sw_fail_ordering_var, 
-                                                       ContProcSet, SwProcSet, 
-                                                       irTypeMapping, 
-                                                       swSeqChangedStatus, 
-                                                       controller2Switch, 
-                                                       switch2Controller, 
-                                                       switchStatus, 
-                                                       installedIRs, 
-                                                       NicAsic2OfaBuff, 
-                                                       Ofa2NicAsicBuff, 
-                                                       Installer2OfaBuff, 
-                                                       Ofa2InstallerBuff, TCAM, 
-                                                       controlMsgCounter, 
-                                                       RecoveryStatus, 
-                                                       controllerSubmoduleFailNum, 
-                                                       controllerSubmoduleFailStat, 
-                                                       switchOrdering, 
-                                                       dependencyGraph, ir2sw, 
-                                                       NIBUpdateForRC, 
-                                                       controllerStateRC, 
-                                                       IRStatusRC, 
-                                                       SwSuspensionStatusRC, 
-                                                       IRQueueRC, 
-                                                       SetScheduledIRsRC, 
-                                                       FlagRCNIBEventHandlerFailover, 
-                                                       FlagRCSequencerFailover, 
-                                                       RC_READY, TEEventQueue, 
-                                                       DAGQueue, DAGID, 
-                                                       MaxDAGID, DAGState, 
-                                                       nxtRCIRID, 
-                                                       idWorkerWorkingOnDAG, 
-                                                       RCSeqWorkerStatus, 
-                                                       IRDoneSet, 
-                                                       idThreadWorkingOnIR, 
-                                                       workerThreadRanking, 
-                                                       controllerStateOFC, 
-                                                       IRStatusOFC, IRQueueOFC, 
-                                                       SwSuspensionStatusOFC, 
-                                                       SetScheduledIRsOFC, 
-                                                       FlagOFCWorkerFailover, 
-                                                       FlagOFCMonitorFailover, 
-                                                       FlagOFCNIBEventHandlerFailover, 
-                                                       OFCThreadID, OFC_READY, 
-                                                       NIB2OFC, NIB2RC, X2NIB, 
-                                                       OFC2NIB, RC2NIB, 
-                                                       FlagNIBFailover, 
-                                                       FlagNIBRCEventhandlerFailover, 
-                                                       FlagNIBOFCEventhandlerFailover, 
-                                                       NIB_READY_FOR_RC, 
-                                                       NIB_READY_FOR_OFC, 
-                                                       masterState, 
-                                                       controllerStateNIB, 
-                                                       IRStatusNIB, 
-                                                       SwSuspensionStatusNIB, 
-                                                       IRQueueNIB, 
-                                                       SetScheduledIRs, 
-                                                       X2NIB_len, NIBThreadID, 
-                                                       RCThreadID, ingressPkt, 
-                                                       ingressIR, egressMsg, 
-                                                       ofaInMsg, 
-                                                       ofaOutConfirmation, 
-                                                       installerInIR, 
-                                                       statusMsg, notFailedSet, 
-                                                       failedElem, obj, 
-                                                       failedSet, 
-                                                       statusResolveMsg, 
-                                                       recoveredElem, value_, 
-                                                       nextTrans_, value_N, 
-                                                       rowRemove_, IR2Remove_, 
-                                                       send_NIB_back_, 
-                                                       stepOfFailure_, 
-                                                       IRIndex_, debug_, 
-                                                       nextTrans, value, 
-                                                       rowRemove_N, IR2Remove, 
-                                                       send_NIB_back, 
-                                                       stepOfFailure_N, 
-                                                       IRIndex, debug_N, 
-                                                       NIBMsg_, isBootStrap_, 
-                                                       sw_id, topoChangeEvent, 
-                                                       currSetDownSw, 
-                                                       prev_dag_id, init, 
-                                                       nxtDAG, setRemovableIRs, 
-                                                       currIR, currIRInDAG, 
-                                                       nxtDAGVertices, 
-                                                       setIRsInDAG, prev_dag, 
-                                                       seqEvent, worker, 
-                                                       toBeScheduledIRs, 
-                                                       nextIR, transaction_, 
-                                                       stepOfFailure_c, 
-                                                       currDAG, IRSet, key, 
-                                                       op1_, op2, debug, 
-                                                       transaction_O, 
-                                                       IRQueueTmp, NIBMsg_O, 
-                                                       isBootStrap, localIRSet, 
-                                                       NIBIRSet, nextIRToSent, 
-                                                       rowIndex, rowRemove, 
-                                                       stepOfFailure_co, 
-                                                       transaction_c, NIBMsg, 
-                                                       op1, IRQueue, 
-                                                       op_ir_status_change_, 
-                                                       removeIR, 
-                                                       monitoringEvent, 
-                                                       setIRsToReset, resetIR, 
-                                                       stepOfFailure, 
-                                                       transaction_co, 
-                                                       topo_change, irID, 
-                                                       removedIR, msg, 
-                                                       op_ir_status_change, 
-                                                       op_first_install, 
-                                                       transaction >>
+TEWaitSequencerTerminate(self) == /\ pc[self] = "TEWaitSequencerTerminate"
+                                  /\ IF idWorkerWorkingOnDAG[prev_dag_id[self]] # DAG_UNLOCK
+                                        THEN /\ idWorkerWorkingOnDAG[prev_dag_id[self]] = DAG_UNLOCK
+                                             /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_NONE]
+                                        ELSE /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_NONE]
+                                  /\ pc' = [pc EXCEPT ![self] = "ControllerTEWaitForStaleDAGToBeRemoved"]
+                                  /\ UNCHANGED << switchLock, controllerLock, 
+                                                  FirstInstallOFC, 
+                                                  FirstInstallNIB, 
+                                                  sw_fail_ordering_var, 
+                                                  ContProcSet, SwProcSet, 
+                                                  irTypeMapping, 
+                                                  swSeqChangedStatus, 
+                                                  controller2Switch, 
+                                                  switch2Controller, 
+                                                  switchStatus, installedIRs, 
+                                                  NicAsic2OfaBuff, 
+                                                  Ofa2NicAsicBuff, 
+                                                  Installer2OfaBuff, 
+                                                  Ofa2InstallerBuff, TCAM, 
+                                                  controlMsgCounter, 
+                                                  RecoveryStatus, 
+                                                  controllerSubmoduleFailNum, 
+                                                  controllerSubmoduleFailStat, 
+                                                  switchOrdering, 
+                                                  dependencyGraph, ir2sw, 
+                                                  NIBUpdateForRC, 
+                                                  controllerStateRC, 
+                                                  IRStatusRC, 
+                                                  SwSuspensionStatusRC, 
+                                                  IRQueueRC, SetScheduledIRsRC, 
+                                                  FlagRCNIBEventHandlerFailover, 
+                                                  FlagRCSequencerFailover, 
+                                                  RC_READY, IRChangeForRC, 
+                                                  TopoChangeForRC, 
+                                                  TEEventQueue, DAGEventQueue, 
+                                                  DAGQueue, DAGID, MaxDAGID, 
+                                                  nxtRCIRID, 
+                                                  idWorkerWorkingOnDAG, 
+                                                  IRDoneSet, 
+                                                  idThreadWorkingOnIR, 
+                                                  workerThreadRanking, 
+                                                  controllerStateOFC, 
+                                                  IRStatusOFC, IRQueueOFC, 
+                                                  SwSuspensionStatusOFC, 
+                                                  SetScheduledIRsOFC, 
+                                                  FlagOFCWorkerFailover, 
+                                                  FlagOFCMonitorFailover, 
+                                                  FlagOFCNIBEventHandlerFailover, 
+                                                  OFCThreadID, OFC_READY, 
+                                                  NIB2OFC, NIB2RC, X2NIB, 
+                                                  OFC2NIB, RC2NIB, 
+                                                  FlagNIBFailover, 
+                                                  FlagNIBRCEventhandlerFailover, 
+                                                  FlagNIBOFCEventhandlerFailover, 
+                                                  NIB_READY_FOR_RC, 
+                                                  NIB_READY_FOR_OFC, 
+                                                  masterState, 
+                                                  controllerStateNIB, 
+                                                  IRStatusNIB, 
+                                                  SwSuspensionStatusNIB, 
+                                                  IRQueueNIB, SetScheduledIRs, 
+                                                  X2NIB_len, NIBThreadID, 
+                                                  RCThreadID, ingressPkt, 
+                                                  ingressIR, egressMsg, 
+                                                  ofaInMsg, ofaOutConfirmation, 
+                                                  installerInIR, statusMsg, 
+                                                  notFailedSet, failedElem, 
+                                                  obj, failedSet, 
+                                                  statusResolveMsg, 
+                                                  recoveredElem, value_, 
+                                                  nextTrans_, value_N, 
+                                                  rowRemove_, IR2Remove_, 
+                                                  send_NIB_back_, 
+                                                  stepOfFailure_, IRIndex_, 
+                                                  debug_, nextTrans, value, 
+                                                  rowRemove_N, IR2Remove, 
+                                                  send_NIB_back, 
+                                                  stepOfFailure_N, IRIndex, 
+                                                  debug_N, NIBMsg_, 
+                                                  isBootStrap_, sw_id, 
+                                                  transaction_, 
+                                                  topoChangeEvent, 
+                                                  currSetDownSw, prev_dag_id, 
+                                                  init, nxtDAG, 
+                                                  setRemovableIRs, currIR, 
+                                                  currIRInDAG, nxtDAGVertices, 
+                                                  setIRsInDAG, prev_dag, 
+                                                  toBeScheduledIRs, nextIR, 
+                                                  transaction_c, 
+                                                  stepOfFailure_c, currDAG, 
+                                                  IRSet, key, op1_, op2, debug, 
+                                                  transaction_O, IRQueueTmp, 
+                                                  NIBMsg_O, isBootStrap, 
+                                                  localIRSet, NIBIRSet, 
+                                                  newIRSet, newIR, 
+                                                  nextIRToSent, rowIndex, 
+                                                  rowRemove, stepOfFailure_co, 
+                                                  transaction_co, NIBMsg, op1, 
+                                                  IRQueue, 
+                                                  op_ir_status_change_, 
+                                                  removeIR, monitoringEvent, 
+                                                  setIRsToReset, resetIR, 
+                                                  stepOfFailure, 
+                                                  transaction_con, topo_change, 
+                                                  irID, removedIR, msg, 
+                                                  op_ir_status_change, 
+                                                  op_first_install, 
+                                                  transaction >>
 
 ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitForStaleDAGToBeRemoved"
-                                                /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                 /\ DAGState[prev_dag_id[self]] = DAG_NONE
                                                 /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID]
@@ -7823,6 +7859,8 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 FlagRCNIBEventHandlerFailover, 
                                                                 FlagRCSequencerFailover, 
                                                                 RC_READY, 
+                                                                IRChangeForRC, 
+                                                                TopoChangeForRC, 
                                                                 TEEventQueue, 
                                                                 DAGEventQueue, 
                                                                 DAGQueue, 
@@ -7831,7 +7869,6 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 DAGState, 
                                                                 nxtRCIRID, 
                                                                 idWorkerWorkingOnDAG, 
-                                                                RCSeqWorkerStatus, 
                                                                 IRDoneSet, 
                                                                 idThreadWorkingOnIR, 
                                                                 workerThreadRanking, 
@@ -7895,6 +7932,7 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 NIBMsg_, 
                                                                 isBootStrap_, 
                                                                 sw_id, 
+                                                                transaction_, 
                                                                 topoChangeEvent, 
                                                                 currSetDownSw, 
                                                                 init, nxtDAG, 
@@ -7902,11 +7940,9 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 currIRInDAG, 
                                                                 nxtDAGVertices, 
                                                                 setIRsInDAG, 
-                                                                seqEvent, 
-                                                                worker, 
                                                                 toBeScheduledIRs, 
                                                                 nextIR, 
-                                                                transaction_, 
+                                                                transaction_c, 
                                                                 stepOfFailure_c, 
                                                                 currDAG, IRSet, 
                                                                 key, op1_, op2, 
@@ -7917,11 +7953,13 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 isBootStrap, 
                                                                 localIRSet, 
                                                                 NIBIRSet, 
+                                                                newIRSet, 
+                                                                newIR, 
                                                                 nextIRToSent, 
                                                                 rowIndex, 
                                                                 rowRemove, 
                                                                 stepOfFailure_co, 
-                                                                transaction_c, 
+                                                                transaction_co, 
                                                                 NIBMsg, op1, 
                                                                 IRQueue, 
                                                                 op_ir_status_change_, 
@@ -7930,7 +7968,7 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 setIRsToReset, 
                                                                 resetIR, 
                                                                 stepOfFailure, 
-                                                                transaction_co, 
+                                                                transaction_con, 
                                                                 topo_change, 
                                                                 irID, 
                                                                 removedIR, msg, 
@@ -7940,7 +7978,10 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
 
 ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnecessaryIRs"
                                           /\ IF setRemovableIRs[self] # {}
-                                                THEN /\ currIR' = [currIR EXCEPT ![self] = CHOOSE x \in setRemovableIRs[self]: TRUE]
+                                                THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                     /\ controllerLock' = self
+                                                     /\ currIR' = [currIR EXCEPT ![self] = CHOOSE x \in setRemovableIRs[self]: TRUE]
                                                      /\ setRemovableIRs' = [setRemovableIRs EXCEPT ![self] = setRemovableIRs[self] \ {currIR'[self]}]
                                                      /\ IRStatusRC' = IRStatusRC @@ (nxtRCIRID :> IR_NONE)
                                                      /\ IRStatusNIB' = IRStatusNIB @@ (nxtRCIRID :> IR_NONE)
@@ -7949,7 +7990,10 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                      /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.v = nxtDAG[self].dag.v \cup {nxtRCIRID}]
                                                      /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = getSetIRsForSwitchInDAG(ir2sw'[currIR'[self]], nxtDAGVertices[self])]
                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
-                                                ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTESubmitNewDAG"]
+                                                ELSE /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                     /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerTESubmitNewDAG"]
                                                      /\ UNCHANGED << irTypeMapping, 
                                                                      ir2sw, 
                                                                      IRStatusRC, 
@@ -7959,7 +8003,6 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                                      currIR, 
                                                                      setIRsInDAG >>
                                           /\ UNCHANGED << switchLock, 
-                                                          controllerLock, 
                                                           FirstInstallOFC, 
                                                           FirstInstallNIB, 
                                                           sw_fail_ordering_var, 
@@ -7989,13 +8032,14 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           FlagRCNIBEventHandlerFailover, 
                                                           FlagRCSequencerFailover, 
                                                           RC_READY, 
+                                                          IRChangeForRC, 
+                                                          TopoChangeForRC, 
                                                           TEEventQueue, 
                                                           DAGEventQueue, 
                                                           DAGQueue, DAGID, 
                                                           MaxDAGID, DAGState, 
                                                           nxtRCIRID, 
                                                           idWorkerWorkingOnDAG, 
-                                                          RCSeqWorkerStatus, 
                                                           IRDoneSet, 
                                                           idThreadWorkingOnIR, 
                                                           workerThreadRanking, 
@@ -8049,15 +8093,16 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           IRIndex, debug_N, 
                                                           NIBMsg_, 
                                                           isBootStrap_, sw_id, 
+                                                          transaction_, 
                                                           topoChangeEvent, 
                                                           currSetDownSw, 
                                                           prev_dag_id, init, 
                                                           currIRInDAG, 
                                                           nxtDAGVertices, 
-                                                          prev_dag, seqEvent, 
-                                                          worker, 
+                                                          prev_dag, 
                                                           toBeScheduledIRs, 
-                                                          nextIR, transaction_, 
+                                                          nextIR, 
+                                                          transaction_c, 
                                                           stepOfFailure_c, 
                                                           currDAG, IRSet, key, 
                                                           op1_, op2, debug, 
@@ -8065,10 +8110,11 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           IRQueueTmp, NIBMsg_O, 
                                                           isBootStrap, 
                                                           localIRSet, NIBIRSet, 
+                                                          newIRSet, newIR, 
                                                           nextIRToSent, 
                                                           rowIndex, rowRemove, 
                                                           stepOfFailure_co, 
-                                                          transaction_c, 
+                                                          transaction_co, 
                                                           NIBMsg, op1, IRQueue, 
                                                           op_ir_status_change_, 
                                                           removeIR, 
@@ -8076,7 +8122,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           setIRsToReset, 
                                                           resetIR, 
                                                           stepOfFailure, 
-                                                          transaction_co, 
+                                                          transaction_con, 
                                                           topo_change, irID, 
                                                           removedIR, msg, 
                                                           op_ir_status_change, 
@@ -8085,17 +8131,23 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
 
 ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                              /\ IF setIRsInDAG[self] # {}
-                                   THEN /\ currIRInDAG' = [currIRInDAG EXCEPT ![self] = CHOOSE x \in setIRsInDAG[self]: TRUE]
+                                   THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock' = self
+                                        /\ currIRInDAG' = [currIRInDAG EXCEPT ![self] = CHOOSE x \in setIRsInDAG[self]: TRUE]
                                         /\ setIRsInDAG' = [setIRsInDAG EXCEPT ![self] = setIRsInDAG[self] \ {currIRInDAG'[self]}]
                                         /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag.e = nxtDAG[self].dag.e \cup {<<nxtRCIRID, currIRInDAG'[self]>>}]
                                         /\ pc' = [pc EXCEPT ![self] = "ControllerTEAddEdge"]
                                         /\ UNCHANGED nxtRCIRID
                                    ELSE /\ nxtRCIRID' = nxtRCIRID + 1
+                                        /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock' = self
                                         /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
                                         /\ UNCHANGED << nxtDAG, currIRInDAG, 
                                                         setIRsInDAG >>
-                             /\ UNCHANGED << switchLock, controllerLock, 
-                                             FirstInstallOFC, FirstInstallNIB, 
+                             /\ UNCHANGED << switchLock, FirstInstallOFC, 
+                                             FirstInstallNIB, 
                                              sw_fail_ordering_var, ContProcSet, 
                                              SwProcSet, irTypeMapping, 
                                              swSeqChangedStatus, 
@@ -8115,11 +8167,11 @@ ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
-                                             idThreadWorkingOnIR, 
+                                             IRDoneSet, idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
                                              IRQueueOFC, SwSuspensionStatusOFC, 
@@ -8150,34 +8202,37 @@ ControllerTEAddEdge(self) == /\ pc[self] = "ControllerTEAddEdge"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, 
                                              setRemovableIRs, currIR, 
                                              nxtDAGVertices, prev_dag, 
-                                             seqEvent, worker, 
                                              toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
 ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
+                                  /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                  /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                  /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                   /\ DAGState' = [DAGState EXCEPT ![nxtDAG[self].id] = DAG_SUBMIT]
                                   /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Append(DAGEventQueue[self[1]], [type |-> DAG_NEW, dag_obj |-> nxtDAG[self]])]
+                                  /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Append(DAGQueue[self[1]], nxtDAG[self])]
                                   /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
-                                  /\ UNCHANGED << switchLock, controllerLock, 
-                                                  FirstInstallOFC, 
+                                  /\ UNCHANGED << switchLock, FirstInstallOFC, 
                                                   FirstInstallNIB, 
                                                   sw_fail_ordering_var, 
                                                   ContProcSet, SwProcSet, 
@@ -8203,11 +8258,12 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                                   IRQueueRC, SetScheduledIRsRC, 
                                                   FlagRCNIBEventHandlerFailover, 
                                                   FlagRCSequencerFailover, 
-                                                  RC_READY, TEEventQueue, 
-                                                  DAGQueue, DAGID, MaxDAGID, 
-                                                  nxtRCIRID, 
+                                                  RC_READY, IRChangeForRC, 
+                                                  TopoChangeForRC, 
+                                                  TEEventQueue, DAGID, 
+                                                  MaxDAGID, nxtRCIRID, 
                                                   idWorkerWorkingOnDAG, 
-                                                  RCSeqWorkerStatus, IRDoneSet, 
+                                                  IRDoneSet, 
                                                   idThreadWorkingOnIR, 
                                                   workerThreadRanking, 
                                                   controllerStateOFC, 
@@ -8249,29 +8305,30 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                                   stepOfFailure_N, IRIndex, 
                                                   debug_N, NIBMsg_, 
                                                   isBootStrap_, sw_id, 
+                                                  transaction_, 
                                                   topoChangeEvent, 
                                                   currSetDownSw, prev_dag_id, 
                                                   init, nxtDAG, 
                                                   setRemovableIRs, currIR, 
                                                   currIRInDAG, nxtDAGVertices, 
                                                   setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
                                                   toBeScheduledIRs, nextIR, 
-                                                  transaction_, 
+                                                  transaction_c, 
                                                   stepOfFailure_c, currDAG, 
                                                   IRSet, key, op1_, op2, debug, 
                                                   transaction_O, IRQueueTmp, 
                                                   NIBMsg_O, isBootStrap, 
                                                   localIRSet, NIBIRSet, 
+                                                  newIRSet, newIR, 
                                                   nextIRToSent, rowIndex, 
                                                   rowRemove, stepOfFailure_co, 
-                                                  transaction_c, NIBMsg, op1, 
+                                                  transaction_co, NIBMsg, op1, 
                                                   IRQueue, 
                                                   op_ir_status_change_, 
                                                   removeIR, monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, 
-                                                  transaction_co, topo_change, 
+                                                  transaction_con, topo_change, 
                                                   irID, removedIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
@@ -8280,248 +8337,22 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
 controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTEEventProcessing(self)
                                          \/ ControllerTEComputeDagBasedOnTopo(self)
-                                         \/ ControllerTESendDagStaleNotif(self)
+                                         \/ TEWaitSequencerTerminate(self)
                                          \/ ControllerTEWaitForStaleDAGToBeRemoved(self)
                                          \/ ControllerTERemoveUnnecessaryIRs(self)
                                          \/ ControllerTEAddEdge(self)
                                          \/ ControllerTESubmitNewDAG(self)
 
-ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
-                               /\ controllerIsMaster(self[1])
-                               /\ moduleIsUp(self)
-                               /\ DAGEventQueue[self[1]] # <<>>
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                               /\ seqEvent' = [seqEvent EXCEPT ![self] = Head(DAGEventQueue[self[1]])]
-                               /\ DAGEventQueue' = [DAGEventQueue EXCEPT ![self[1]] = Tail(DAGEventQueue[self[1]])]
-                               /\ Assert(seqEvent'[self].type \in {DAG_NEW, DAG_STALE}, 
-                                         "Failure of assertion at line 2043, column 9.")
-                               /\ IF seqEvent'[self].type = DAG_NEW
-                                     THEN /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Append(DAGQueue[self[1]], seqEvent'[self].dag_obj)]
-                                          /\ pc' = [pc EXCEPT ![self] = "ControllerBossSeqProc"]
-                                          /\ UNCHANGED << DAGState, 
-                                                          RCSeqWorkerStatus, 
-                                                          worker >>
-                                     ELSE /\ worker' = [worker EXCEPT ![self] = idWorkerWorkingOnDAG[seqEvent'[self].id]]
-                                          /\ IF worker'[self] # DAG_UNLOCK
-                                                THEN /\ RCSeqWorkerStatus' = [RCSeqWorkerStatus EXCEPT ![CONT_WORKER_SEQ] = SEQ_WORKER_STALE_SIGNAL]
-                                                     /\ pc' = [pc EXCEPT ![self] = "WaitForRCSeqWorkerTerminate"]
-                                                     /\ UNCHANGED DAGState
-                                                ELSE /\ DAGState' = [DAGState EXCEPT ![seqEvent'[self].id] = DAG_NONE]
-                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerBossSeqProc"]
-                                                     /\ UNCHANGED RCSeqWorkerStatus
-                                          /\ UNCHANGED DAGQueue
-                               /\ UNCHANGED << switchLock, controllerLock, 
-                                               FirstInstallOFC, 
-                                               FirstInstallNIB, 
-                                               sw_fail_ordering_var, 
-                                               ContProcSet, SwProcSet, 
-                                               irTypeMapping, 
-                                               swSeqChangedStatus, 
-                                               controller2Switch, 
-                                               switch2Controller, switchStatus, 
-                                               installedIRs, NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Installer2OfaBuff, 
-                                               Ofa2InstallerBuff, TCAM, 
-                                               controlMsgCounter, 
-                                               RecoveryStatus, 
-                                               controllerSubmoduleFailNum, 
-                                               controllerSubmoduleFailStat, 
-                                               switchOrdering, dependencyGraph, 
-                                               ir2sw, NIBUpdateForRC, 
-                                               controllerStateRC, IRStatusRC, 
-                                               SwSuspensionStatusRC, IRQueueRC, 
-                                               SetScheduledIRsRC, 
-                                               FlagRCNIBEventHandlerFailover, 
-                                               FlagRCSequencerFailover, 
-                                               RC_READY, TEEventQueue, DAGID, 
-                                               MaxDAGID, nxtRCIRID, 
-                                               idWorkerWorkingOnDAG, IRDoneSet, 
-                                               idThreadWorkingOnIR, 
-                                               workerThreadRanking, 
-                                               controllerStateOFC, IRStatusOFC, 
-                                               IRQueueOFC, 
-                                               SwSuspensionStatusOFC, 
-                                               SetScheduledIRsOFC, 
-                                               FlagOFCWorkerFailover, 
-                                               FlagOFCMonitorFailover, 
-                                               FlagOFCNIBEventHandlerFailover, 
-                                               OFCThreadID, OFC_READY, NIB2OFC, 
-                                               NIB2RC, X2NIB, OFC2NIB, RC2NIB, 
-                                               FlagNIBFailover, 
-                                               FlagNIBRCEventhandlerFailover, 
-                                               FlagNIBOFCEventhandlerFailover, 
-                                               NIB_READY_FOR_RC, 
-                                               NIB_READY_FOR_OFC, masterState, 
-                                               controllerStateNIB, IRStatusNIB, 
-                                               SwSuspensionStatusNIB, 
-                                               IRQueueNIB, SetScheduledIRs, 
-                                               X2NIB_len, NIBThreadID, 
-                                               RCThreadID, ingressPkt, 
-                                               ingressIR, egressMsg, ofaInMsg, 
-                                               ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, obj, 
-                                               failedSet, statusResolveMsg, 
-                                               recoveredElem, value_, 
-                                               nextTrans_, value_N, rowRemove_, 
-                                               IR2Remove_, send_NIB_back_, 
-                                               stepOfFailure_, IRIndex_, 
-                                               debug_, nextTrans, value, 
-                                               rowRemove_N, IR2Remove, 
-                                               send_NIB_back, stepOfFailure_N, 
-                                               IRIndex, debug_N, NIBMsg_, 
-                                               isBootStrap_, sw_id, 
-                                               topoChangeEvent, currSetDownSw, 
-                                               prev_dag_id, init, nxtDAG, 
-                                               setRemovableIRs, currIR, 
-                                               currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, 
-                                               toBeScheduledIRs, nextIR, 
-                                               transaction_, stepOfFailure_c, 
-                                               currDAG, IRSet, key, op1_, op2, 
-                                               debug, transaction_O, 
-                                               IRQueueTmp, NIBMsg_O, 
-                                               isBootStrap, localIRSet, 
-                                               NIBIRSet, nextIRToSent, 
-                                               rowIndex, rowRemove, 
-                                               stepOfFailure_co, transaction_c, 
-                                               NIBMsg, op1, IRQueue, 
-                                               op_ir_status_change_, removeIR, 
-                                               monitoringEvent, setIRsToReset, 
-                                               resetIR, stepOfFailure, 
-                                               transaction_co, topo_change, 
-                                               irID, removedIR, msg, 
-                                               op_ir_status_change, 
-                                               op_first_install, transaction >>
-
-WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
-                                     /\ idWorkerWorkingOnDAG[seqEvent[self].id] = DAG_UNLOCK
-                                     /\ DAGState' = [DAGState EXCEPT ![seqEvent[self].id] = DAG_NONE]
-                                     /\ pc' = [pc EXCEPT ![self] = "ControllerBossSeqProc"]
-                                     /\ UNCHANGED << switchLock, 
-                                                     controllerLock, 
-                                                     FirstInstallOFC, 
-                                                     FirstInstallNIB, 
-                                                     sw_fail_ordering_var, 
-                                                     ContProcSet, SwProcSet, 
-                                                     irTypeMapping, 
-                                                     swSeqChangedStatus, 
-                                                     controller2Switch, 
-                                                     switch2Controller, 
-                                                     switchStatus, 
-                                                     installedIRs, 
-                                                     NicAsic2OfaBuff, 
-                                                     Ofa2NicAsicBuff, 
-                                                     Installer2OfaBuff, 
-                                                     Ofa2InstallerBuff, TCAM, 
-                                                     controlMsgCounter, 
-                                                     RecoveryStatus, 
-                                                     controllerSubmoduleFailNum, 
-                                                     controllerSubmoduleFailStat, 
-                                                     switchOrdering, 
-                                                     dependencyGraph, ir2sw, 
-                                                     NIBUpdateForRC, 
-                                                     controllerStateRC, 
-                                                     IRStatusRC, 
-                                                     SwSuspensionStatusRC, 
-                                                     IRQueueRC, 
-                                                     SetScheduledIRsRC, 
-                                                     FlagRCNIBEventHandlerFailover, 
-                                                     FlagRCSequencerFailover, 
-                                                     RC_READY, TEEventQueue, 
-                                                     DAGEventQueue, DAGQueue, 
-                                                     DAGID, MaxDAGID, 
-                                                     nxtRCIRID, 
-                                                     idWorkerWorkingOnDAG, 
-                                                     RCSeqWorkerStatus, 
-                                                     IRDoneSet, 
-                                                     idThreadWorkingOnIR, 
-                                                     workerThreadRanking, 
-                                                     controllerStateOFC, 
-                                                     IRStatusOFC, IRQueueOFC, 
-                                                     SwSuspensionStatusOFC, 
-                                                     SetScheduledIRsOFC, 
-                                                     FlagOFCWorkerFailover, 
-                                                     FlagOFCMonitorFailover, 
-                                                     FlagOFCNIBEventHandlerFailover, 
-                                                     OFCThreadID, OFC_READY, 
-                                                     NIB2OFC, NIB2RC, X2NIB, 
-                                                     OFC2NIB, RC2NIB, 
-                                                     FlagNIBFailover, 
-                                                     FlagNIBRCEventhandlerFailover, 
-                                                     FlagNIBOFCEventhandlerFailover, 
-                                                     NIB_READY_FOR_RC, 
-                                                     NIB_READY_FOR_OFC, 
-                                                     masterState, 
-                                                     controllerStateNIB, 
-                                                     IRStatusNIB, 
-                                                     SwSuspensionStatusNIB, 
-                                                     IRQueueNIB, 
-                                                     SetScheduledIRs, 
-                                                     X2NIB_len, NIBThreadID, 
-                                                     RCThreadID, ingressPkt, 
-                                                     ingressIR, egressMsg, 
-                                                     ofaInMsg, 
-                                                     ofaOutConfirmation, 
-                                                     installerInIR, statusMsg, 
-                                                     notFailedSet, failedElem, 
-                                                     obj, failedSet, 
-                                                     statusResolveMsg, 
-                                                     recoveredElem, value_, 
-                                                     nextTrans_, value_N, 
-                                                     rowRemove_, IR2Remove_, 
-                                                     send_NIB_back_, 
-                                                     stepOfFailure_, IRIndex_, 
-                                                     debug_, nextTrans, value, 
-                                                     rowRemove_N, IR2Remove, 
-                                                     send_NIB_back, 
-                                                     stepOfFailure_N, IRIndex, 
-                                                     debug_N, NIBMsg_, 
-                                                     isBootStrap_, sw_id, 
-                                                     topoChangeEvent, 
-                                                     currSetDownSw, 
-                                                     prev_dag_id, init, nxtDAG, 
-                                                     setRemovableIRs, currIR, 
-                                                     currIRInDAG, 
-                                                     nxtDAGVertices, 
-                                                     setIRsInDAG, prev_dag, 
-                                                     seqEvent, worker, 
-                                                     toBeScheduledIRs, nextIR, 
-                                                     transaction_, 
-                                                     stepOfFailure_c, currDAG, 
-                                                     IRSet, key, op1_, op2, 
-                                                     debug, transaction_O, 
-                                                     IRQueueTmp, NIBMsg_O, 
-                                                     isBootStrap, localIRSet, 
-                                                     NIBIRSet, nextIRToSent, 
-                                                     rowIndex, rowRemove, 
-                                                     stepOfFailure_co, 
-                                                     transaction_c, NIBMsg, 
-                                                     op1, IRQueue, 
-                                                     op_ir_status_change_, 
-                                                     removeIR, monitoringEvent, 
-                                                     setIRsToReset, resetIR, 
-                                                     stepOfFailure, 
-                                                     transaction_co, 
-                                                     topo_change, irID, 
-                                                     removedIR, msg, 
-                                                     op_ir_status_change, 
-                                                     op_first_install, 
-                                                     transaction >>
-
-controllerBossSequencer(self) == ControllerBossSeqProc(self)
-                                    \/ WaitForRCSeqWorkerTerminate(self)
-
 RCWorkerSeqProc(self) == /\ pc[self] = "RCWorkerSeqProc"
                          /\ controllerIsMaster(self[1])
                          /\ moduleIsUp(self)
+                         /\ RC_READY = TRUE
                          /\ DAGQueue[self[1]] # <<>>
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                         /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                          /\ currDAG' = [currDAG EXCEPT ![self] = Head(DAGQueue[self[1]])]
                          /\ idWorkerWorkingOnDAG' = [idWorkerWorkingOnDAG EXCEPT ![currDAG'[self].id] = self[2]]
+                         /\ NIBUpdateForRC' = TRUE
                          /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqScheduleDAG"]
                          /\ UNCHANGED << switchLock, controllerLock, 
                                          FirstInstallOFC, FirstInstallNIB, 
@@ -8536,16 +8367,15 @@ RCWorkerSeqProc(self) == /\ pc[self] = "RCWorkerSeqProc"
                                          controllerSubmoduleFailNum, 
                                          controllerSubmoduleFailStat, 
                                          switchOrdering, dependencyGraph, 
-                                         ir2sw, NIBUpdateForRC, 
-                                         controllerStateRC, IRStatusRC, 
+                                         ir2sw, controllerStateRC, IRStatusRC, 
                                          SwSuspensionStatusRC, IRQueueRC, 
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
-                                         idThreadWorkingOnIR, 
+                                         IRDoneSet, idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRStatusOFC, 
                                          IRQueueOFC, SwSuspensionStatusOFC, 
@@ -8575,41 +8405,45 @@ RCWorkerSeqProc(self) == /\ pc[self] = "RCWorkerSeqProc"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
-                                         IRSet, key, op1_, op2, debug, 
-                                         transaction_O, IRQueueTmp, NIBMsg_O, 
-                                         isBootStrap, localIRSet, NIBIRSet, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, IRSet, 
+                                         key, op1_, op2, debug, transaction_O, 
+                                         IRQueueTmp, NIBMsg_O, isBootStrap, 
+                                         localIRSet, NIBIRSet, newIRSet, newIR, 
                                          nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
+                                         stepOfFailure_co, transaction_co, 
                                          NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 RCWorkerSeqScheduleDAG(self) == /\ pc[self] = "RCWorkerSeqScheduleDAG"
                                 /\ IF ~allIRsInDAGInstalled(self[1], currDAG[self].dag) /\ ~isDAGStale(currDAG[self].id)
-                                      THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                      THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                            /\ IF isRCFailed(self)
                                                  THEN /\ FlagRCSequencerFailover' = TRUE
                                                       /\ pc' = [pc EXCEPT ![self] = "RCSequencerFailover"]
                                                       /\ UNCHANGED << NIBUpdateForRC, 
                                                                       toBeScheduledIRs >>
-                                                 ELSE /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNextRC(currDAG[self].dag)]
-                                                      /\ NIBUpdateForRC' = FALSE
+                                                 ELSE /\ NIBUpdateForRC
+                                                      /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNextRC(currDAG[self].dag)]
                                                       /\ IF toBeScheduledIRs'[self] = {}
-                                                            THEN /\ IF isDAGStale(currDAG[self].id)
+                                                            THEN /\ IF TopoChangeForRC
                                                                        THEN /\ pc' = [pc EXCEPT ![self] = "RemoveDAGFromQueue"]
-                                                                       ELSE /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqScheduleDAG"]
+                                                                            /\ UNCHANGED NIBUpdateForRC
+                                                                       ELSE /\ NIBUpdateForRC' = FALSE
+                                                                            /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqScheduleDAG"]
                                                             ELSE /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
+                                                                 /\ UNCHANGED NIBUpdateForRC
                                                       /\ UNCHANGED FlagRCSequencerFailover
                                       ELSE /\ pc' = [pc EXCEPT ![self] = "RemoveDAGFromQueue"]
                                            /\ UNCHANGED << NIBUpdateForRC, 
@@ -8639,12 +8473,12 @@ RCWorkerSeqScheduleDAG(self) == /\ pc[self] = "RCWorkerSeqScheduleDAG"
                                                 SwSuspensionStatusRC, 
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 IRStatusOFC, IRQueueOFC, 
@@ -8681,31 +8515,31 @@ RCWorkerSeqScheduleDAG(self) == /\ pc[self] = "RCWorkerSeqScheduleDAG"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, nextIR, 
-                                                transaction_, stepOfFailure_c, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, nextIR, 
+                                                transaction_c, stepOfFailure_c, 
                                                 currDAG, IRSet, key, op1_, op2, 
                                                 debug, transaction_O, 
                                                 IRQueueTmp, NIBMsg_O, 
                                                 isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                NIBIRSet, newIRSet, newIR, 
+                                                nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, irID, removedIR, 
                                                 msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF isRCFailed(self)
                                   THEN /\ FlagRCSequencerFailover' = TRUE
@@ -8715,7 +8549,7 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                                        toBeScheduledIRs, 
                                                        nextIR >>
                                   ELSE /\ nextIR' = [nextIR EXCEPT ![self] = CHOOSE x \in toBeScheduledIRs[self]: TRUE]
-                                       /\ SetScheduledIRsRC' = [SetScheduledIRsRC EXCEPT ![IR2SW[nextIR'[self]]] = SetScheduledIRsRC[IR2SW[nextIR'[self]]] \cup {nextIR'[self]}]
+                                       /\ SetScheduledIRsRC' = [SetScheduledIRsRC EXCEPT ![ir2sw[nextIR'[self]]] = SetScheduledIRsRC[ir2sw[nextIR'[self]]] \cup {nextIR'[self]}]
                                        /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = toBeScheduledIRs[self]\{nextIR'[self]}]
                                        /\ IRQueueRC' = Append(IRQueueRC, [IR |-> nextIR'[self], tag |-> NO_TAG])
                                        /\ pc' = [pc EXCEPT ![self] = "AddDeleteIRDoneSet"]
@@ -8738,11 +8572,11 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             controllerStateRC, IRStatusRC, 
                                             SwSuspensionStatusRC, 
                                             FlagRCNIBEventHandlerFailover, 
-                                            RC_READY, TEEventQueue, 
+                                            RC_READY, IRChangeForRC, 
+                                            TopoChangeForRC, TEEventQueue, 
                                             DAGEventQueue, DAGQueue, DAGID, 
                                             MaxDAGID, DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -8774,30 +8608,30 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, transaction_, 
-                                            stepOfFailure_c, currDAG, IRSet, 
-                                            key, op1_, op2, debug, 
-                                            transaction_O, IRQueueTmp, 
+                                            setIRsInDAG, prev_dag, 
+                                            transaction_c, stepOfFailure_c, 
+                                            currDAG, IRSet, key, op1_, op2, 
+                                            debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
 AddDeleteIRDoneSet(self) == /\ pc[self] = "AddDeleteIRDoneSet"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF irTypeMapping[nextIR[self]].type = INSTALL_FLOW
                                   THEN /\ IRDoneSet' = [IRDoneSet EXCEPT ![self[1]] = IRDoneSet[self[1]] \cup {nextIR[self]}]
@@ -8823,11 +8657,11 @@ AddDeleteIRDoneSet(self) == /\ pc[self] = "AddDeleteIRDoneSet"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
                                             idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -8859,39 +8693,40 @@ AddDeleteIRDoneSet(self) == /\ pc[self] = "AddDeleteIRDoneSet"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
 RCSendIR2NIB(self) == /\ pc[self] = "RCSendIR2NIB"
-                      /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                      /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                       /\ IF isRCFailed(self)
                             THEN /\ FlagRCSequencerFailover' = TRUE
                                  /\ pc' = [pc EXCEPT ![self] = "RCSequencerFailover"]
-                                 /\ UNCHANGED << RC2NIB, transaction_, op1_ >>
+                                 /\ UNCHANGED << RC2NIB, transaction_c, op1_ >>
                             ELSE /\ isNIBUp(NIBThreadID) \/ isNIBFailed(NIBThreadID)
                                  /\ op1_' = [op1_ EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> NULL, value |-> [IR |-> nextIR[self], tag |-> NO_TAG]]]
-                                 /\ transaction_' = [transaction_ EXCEPT ![self] = [name |-> "RCScheduleIRInOneStep", ops |-> <<op1_'[self]>>]]
-                                 /\ RC2NIB' = RC2NIB \o <<transaction_'[self]>>
+                                 /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RCScheduleIRInOneStep", ops |-> <<op1_'[self]>>]]
+                                 /\ RC2NIB' = RC2NIB \o <<transaction_c'[self]>>
                                  /\ IF toBeScheduledIRs[self] = {} \/ isDAGStale(currDAG[self].id)
                                        THEN /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqScheduleDAG"]
                                        ELSE /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
@@ -8913,13 +8748,13 @@ RCSendIR2NIB(self) == /\ pc[self] = "RCSendIR2NIB"
                                       IRStatusRC, SwSuspensionStatusRC, 
                                       IRQueueRC, SetScheduledIRsRC, 
                                       FlagRCNIBEventHandlerFailover, RC_READY, 
+                                      IRChangeForRC, TopoChangeForRC, 
                                       TEEventQueue, DAGEventQueue, DAGQueue, 
                                       DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                      idWorkerWorkingOnDAG, RCSeqWorkerStatus, 
-                                      IRDoneSet, idThreadWorkingOnIR, 
-                                      workerThreadRanking, controllerStateOFC, 
-                                      IRStatusOFC, IRQueueOFC, 
-                                      SwSuspensionStatusOFC, 
+                                      idWorkerWorkingOnDAG, IRDoneSet, 
+                                      idThreadWorkingOnIR, workerThreadRanking, 
+                                      controllerStateOFC, IRStatusOFC, 
+                                      IRQueueOFC, SwSuspensionStatusOFC, 
                                       SetScheduledIRsOFC, 
                                       FlagOFCWorkerFailover, 
                                       FlagOFCMonitorFailover, 
@@ -8944,29 +8779,33 @@ RCSendIR2NIB(self) == /\ pc[self] = "RCSendIR2NIB"
                                       IR2Remove, send_NIB_back, 
                                       stepOfFailure_N, IRIndex, debug_N, 
                                       NIBMsg_, isBootStrap_, sw_id, 
-                                      topoChangeEvent, currSetDownSw, 
-                                      prev_dag_id, init, nxtDAG, 
+                                      transaction_, topoChangeEvent, 
+                                      currSetDownSw, prev_dag_id, init, nxtDAG, 
                                       setRemovableIRs, currIR, currIRInDAG, 
                                       nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                      seqEvent, worker, toBeScheduledIRs, 
-                                      nextIR, stepOfFailure_c, currDAG, IRSet, 
-                                      key, op2, debug, transaction_O, 
-                                      IRQueueTmp, NIBMsg_O, isBootStrap, 
-                                      localIRSet, NIBIRSet, nextIRToSent, 
+                                      toBeScheduledIRs, nextIR, 
+                                      stepOfFailure_c, currDAG, IRSet, key, 
+                                      op2, debug, transaction_O, IRQueueTmp, 
+                                      NIBMsg_O, isBootStrap, localIRSet, 
+                                      NIBIRSet, newIRSet, newIR, nextIRToSent, 
                                       rowIndex, rowRemove, stepOfFailure_co, 
-                                      transaction_c, NIBMsg, op1, IRQueue, 
+                                      transaction_co, NIBMsg, op1, IRQueue, 
                                       op_ir_status_change_, removeIR, 
                                       monitoringEvent, setIRsToReset, resetIR, 
-                                      stepOfFailure, transaction_co, 
+                                      stepOfFailure, transaction_con, 
                                       topo_change, irID, removedIR, msg, 
                                       op_ir_status_change, op_first_install, 
                                       transaction >>
 
 RemoveDAGFromQueue(self) == /\ pc[self] = "RemoveDAGFromQueue"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                            /\ IF TopoChangeForRC
+                                  THEN /\ isDAGStale(currDAG[self].id)
+                                       /\ TopoChangeForRC' = FALSE
+                                  ELSE /\ TRUE
+                                       /\ UNCHANGED TopoChangeForRC
                             /\ idWorkerWorkingOnDAG' = [idWorkerWorkingOnDAG EXCEPT ![currDAG[self].id] = DAG_UNLOCK]
-                            /\ RCSeqWorkerStatus' = [RCSeqWorkerStatus EXCEPT ![self[2]] = SEQ_WORKER_RUN]
                             /\ IRSet' = [IRSet EXCEPT ![self] = currDAG[self].dag.v]
                             /\ pc' = [pc EXCEPT ![self] = "AddDeleteDAGIRDoneSet"]
                             /\ UNCHANGED << switchLock, controllerLock, 
@@ -8989,10 +8828,10 @@ RemoveDAGFromQueue(self) == /\ pc[self] = "RemoveDAGFromQueue"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
-                                            TEEventQueue, DAGEventQueue, 
-                                            DAGQueue, DAGID, MaxDAGID, 
-                                            DAGState, nxtRCIRID, IRDoneSet, 
-                                            idThreadWorkingOnIR, 
+                                            IRChangeForRC, TEEventQueue, 
+                                            DAGEventQueue, DAGQueue, DAGID, 
+                                            MaxDAGID, DAGState, nxtRCIRID, 
+                                            IRDoneSet, idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
                                             IRQueueOFC, SwSuspensionStatusOFC, 
@@ -9023,45 +8862,54 @@ RemoveDAGFromQueue(self) == /\ pc[self] = "RemoveDAGFromQueue"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, key, op1_, op2, debug, 
                                             transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
 AddDeleteDAGIRDoneSet(self) == /\ pc[self] = "AddDeleteDAGIRDoneSet"
                                /\ IF IRSet[self] # {} /\ allIRsInDAGInstalled(self[1], currDAG[self].dag)
-                                     THEN /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                     THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                          /\ controllerLock' = self
                                           /\ nextIR' = [nextIR EXCEPT ![self] = CHOOSE x \in IRSet[self]: TRUE]
                                           /\ IF irTypeMapping[nextIR'[self]].type = INSTALL_FLOW
                                                 THEN /\ IRDoneSet' = [IRDoneSet EXCEPT ![self[1]] = IRDoneSet[self[1]] \cup {nextIR'[self]}]
                                                 ELSE /\ IRDoneSet' = [IRDoneSet EXCEPT ![self[1]] = IRDoneSet[self[1]] \ {getIRIDForFlow(irTypeMapping[nextIR'[self]].flow, INSTALLED_SUCCESSFULLY)}]
                                           /\ IRSet' = [IRSet EXCEPT ![self] = IRSet[self] \ {nextIR'[self]}]
                                           /\ pc' = [pc EXCEPT ![self] = "AddDeleteDAGIRDoneSet"]
+                                          /\ UNCHANGED DAGQueue
                                      ELSE /\ IF allIRsInDAGInstalled(self[1], currDAG[self].dag) \/ isDAGStale(currDAG[self].id)
-                                                THEN /\ pc' = [pc EXCEPT ![self] = "RemoveDAGfromDAGQueue"]
-                                                ELSE /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqProc"]
+                                                THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                     /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Tail(DAGQueue[self[1]])]
+                                                ELSE /\ TRUE
+                                                     /\ UNCHANGED DAGQueue
+                                          /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                          /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                          /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqProc"]
                                           /\ UNCHANGED << IRDoneSet, nextIR, 
                                                           IRSet >>
-                               /\ UNCHANGED << switchLock, controllerLock, 
-                                               FirstInstallOFC, 
+                               /\ UNCHANGED << switchLock, FirstInstallOFC, 
                                                FirstInstallNIB, 
                                                sw_fail_ordering_var, 
                                                ContProcSet, SwProcSet, 
@@ -9084,102 +8932,11 @@ AddDeleteDAGIRDoneSet(self) == /\ pc[self] = "AddDeleteDAGIRDoneSet"
                                                SetScheduledIRsRC, 
                                                FlagRCNIBEventHandlerFailover, 
                                                FlagRCSequencerFailover, 
-                                               RC_READY, TEEventQueue, 
-                                               DAGEventQueue, DAGQueue, DAGID, 
-                                               MaxDAGID, DAGState, nxtRCIRID, 
-                                               idWorkerWorkingOnDAG, 
-                                               RCSeqWorkerStatus, 
-                                               idThreadWorkingOnIR, 
-                                               workerThreadRanking, 
-                                               controllerStateOFC, IRStatusOFC, 
-                                               IRQueueOFC, 
-                                               SwSuspensionStatusOFC, 
-                                               SetScheduledIRsOFC, 
-                                               FlagOFCWorkerFailover, 
-                                               FlagOFCMonitorFailover, 
-                                               FlagOFCNIBEventHandlerFailover, 
-                                               OFCThreadID, OFC_READY, NIB2OFC, 
-                                               NIB2RC, X2NIB, OFC2NIB, RC2NIB, 
-                                               FlagNIBFailover, 
-                                               FlagNIBRCEventhandlerFailover, 
-                                               FlagNIBOFCEventhandlerFailover, 
-                                               NIB_READY_FOR_RC, 
-                                               NIB_READY_FOR_OFC, masterState, 
-                                               controllerStateNIB, IRStatusNIB, 
-                                               SwSuspensionStatusNIB, 
-                                               IRQueueNIB, SetScheduledIRs, 
-                                               X2NIB_len, NIBThreadID, 
-                                               RCThreadID, ingressPkt, 
-                                               ingressIR, egressMsg, ofaInMsg, 
-                                               ofaOutConfirmation, 
-                                               installerInIR, statusMsg, 
-                                               notFailedSet, failedElem, obj, 
-                                               failedSet, statusResolveMsg, 
-                                               recoveredElem, value_, 
-                                               nextTrans_, value_N, rowRemove_, 
-                                               IR2Remove_, send_NIB_back_, 
-                                               stepOfFailure_, IRIndex_, 
-                                               debug_, nextTrans, value, 
-                                               rowRemove_N, IR2Remove, 
-                                               send_NIB_back, stepOfFailure_N, 
-                                               IRIndex, debug_N, NIBMsg_, 
-                                               isBootStrap_, sw_id, 
-                                               topoChangeEvent, currSetDownSw, 
-                                               prev_dag_id, init, nxtDAG, 
-                                               setRemovableIRs, currIR, 
-                                               currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, seqEvent, 
-                                               worker, toBeScheduledIRs, 
-                                               transaction_, stepOfFailure_c, 
-                                               currDAG, key, op1_, op2, debug, 
-                                               transaction_O, IRQueueTmp, 
-                                               NIBMsg_O, isBootStrap, 
-                                               localIRSet, NIBIRSet, 
-                                               nextIRToSent, rowIndex, 
-                                               rowRemove, stepOfFailure_co, 
-                                               transaction_c, NIBMsg, op1, 
-                                               IRQueue, op_ir_status_change_, 
-                                               removeIR, monitoringEvent, 
-                                               setIRsToReset, resetIR, 
-                                               stepOfFailure, transaction_co, 
-                                               topo_change, irID, removedIR, 
-                                               msg, op_ir_status_change, 
-                                               op_first_install, transaction >>
-
-RemoveDAGfromDAGQueue(self) == /\ pc[self] = "RemoveDAGfromDAGQueue"
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                               /\ DAGQueue' = [DAGQueue EXCEPT ![self[1]] = Tail(DAGQueue[self[1]])]
-                               /\ pc' = [pc EXCEPT ![self] = "RCWorkerSeqProc"]
-                               /\ UNCHANGED << switchLock, controllerLock, 
-                                               FirstInstallOFC, 
-                                               FirstInstallNIB, 
-                                               sw_fail_ordering_var, 
-                                               ContProcSet, SwProcSet, 
-                                               irTypeMapping, 
-                                               swSeqChangedStatus, 
-                                               controller2Switch, 
-                                               switch2Controller, switchStatus, 
-                                               installedIRs, NicAsic2OfaBuff, 
-                                               Ofa2NicAsicBuff, 
-                                               Installer2OfaBuff, 
-                                               Ofa2InstallerBuff, TCAM, 
-                                               controlMsgCounter, 
-                                               RecoveryStatus, 
-                                               controllerSubmoduleFailNum, 
-                                               controllerSubmoduleFailStat, 
-                                               switchOrdering, dependencyGraph, 
-                                               ir2sw, NIBUpdateForRC, 
-                                               controllerStateRC, IRStatusRC, 
-                                               SwSuspensionStatusRC, IRQueueRC, 
-                                               SetScheduledIRsRC, 
-                                               FlagRCNIBEventHandlerFailover, 
-                                               FlagRCSequencerFailover, 
-                                               RC_READY, TEEventQueue, 
+                                               RC_READY, IRChangeForRC, 
+                                               TopoChangeForRC, TEEventQueue, 
                                                DAGEventQueue, DAGID, MaxDAGID, 
                                                DAGState, nxtRCIRID, 
                                                idWorkerWorkingOnDAG, 
-                                               RCSeqWorkerStatus, IRDoneSet, 
                                                idThreadWorkingOnIR, 
                                                workerThreadRanking, 
                                                controllerStateOFC, IRStatusOFC, 
@@ -9215,31 +8972,30 @@ RemoveDAGfromDAGQueue(self) == /\ pc[self] = "RemoveDAGfromDAGQueue"
                                                send_NIB_back, stepOfFailure_N, 
                                                IRIndex, debug_N, NIBMsg_, 
                                                isBootStrap_, sw_id, 
-                                               topoChangeEvent, currSetDownSw, 
-                                               prev_dag_id, init, nxtDAG, 
-                                               setRemovableIRs, currIR, 
-                                               currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, seqEvent, 
-                                               worker, toBeScheduledIRs, 
-                                               nextIR, transaction_, 
-                                               stepOfFailure_c, currDAG, IRSet, 
-                                               key, op1_, op2, debug, 
+                                               transaction_, topoChangeEvent, 
+                                               currSetDownSw, prev_dag_id, 
+                                               init, nxtDAG, setRemovableIRs, 
+                                               currIR, currIRInDAG, 
+                                               nxtDAGVertices, setIRsInDAG, 
+                                               prev_dag, toBeScheduledIRs, 
+                                               transaction_c, stepOfFailure_c, 
+                                               currDAG, key, op1_, op2, debug, 
                                                transaction_O, IRQueueTmp, 
                                                NIBMsg_O, isBootStrap, 
-                                               localIRSet, NIBIRSet, 
-                                               nextIRToSent, rowIndex, 
+                                               localIRSet, NIBIRSet, newIRSet, 
+                                               newIR, nextIRToSent, rowIndex, 
                                                rowRemove, stepOfFailure_co, 
-                                               transaction_c, NIBMsg, op1, 
+                                               transaction_co, NIBMsg, op1, 
                                                IRQueue, op_ir_status_change_, 
                                                removeIR, monitoringEvent, 
                                                setIRsToReset, resetIR, 
-                                               stepOfFailure, transaction_co, 
+                                               stepOfFailure, transaction_con, 
                                                topo_change, irID, removedIR, 
                                                msg, op_ir_status_change, 
                                                op_first_install, transaction >>
 
 RCSequencerFailover(self) == /\ pc[self] = "RCSequencerFailover"
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
                              /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = {}]
                              /\ controllerSubmoduleFailStat[<<rc0,CONT_WORKER_SEQ>>] = NotFailed /\
@@ -9266,11 +9022,11 @@ RCSequencerFailover(self) == /\ pc[self] = "RCSequencerFailover"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -9302,25 +9058,25 @@ RCSequencerFailover(self) == /\ pc[self] = "RCSequencerFailover"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, nextIR, transaction_, 
-                                             stepOfFailure_c, currDAG, IRSet, 
-                                             key, op1_, op2, debug, 
-                                             transaction_O, IRQueueTmp, 
+                                             setIRsInDAG, prev_dag, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
+                                             currDAG, IRSet, key, op1_, op2, 
+                                             debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
@@ -9331,11 +9087,81 @@ controllerSequencer(self) == RCWorkerSeqProc(self)
                                 \/ RCSendIR2NIB(self)
                                 \/ RemoveDAGFromQueue(self)
                                 \/ AddDeleteDAGIRDoneSet(self)
-                                \/ RemoveDAGfromDAGQueue(self)
                                 \/ RCSequencerFailover(self)
 
+NIBFailure(self) == /\ pc[self] = "NIBFailure"
+                    /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                    /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![<<nib0,CONT_NIB_RC_EVENT>>] = Failed,
+                                                                                          ![<<nib0,CONT_NIB_OFC_EVENT>>] = Failed]
+                    /\ pc' = [pc EXCEPT ![self] = "Done"]
+                    /\ UNCHANGED << switchLock, controllerLock, 
+                                    FirstInstallOFC, FirstInstallNIB, 
+                                    sw_fail_ordering_var, ContProcSet, 
+                                    SwProcSet, irTypeMapping, 
+                                    swSeqChangedStatus, controller2Switch, 
+                                    switch2Controller, switchStatus, 
+                                    installedIRs, NicAsic2OfaBuff, 
+                                    Ofa2NicAsicBuff, Installer2OfaBuff, 
+                                    Ofa2InstallerBuff, TCAM, controlMsgCounter, 
+                                    RecoveryStatus, controllerSubmoduleFailNum, 
+                                    switchOrdering, dependencyGraph, ir2sw, 
+                                    NIBUpdateForRC, controllerStateRC, 
+                                    IRStatusRC, SwSuspensionStatusRC, 
+                                    IRQueueRC, SetScheduledIRsRC, 
+                                    FlagRCNIBEventHandlerFailover, 
+                                    FlagRCSequencerFailover, RC_READY, 
+                                    IRChangeForRC, TopoChangeForRC, 
+                                    TEEventQueue, DAGEventQueue, DAGQueue, 
+                                    DAGID, MaxDAGID, DAGState, nxtRCIRID, 
+                                    idWorkerWorkingOnDAG, IRDoneSet, 
+                                    idThreadWorkingOnIR, workerThreadRanking, 
+                                    controllerStateOFC, IRStatusOFC, 
+                                    IRQueueOFC, SwSuspensionStatusOFC, 
+                                    SetScheduledIRsOFC, FlagOFCWorkerFailover, 
+                                    FlagOFCMonitorFailover, 
+                                    FlagOFCNIBEventHandlerFailover, 
+                                    OFCThreadID, OFC_READY, NIB2OFC, NIB2RC, 
+                                    X2NIB, OFC2NIB, RC2NIB, FlagNIBFailover, 
+                                    FlagNIBRCEventhandlerFailover, 
+                                    FlagNIBOFCEventhandlerFailover, 
+                                    NIB_READY_FOR_RC, NIB_READY_FOR_OFC, 
+                                    masterState, controllerStateNIB, 
+                                    IRStatusNIB, SwSuspensionStatusNIB, 
+                                    IRQueueNIB, SetScheduledIRs, X2NIB_len, 
+                                    NIBThreadID, RCThreadID, ingressPkt, 
+                                    ingressIR, egressMsg, ofaInMsg, 
+                                    ofaOutConfirmation, installerInIR, 
+                                    statusMsg, notFailedSet, failedElem, obj, 
+                                    failedSet, statusResolveMsg, recoveredElem, 
+                                    value_, nextTrans_, value_N, rowRemove_, 
+                                    IR2Remove_, send_NIB_back_, stepOfFailure_, 
+                                    IRIndex_, debug_, nextTrans, value, 
+                                    rowRemove_N, IR2Remove, send_NIB_back, 
+                                    stepOfFailure_N, IRIndex, debug_N, NIBMsg_, 
+                                    isBootStrap_, sw_id, transaction_, 
+                                    topoChangeEvent, currSetDownSw, 
+                                    prev_dag_id, init, nxtDAG, setRemovableIRs, 
+                                    currIR, currIRInDAG, nxtDAGVertices, 
+                                    setIRsInDAG, prev_dag, toBeScheduledIRs, 
+                                    nextIR, transaction_c, stepOfFailure_c, 
+                                    currDAG, IRSet, key, op1_, op2, debug, 
+                                    transaction_O, IRQueueTmp, NIBMsg_O, 
+                                    isBootStrap, localIRSet, NIBIRSet, 
+                                    newIRSet, newIR, nextIRToSent, rowIndex, 
+                                    rowRemove, stepOfFailure_co, 
+                                    transaction_co, NIBMsg, op1, IRQueue, 
+                                    op_ir_status_change_, removeIR, 
+                                    monitoringEvent, setIRsToReset, resetIR, 
+                                    stepOfFailure, transaction_con, 
+                                    topo_change, irID, removedIR, msg, 
+                                    op_ir_status_change, op_first_install, 
+                                    transaction >>
+
+NIBFailureProc(self) == NIBFailure(self)
+
 OFCFailoverResetStates(self) == /\ pc[self] = "OFCFailoverResetStates"
-                                /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                 /\ controllerSubmoduleFailStat[OFCThreadID] = Failed
                                      /\ controllerSubmoduleFailStat[<<ofc0,CONT_MONITOR>>] = Failed
@@ -9375,12 +9201,12 @@ OFCFailoverResetStates(self) == /\ pc[self] = "OFCFailoverResetStates"
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
                                                 FlagRCSequencerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 SwSuspensionStatusOFC, 
@@ -9414,31 +9240,32 @@ OFCFailoverResetStates(self) == /\ pc[self] = "OFCFailoverResetStates"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
-                                                toBeScheduledIRs, nextIR, 
-                                                transaction_, stepOfFailure_c, 
-                                                currDAG, IRSet, key, op1_, op2, 
-                                                debug, transaction_O, 
-                                                IRQueueTmp, NIBMsg_O, 
-                                                isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, toBeScheduledIRs, 
+                                                nextIR, transaction_c, 
+                                                stepOfFailure_c, currDAG, 
+                                                IRSet, key, op1_, op2, debug, 
+                                                transaction_O, IRQueueTmp, 
+                                                NIBMsg_O, isBootStrap, 
+                                                localIRSet, NIBIRSet, newIRSet, 
+                                                newIR, nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, irID, removedIR, 
                                                 msg, op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 OFCReadSwitches(self) == /\ pc[self] = "OFCReadSwitches"
+                         /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
                          /\ IRStatusOFC' = [x \in 1..MaxNumIRs |-> IF x \in rangeSeq(installedIRs)
                                                                    THEN IR_DONE
                                                                    ELSE IRStatusOFC[x]]
@@ -9465,10 +9292,10 @@ OFCReadSwitches(self) == /\ pc[self] = "OFCReadSwitches"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRQueueOFC, 
@@ -9498,26 +9325,29 @@ OFCReadSwitches(self) == /\ pc[self] = "OFCReadSwitches"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCReadNIB(self) == /\ pc[self] = "OFCReadNIB"
+                    /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
                     /\ NIB_READY_FOR_OFC \/ isNIBUp(NIBThreadID)
                     /\ IRQueueOFC' = SelectSeq(IRQueueRC, LAMBDA i: IRStatusOFC[i.IR] # IR_DONE)
                     /\ pc' = [pc EXCEPT ![self] = "OFCBack2Normal"]
@@ -9538,13 +9368,14 @@ OFCReadNIB(self) == /\ pc[self] = "OFCReadNIB"
                                     IRQueueRC, SetScheduledIRsRC, 
                                     FlagRCNIBEventHandlerFailover, 
                                     FlagRCSequencerFailover, RC_READY, 
+                                    IRChangeForRC, TopoChangeForRC, 
                                     TEEventQueue, DAGEventQueue, DAGQueue, 
                                     DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                    idWorkerWorkingOnDAG, RCSeqWorkerStatus, 
-                                    IRDoneSet, idThreadWorkingOnIR, 
-                                    workerThreadRanking, controllerStateOFC, 
-                                    IRStatusOFC, SwSuspensionStatusOFC, 
-                                    SetScheduledIRsOFC, FlagOFCWorkerFailover, 
+                                    idWorkerWorkingOnDAG, IRDoneSet, 
+                                    idThreadWorkingOnIR, workerThreadRanking, 
+                                    controllerStateOFC, IRStatusOFC, 
+                                    SwSuspensionStatusOFC, SetScheduledIRsOFC, 
+                                    FlagOFCWorkerFailover, 
                                     FlagOFCMonitorFailover, 
                                     FlagOFCNIBEventHandlerFailover, 
                                     OFCThreadID, OFC_READY, NIB2OFC, NIB2RC, 
@@ -9565,25 +9396,28 @@ OFCReadNIB(self) == /\ pc[self] = "OFCReadNIB"
                                     IRIndex_, debug_, nextTrans, value, 
                                     rowRemove_N, IR2Remove, send_NIB_back, 
                                     stepOfFailure_N, IRIndex, debug_N, NIBMsg_, 
-                                    isBootStrap_, sw_id, topoChangeEvent, 
-                                    currSetDownSw, prev_dag_id, init, nxtDAG, 
-                                    setRemovableIRs, currIR, currIRInDAG, 
-                                    nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                    seqEvent, worker, toBeScheduledIRs, nextIR, 
-                                    transaction_, stepOfFailure_c, currDAG, 
-                                    IRSet, key, op1_, op2, debug, 
+                                    isBootStrap_, sw_id, transaction_, 
+                                    topoChangeEvent, currSetDownSw, 
+                                    prev_dag_id, init, nxtDAG, setRemovableIRs, 
+                                    currIR, currIRInDAG, nxtDAGVertices, 
+                                    setIRsInDAG, prev_dag, toBeScheduledIRs, 
+                                    nextIR, transaction_c, stepOfFailure_c, 
+                                    currDAG, IRSet, key, op1_, op2, debug, 
                                     transaction_O, IRQueueTmp, NIBMsg_O, 
                                     isBootStrap, localIRSet, NIBIRSet, 
-                                    nextIRToSent, rowIndex, rowRemove, 
-                                    stepOfFailure_co, transaction_c, NIBMsg, 
-                                    op1, IRQueue, op_ir_status_change_, 
-                                    removeIR, monitoringEvent, setIRsToReset, 
-                                    resetIR, stepOfFailure, transaction_co, 
+                                    newIRSet, newIR, nextIRToSent, rowIndex, 
+                                    rowRemove, stepOfFailure_co, 
+                                    transaction_co, NIBMsg, op1, IRQueue, 
+                                    op_ir_status_change_, removeIR, 
+                                    monitoringEvent, setIRsToReset, resetIR, 
+                                    stepOfFailure, transaction_con, 
                                     topo_change, irID, removedIR, msg, 
                                     op_ir_status_change, op_first_install, 
                                     transaction >>
 
 OFCBack2Normal(self) == /\ pc[self] = "OFCBack2Normal"
+                        /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
                         /\ isNIBUp(NIBThreadID) \/ isNIBReconciliation(NIBThreadID)
                         /\ transaction_O' = [transaction_O EXCEPT ![self] = [name |-> "OFCOverrideIRStatus",
                                                                                      ops |-> <<IRStatusOFC, FirstInstallOFC>>]]
@@ -9609,10 +9443,10 @@ OFCBack2Normal(self) == /\ pc[self] = "OFCBack2Normal"
                                         IRQueueRC, SetScheduledIRsRC, 
                                         FlagRCNIBEventHandlerFailover, 
                                         FlagRCSequencerFailover, RC_READY, 
+                                        IRChangeForRC, TopoChangeForRC, 
                                         TEEventQueue, DAGEventQueue, DAGQueue, 
                                         DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                        idWorkerWorkingOnDAG, 
-                                        RCSeqWorkerStatus, IRDoneSet, 
+                                        idWorkerWorkingOnDAG, IRDoneSet, 
                                         idThreadWorkingOnIR, 
                                         workerThreadRanking, 
                                         controllerStateOFC, IRStatusOFC, 
@@ -9641,46 +9475,60 @@ OFCBack2Normal(self) == /\ pc[self] = "OFCBack2Normal"
                                         rowRemove_N, IR2Remove, send_NIB_back, 
                                         stepOfFailure_N, IRIndex, debug_N, 
                                         NIBMsg_, isBootStrap_, sw_id, 
-                                        topoChangeEvent, currSetDownSw, 
-                                        prev_dag_id, init, nxtDAG, 
-                                        setRemovableIRs, currIR, currIRInDAG, 
-                                        nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                        seqEvent, worker, toBeScheduledIRs, 
-                                        nextIR, transaction_, stepOfFailure_c, 
+                                        transaction_, topoChangeEvent, 
+                                        currSetDownSw, prev_dag_id, init, 
+                                        nxtDAG, setRemovableIRs, currIR, 
+                                        currIRInDAG, nxtDAGVertices, 
+                                        setIRsInDAG, prev_dag, 
+                                        toBeScheduledIRs, nextIR, 
+                                        transaction_c, stepOfFailure_c, 
                                         currDAG, IRSet, key, op1_, op2, debug, 
                                         IRQueueTmp, NIBMsg_O, isBootStrap, 
-                                        localIRSet, NIBIRSet, nextIRToSent, 
-                                        rowIndex, rowRemove, stepOfFailure_co, 
-                                        transaction_c, NIBMsg, op1, IRQueue, 
+                                        localIRSet, NIBIRSet, newIRSet, newIR, 
+                                        nextIRToSent, rowIndex, rowRemove, 
+                                        stepOfFailure_co, transaction_co, 
+                                        NIBMsg, op1, IRQueue, 
                                         op_ir_status_change_, removeIR, 
                                         monitoringEvent, setIRsToReset, 
-                                        resetIR, stepOfFailure, transaction_co, 
-                                        topo_change, irID, removedIR, msg, 
-                                        op_ir_status_change, op_first_install, 
-                                        transaction >>
+                                        resetIR, stepOfFailure, 
+                                        transaction_con, topo_change, irID, 
+                                        removedIR, msg, op_ir_status_change, 
+                                        op_first_install, transaction >>
 
 OFCFailoverProc(self) == OFCFailoverResetStates(self)
                             \/ OFCReadSwitches(self) \/ OFCReadNIB(self)
                             \/ OFCBack2Normal(self)
 
 OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
-                               /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                               /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                /\ IF isOFCFailed(self)
                                      THEN /\ FlagOFCNIBEventHandlerFailover' = TRUE
                                           /\ pc' = [pc EXCEPT ![self] = "OFCNIBEventHandlerFailover"]
-                                          /\ UNCHANGED << IRQueueOFC, NIB2OFC, 
+                                          /\ UNCHANGED << IRStatusOFC, 
+                                                          IRQueueOFC, NIB2OFC, 
                                                           NIBMsg_O, localIRSet, 
-                                                          NIBIRSet >>
+                                                          NIBIRSet, newIRSet, 
+                                                          newIR >>
                                      ELSE /\ NIB2OFC # <<>>
                                           /\ NIBMsg_O' = [NIBMsg_O EXCEPT ![self] = Head(NIB2OFC)]
                                           /\ NIB2OFC' = Tail(NIB2OFC)
+                                          /\ IF Cardinality(DOMAIN NIBMsg_O'[self].value.IRStatusNIB) > Cardinality(DOMAIN IRStatusOFC)
+                                                THEN /\ newIRSet' = [newIRSet EXCEPT ![self] = DOMAIN NIBMsg_O'[self].value.IRStatusNIB \ DOMAIN IRStatusOFC]
+                                                     /\ Assert(Cardinality(newIRSet'[self])=1, 
+                                                               "Failure of assertion at line 2381, column 21.")
+                                                     /\ newIR' = [newIR EXCEPT ![self] = CHOOSE x \in newIRSet'[self]: TRUE]
+                                                     /\ IRStatusOFC' = IRStatusOFC @@ (newIR'[self] :> IR_NONE)
+                                                ELSE /\ TRUE
+                                                     /\ UNCHANGED << IRStatusOFC, 
+                                                                     newIRSet, 
+                                                                     newIR >>
                                           /\ localIRSet' = [localIRSet EXCEPT ![self] = {IRQueueOFC[i].IR: i \in DOMAIN IRQueueOFC}]
                                           /\ NIBIRSet' = [NIBIRSet EXCEPT ![self] = {NIBMsg_O'[self].value.IRQueueNIB[i].IR: i \in DOMAIN NIBMsg_O'[self].value.IRQueueNIB}]
                                           /\ IF localIRSet'[self] # NIBIRSet'[self]
-                                                THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: IRStatusOFC[i.IR] = IR_NONE)
+                                                THEN /\ IRQueueOFC' = SelectSeq(NIBMsg_O'[self].value.IRQueueNIB, LAMBDA i: i.IR \notin DOMAIN IRStatusOFC' \/ IRStatusOFC'[i.IR] = IR_NONE)
                                                      /\ Assert(Len(IRQueueOFC') <= MaxNumIRs, 
-                                                               "Failure of assertion at line 2435, column 21.")
+                                                               "Failure of assertion at line 2391, column 21.")
                                                 ELSE /\ TRUE
                                                      /\ UNCHANGED IRQueueOFC
                                           /\ pc' = [pc EXCEPT ![self] = "OFCNIBEventHanderProc"]
@@ -9709,14 +9557,14 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                                SetScheduledIRsRC, 
                                                FlagRCNIBEventHandlerFailover, 
                                                FlagRCSequencerFailover, 
-                                               RC_READY, TEEventQueue, 
+                                               RC_READY, IRChangeForRC, 
+                                               TopoChangeForRC, TEEventQueue, 
                                                DAGEventQueue, DAGQueue, DAGID, 
                                                MaxDAGID, DAGState, nxtRCIRID, 
-                                               idWorkerWorkingOnDAG, 
-                                               RCSeqWorkerStatus, IRDoneSet, 
+                                               idWorkerWorkingOnDAG, IRDoneSet, 
                                                idThreadWorkingOnIR, 
                                                workerThreadRanking, 
-                                               controllerStateOFC, IRStatusOFC, 
+                                               controllerStateOFC, 
                                                SwSuspensionStatusOFC, 
                                                SetScheduledIRsOFC, 
                                                FlagOFCWorkerFailover, 
@@ -9747,30 +9595,30 @@ OFCNIBEventHanderProc(self) == /\ pc[self] = "OFCNIBEventHanderProc"
                                                send_NIB_back, stepOfFailure_N, 
                                                IRIndex, debug_N, NIBMsg_, 
                                                isBootStrap_, sw_id, 
-                                               topoChangeEvent, currSetDownSw, 
-                                               prev_dag_id, init, nxtDAG, 
-                                               setRemovableIRs, currIR, 
-                                               currIRInDAG, nxtDAGVertices, 
-                                               setIRsInDAG, prev_dag, seqEvent, 
-                                               worker, toBeScheduledIRs, 
-                                               nextIR, transaction_, 
+                                               transaction_, topoChangeEvent, 
+                                               currSetDownSw, prev_dag_id, 
+                                               init, nxtDAG, setRemovableIRs, 
+                                               currIR, currIRInDAG, 
+                                               nxtDAGVertices, setIRsInDAG, 
+                                               prev_dag, toBeScheduledIRs, 
+                                               nextIR, transaction_c, 
                                                stepOfFailure_c, currDAG, IRSet, 
                                                key, op1_, op2, debug, 
                                                transaction_O, IRQueueTmp, 
                                                isBootStrap, nextIRToSent, 
                                                rowIndex, rowRemove, 
-                                               stepOfFailure_co, transaction_c, 
-                                               NIBMsg, op1, IRQueue, 
-                                               op_ir_status_change_, removeIR, 
-                                               monitoringEvent, setIRsToReset, 
-                                               resetIR, stepOfFailure, 
-                                               transaction_co, topo_change, 
-                                               irID, removedIR, msg, 
-                                               op_ir_status_change, 
+                                               stepOfFailure_co, 
+                                               transaction_co, NIBMsg, op1, 
+                                               IRQueue, op_ir_status_change_, 
+                                               removeIR, monitoringEvent, 
+                                               setIRsToReset, resetIR, 
+                                               stepOfFailure, transaction_con, 
+                                               topo_change, irID, removedIR, 
+                                               msg, op_ir_status_change, 
                                                op_first_install, transaction >>
 
 OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
-                                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                     /\ isOFCUp(OFCThreadID)
                                     /\ pc' = [pc EXCEPT ![self] = "OFCNIBEventHanderProc"]
@@ -9802,12 +9650,13 @@ OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
                                                     SetScheduledIRsRC, 
                                                     FlagRCNIBEventHandlerFailover, 
                                                     FlagRCSequencerFailover, 
-                                                    RC_READY, TEEventQueue, 
+                                                    RC_READY, IRChangeForRC, 
+                                                    TopoChangeForRC, 
+                                                    TEEventQueue, 
                                                     DAGEventQueue, DAGQueue, 
                                                     DAGID, MaxDAGID, DAGState, 
                                                     nxtRCIRID, 
                                                     idWorkerWorkingOnDAG, 
-                                                    RCSeqWorkerStatus, 
                                                     IRDoneSet, 
                                                     idThreadWorkingOnIR, 
                                                     workerThreadRanking, 
@@ -9851,6 +9700,7 @@ OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
                                                     stepOfFailure_N, IRIndex, 
                                                     debug_N, NIBMsg_, 
                                                     isBootStrap_, sw_id, 
+                                                    transaction_, 
                                                     topoChangeEvent, 
                                                     currSetDownSw, prev_dag_id, 
                                                     init, nxtDAG, 
@@ -9858,24 +9708,24 @@ OFCNIBEventHandlerFailover(self) == /\ pc[self] = "OFCNIBEventHandlerFailover"
                                                     currIRInDAG, 
                                                     nxtDAGVertices, 
                                                     setIRsInDAG, prev_dag, 
-                                                    seqEvent, worker, 
                                                     toBeScheduledIRs, nextIR, 
-                                                    transaction_, 
+                                                    transaction_c, 
                                                     stepOfFailure_c, currDAG, 
                                                     IRSet, key, op1_, op2, 
                                                     debug, transaction_O, 
                                                     IRQueueTmp, NIBMsg_O, 
                                                     isBootStrap, localIRSet, 
-                                                    NIBIRSet, nextIRToSent, 
-                                                    rowIndex, rowRemove, 
+                                                    NIBIRSet, newIRSet, newIR, 
+                                                    nextIRToSent, rowIndex, 
+                                                    rowRemove, 
                                                     stepOfFailure_co, 
-                                                    transaction_c, NIBMsg, op1, 
-                                                    IRQueue, 
+                                                    transaction_co, NIBMsg, 
+                                                    op1, IRQueue, 
                                                     op_ir_status_change_, 
                                                     removeIR, monitoringEvent, 
                                                     setIRsToReset, resetIR, 
                                                     stepOfFailure, 
-                                                    transaction_co, 
+                                                    transaction_con, 
                                                     topo_change, irID, 
                                                     removedIR, msg, 
                                                     op_ir_status_change, 
@@ -9886,7 +9736,7 @@ OFCNIBEventHandler(self) == OFCNIBEventHanderProc(self)
                                \/ OFCNIBEventHandlerFailover(self)
 
 OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF isOFCFailed(self)
                                   THEN /\ FlagOFCWorkerFailover' = TRUE
@@ -9921,11 +9771,11 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -9956,30 +9806,30 @@ OFCThreadGetNextIR(self) == /\ pc[self] = "OFCThreadGetNextIR"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, rowRemove, 
-                                            stepOfFailure_co, transaction_c, 
-                                            NIBMsg, op1, IRQueue, 
-                                            op_ir_status_change_, removeIR, 
-                                            monitoringEvent, setIRsToReset, 
-                                            resetIR, stepOfFailure, 
-                                            transaction_co, topo_change, irID, 
-                                            removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            rowRemove, stepOfFailure_co, 
+                                            transaction_co, NIBMsg, op1, 
+                                            IRQueue, op_ir_status_change_, 
+                                            removeIR, monitoringEvent, 
+                                            setIRsToReset, resetIR, 
+                                            stepOfFailure, transaction_con, 
+                                            topo_change, irID, removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
 OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                         /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                          /\ IF isOFCFailed(self)
                                THEN /\ FlagOFCWorkerFailover' = TRUE
@@ -10010,10 +9860,10 @@ OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRQueueOFC, 
@@ -10043,38 +9893,39 @@ OFCThreadSendIR(self) == /\ pc[self] = "OFCThreadSendIR"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCThreadNotifyNIBIRSent(self) == /\ pc[self] = "OFCThreadNotifyNIBIRSent"
-                                  /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                  /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                   /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                   /\ IF isOFCFailed(self)
                                         THEN /\ FlagOFCWorkerFailover' = TRUE
                                              /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
                                              /\ UNCHANGED << OFC2NIB, 
-                                                             transaction_c, 
+                                                             transaction_co, 
                                                              op_ir_status_change_ >>
                                         ELSE /\ isNIBUp(NIBThreadID)
                                              /\ op_ir_status_change_' = [op_ir_status_change_ EXCEPT ![self] = [table |-> NIBT_IR_STATUS, key |-> nextIRToSent[self], value |-> IR_SENT]]
-                                             /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change_'[self]>>]]
-                                             /\ OFC2NIB' = OFC2NIB \o <<transaction_c'[self]>>
+                                             /\ transaction_co' = [transaction_co EXCEPT ![self] = [name |-> "OFCChangeIRStatus2Sent", ops |-> <<op_ir_status_change_'[self]>>]]
+                                             /\ OFC2NIB' = OFC2NIB \o <<transaction_co'[self]>>
                                              /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIRInner"]
                                              /\ UNCHANGED FlagOFCWorkerFailover
                                   /\ UNCHANGED << switchLock, controllerLock, 
@@ -10104,12 +9955,13 @@ OFCThreadNotifyNIBIRSent(self) == /\ pc[self] = "OFCThreadNotifyNIBIRSent"
                                                   IRQueueRC, SetScheduledIRsRC, 
                                                   FlagRCNIBEventHandlerFailover, 
                                                   FlagRCSequencerFailover, 
-                                                  RC_READY, TEEventQueue, 
-                                                  DAGEventQueue, DAGQueue, 
-                                                  DAGID, MaxDAGID, DAGState, 
-                                                  nxtRCIRID, 
+                                                  RC_READY, IRChangeForRC, 
+                                                  TopoChangeForRC, 
+                                                  TEEventQueue, DAGEventQueue, 
+                                                  DAGQueue, DAGID, MaxDAGID, 
+                                                  DAGState, nxtRCIRID, 
                                                   idWorkerWorkingOnDAG, 
-                                                  RCSeqWorkerStatus, IRDoneSet, 
+                                                  IRDoneSet, 
                                                   idThreadWorkingOnIR, 
                                                   workerThreadRanking, 
                                                   controllerStateOFC, 
@@ -10149,34 +10001,35 @@ OFCThreadNotifyNIBIRSent(self) == /\ pc[self] = "OFCThreadNotifyNIBIRSent"
                                                   stepOfFailure_N, IRIndex, 
                                                   debug_N, NIBMsg_, 
                                                   isBootStrap_, sw_id, 
+                                                  transaction_, 
                                                   topoChangeEvent, 
                                                   currSetDownSw, prev_dag_id, 
                                                   init, nxtDAG, 
                                                   setRemovableIRs, currIR, 
                                                   currIRInDAG, nxtDAGVertices, 
                                                   setIRsInDAG, prev_dag, 
-                                                  seqEvent, worker, 
                                                   toBeScheduledIRs, nextIR, 
-                                                  transaction_, 
+                                                  transaction_c, 
                                                   stepOfFailure_c, currDAG, 
                                                   IRSet, key, op1_, op2, debug, 
                                                   transaction_O, IRQueueTmp, 
                                                   NIBMsg_O, isBootStrap, 
                                                   localIRSet, NIBIRSet, 
+                                                  newIRSet, newIR, 
                                                   nextIRToSent, rowIndex, 
                                                   rowRemove, stepOfFailure_co, 
                                                   NIBMsg, op1, IRQueue, 
                                                   removeIR, monitoringEvent, 
                                                   setIRsToReset, resetIR, 
                                                   stepOfFailure, 
-                                                  transaction_co, topo_change, 
+                                                  transaction_con, topo_change, 
                                                   irID, removedIR, msg, 
                                                   op_ir_status_change, 
                                                   op_first_install, 
                                                   transaction >>
 
 ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIRInner"
-                                        /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                         /\ IF isOFCFailed(self)
                                               THEN /\ FlagOFCWorkerFailover' = TRUE
@@ -10184,15 +10037,15 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                    /\ UNCHANGED << switchLock, 
                                                                    controller2Switch >>
                                               ELSE /\ Assert(irTypeMapping[nextIRToSent[self]].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                                             "Failure of assertion at line 1048, column 9 of macro called at line 2506, column 17.")
+                                                             "Failure of assertion at line 1057, column 9 of macro called at line 2462, column 17.")
                                                    /\ Assert(irTypeMapping[nextIRToSent[self]].flow \in 1..MaxNumFlows, 
-                                                             "Failure of assertion at line 1049, column 9 of macro called at line 2506, column 17.")
+                                                             "Failure of assertion at line 1058, column 9 of macro called at line 2462, column 17.")
                                                    /\ controller2Switch' = [controller2Switch EXCEPT ![ir2sw[nextIRToSent[self]]] = Append(controller2Switch[ir2sw[nextIRToSent[self]]], [type |-> irTypeMapping[nextIRToSent[self]].type,
                                                                                                                                                                                           to |-> ir2sw[nextIRToSent[self]],
                                                                                                                                                                                           flow |-> irTypeMapping[nextIRToSent[self]].flow])]
-                                                   /\ IF whichSwitchModel(IR2SW[nextIRToSent[self]]) = SW_COMPLEX_MODEL
-                                                         THEN /\ switchLock' = <<NIC_ASIC_IN, IR2SW[nextIRToSent[self]]>>
-                                                         ELSE /\ switchLock' = <<SW_SIMPLE_ID, IR2SW[nextIRToSent[self]]>>
+                                                   /\ IF whichSwitchModel(ir2sw[nextIRToSent[self]]) = SW_COMPLEX_MODEL
+                                                         THEN /\ switchLock' = <<NIC_ASIC_IN, ir2sw[nextIRToSent[self]]>>
+                                                         ELSE /\ switchLock' = <<SW_SIMPLE_ID, ir2sw[nextIRToSent[self]]>>
                                                    /\ pc' = [pc EXCEPT ![self] = "OFCRemoveIRFromIRQueueOFCLocal"]
                                                    /\ UNCHANGED FlagOFCWorkerFailover
                                         /\ UNCHANGED << controllerLock, 
@@ -10224,13 +10077,15 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         SetScheduledIRsRC, 
                                                         FlagRCNIBEventHandlerFailover, 
                                                         FlagRCSequencerFailover, 
-                                                        RC_READY, TEEventQueue, 
+                                                        RC_READY, 
+                                                        IRChangeForRC, 
+                                                        TopoChangeForRC, 
+                                                        TEEventQueue, 
                                                         DAGEventQueue, 
                                                         DAGQueue, DAGID, 
                                                         MaxDAGID, DAGState, 
                                                         nxtRCIRID, 
                                                         idWorkerWorkingOnDAG, 
-                                                        RCSeqWorkerStatus, 
                                                         IRDoneSet, 
                                                         idThreadWorkingOnIR, 
                                                         workerThreadRanking, 
@@ -10278,7 +10133,8 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         stepOfFailure_N, 
                                                         IRIndex, debug_N, 
                                                         NIBMsg_, isBootStrap_, 
-                                                        sw_id, topoChangeEvent, 
+                                                        sw_id, transaction_, 
+                                                        topoChangeEvent, 
                                                         currSetDownSw, 
                                                         prev_dag_id, init, 
                                                         nxtDAG, 
@@ -10286,9 +10142,8 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         currIR, currIRInDAG, 
                                                         nxtDAGVertices, 
                                                         setIRsInDAG, prev_dag, 
-                                                        seqEvent, worker, 
                                                         toBeScheduledIRs, 
-                                                        nextIR, transaction_, 
+                                                        nextIR, transaction_c, 
                                                         stepOfFailure_c, 
                                                         currDAG, IRSet, key, 
                                                         op1_, op2, debug, 
@@ -10296,17 +10151,18 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         IRQueueTmp, NIBMsg_O, 
                                                         isBootStrap, 
                                                         localIRSet, NIBIRSet, 
+                                                        newIRSet, newIR, 
                                                         nextIRToSent, rowIndex, 
                                                         rowRemove, 
                                                         stepOfFailure_co, 
-                                                        transaction_c, NIBMsg, 
+                                                        transaction_co, NIBMsg, 
                                                         op1, IRQueue, 
                                                         op_ir_status_change_, 
                                                         removeIR, 
                                                         monitoringEvent, 
                                                         setIRsToReset, resetIR, 
                                                         stepOfFailure, 
-                                                        transaction_co, 
+                                                        transaction_con, 
                                                         topo_change, irID, 
                                                         removedIR, msg, 
                                                         op_ir_status_change, 
@@ -10314,7 +10170,7 @@ ControllerThreadForwardIRInner(self) == /\ pc[self] = "ControllerThreadForwardIR
                                                         transaction >>
 
 OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFCLocal"
-                                        /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                        /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                         /\ IF isOFCFailed(self)
                                               THEN /\ FlagOFCWorkerFailover' = TRUE
@@ -10363,13 +10219,15 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                                         SetScheduledIRsRC, 
                                                         FlagRCNIBEventHandlerFailover, 
                                                         FlagRCSequencerFailover, 
-                                                        RC_READY, TEEventQueue, 
+                                                        RC_READY, 
+                                                        IRChangeForRC, 
+                                                        TopoChangeForRC, 
+                                                        TEEventQueue, 
                                                         DAGEventQueue, 
                                                         DAGQueue, DAGID, 
                                                         MaxDAGID, DAGState, 
                                                         nxtRCIRID, 
                                                         idWorkerWorkingOnDAG, 
-                                                        RCSeqWorkerStatus, 
                                                         IRDoneSet, 
                                                         idThreadWorkingOnIR, 
                                                         workerThreadRanking, 
@@ -10416,7 +10274,8 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                                         stepOfFailure_N, 
                                                         IRIndex, debug_N, 
                                                         NIBMsg_, isBootStrap_, 
-                                                        sw_id, topoChangeEvent, 
+                                                        sw_id, transaction_, 
+                                                        topoChangeEvent, 
                                                         currSetDownSw, 
                                                         prev_dag_id, init, 
                                                         nxtDAG, 
@@ -10424,9 +10283,8 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                                         currIR, currIRInDAG, 
                                                         nxtDAGVertices, 
                                                         setIRsInDAG, prev_dag, 
-                                                        seqEvent, worker, 
                                                         toBeScheduledIRs, 
-                                                        nextIR, transaction_, 
+                                                        nextIR, transaction_c, 
                                                         stepOfFailure_c, 
                                                         currDAG, IRSet, key, 
                                                         op1_, op2, debug, 
@@ -10434,15 +10292,16 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                                         IRQueueTmp, NIBMsg_O, 
                                                         isBootStrap, 
                                                         localIRSet, NIBIRSet, 
+                                                        newIRSet, newIR, 
                                                         nextIRToSent, rowIndex, 
                                                         stepOfFailure_co, 
-                                                        transaction_c, NIBMsg, 
+                                                        transaction_co, NIBMsg, 
                                                         op1, IRQueue, 
                                                         op_ir_status_change_, 
                                                         monitoringEvent, 
                                                         setIRsToReset, resetIR, 
                                                         stepOfFailure, 
-                                                        transaction_co, 
+                                                        transaction_con, 
                                                         topo_change, irID, 
                                                         removedIR, msg, 
                                                         op_ir_status_change, 
@@ -10450,23 +10309,23 @@ OFCRemoveIRFromIRQueueOFCLocal(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueOFC
                                                         transaction >>
 
 OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemote"
-                                      /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                      /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                       /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                       /\ IF isOFCFailed(self)
                                             THEN /\ FlagOFCWorkerFailover' = TRUE
                                                  /\ pc' = [pc EXCEPT ![self] = "OFCWorkerFailover"]
                                                  /\ UNCHANGED << OFC2NIB, 
-                                                                 transaction_c, 
+                                                                 transaction_co, 
                                                                  op1, removeIR >>
                                             ELSE /\ IF removeIR[self] = TRUE
                                                        THEN /\ isNIBUp(NIBThreadID)
                                                             /\ op1' = [op1 EXCEPT ![self] = [table |-> NIBT_IR_QUEUE, key |-> nextIRToSent[self]]]
-                                                            /\ transaction_c' = [transaction_c EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
-                                                            /\ OFC2NIB' = OFC2NIB \o <<transaction_c'[self]>>
+                                                            /\ transaction_co' = [transaction_co EXCEPT ![self] = [name |-> "RemoveIR", ops |-> <<op1'[self]>>]]
+                                                            /\ OFC2NIB' = OFC2NIB \o <<transaction_co'[self]>>
                                                             /\ removeIR' = [removeIR EXCEPT ![self] = FALSE]
                                                        ELSE /\ TRUE
                                                             /\ UNCHANGED << OFC2NIB, 
-                                                                            transaction_c, 
+                                                                            transaction_co, 
                                                                             op1, 
                                                                             removeIR >>
                                                  /\ pc' = [pc EXCEPT ![self] = "OFCThreadGetNextIR"]
@@ -10501,12 +10360,13 @@ OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemot
                                                       SetScheduledIRsRC, 
                                                       FlagRCNIBEventHandlerFailover, 
                                                       FlagRCSequencerFailover, 
-                                                      RC_READY, TEEventQueue, 
+                                                      RC_READY, IRChangeForRC, 
+                                                      TopoChangeForRC, 
+                                                      TEEventQueue, 
                                                       DAGEventQueue, DAGQueue, 
                                                       DAGID, MaxDAGID, 
                                                       DAGState, nxtRCIRID, 
                                                       idWorkerWorkingOnDAG, 
-                                                      RCSeqWorkerStatus, 
                                                       IRDoneSet, 
                                                       idThreadWorkingOnIR, 
                                                       workerThreadRanking, 
@@ -10549,6 +10409,7 @@ OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemot
                                                       stepOfFailure_N, IRIndex, 
                                                       debug_N, NIBMsg_, 
                                                       isBootStrap_, sw_id, 
+                                                      transaction_, 
                                                       topoChangeEvent, 
                                                       currSetDownSw, 
                                                       prev_dag_id, init, 
@@ -10556,15 +10417,15 @@ OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemot
                                                       currIR, currIRInDAG, 
                                                       nxtDAGVertices, 
                                                       setIRsInDAG, prev_dag, 
-                                                      seqEvent, worker, 
                                                       toBeScheduledIRs, nextIR, 
-                                                      transaction_, 
+                                                      transaction_c, 
                                                       stepOfFailure_c, currDAG, 
                                                       IRSet, key, op1_, op2, 
                                                       debug, transaction_O, 
                                                       IRQueueTmp, NIBMsg_O, 
                                                       isBootStrap, localIRSet, 
-                                                      NIBIRSet, nextIRToSent, 
+                                                      NIBIRSet, newIRSet, 
+                                                      newIR, nextIRToSent, 
                                                       rowIndex, rowRemove, 
                                                       stepOfFailure_co, NIBMsg, 
                                                       IRQueue, 
@@ -10572,7 +10433,7 @@ OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemot
                                                       monitoringEvent, 
                                                       setIRsToReset, resetIR, 
                                                       stepOfFailure, 
-                                                      transaction_co, 
+                                                      transaction_con, 
                                                       topo_change, irID, 
                                                       removedIR, msg, 
                                                       op_ir_status_change, 
@@ -10580,7 +10441,7 @@ OFCRemoveIRFromIRQueueRemote(self) == /\ pc[self] = "OFCRemoveIRFromIRQueueRemot
                                                       transaction >>
 
 OFCWorkerFailover(self) == /\ pc[self] = "OFCWorkerFailover"
-                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                           /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                            /\ isOFCUp(OFCThreadID)
                            /\ pc' = [pc EXCEPT ![self] = "OFCThreadGetNextIR"]
@@ -10604,11 +10465,11 @@ OFCWorkerFailover(self) == /\ pc[self] = "OFCWorkerFailover"
                                            SetScheduledIRsRC, 
                                            FlagRCNIBEventHandlerFailover, 
                                            FlagRCSequencerFailover, RC_READY, 
+                                           IRChangeForRC, TopoChangeForRC, 
                                            TEEventQueue, DAGEventQueue, 
                                            DAGQueue, DAGID, MaxDAGID, DAGState, 
                                            nxtRCIRID, idWorkerWorkingOnDAG, 
-                                           RCSeqWorkerStatus, IRDoneSet, 
-                                           idThreadWorkingOnIR, 
+                                           IRDoneSet, idThreadWorkingOnIR, 
                                            workerThreadRanking, 
                                            controllerStateOFC, IRStatusOFC, 
                                            IRQueueOFC, SwSuspensionStatusOFC, 
@@ -10638,24 +10499,25 @@ OFCWorkerFailover(self) == /\ pc[self] = "OFCWorkerFailover"
                                            rowRemove_N, IR2Remove, 
                                            send_NIB_back, stepOfFailure_N, 
                                            IRIndex, debug_N, NIBMsg_, 
-                                           isBootStrap_, sw_id, 
+                                           isBootStrap_, sw_id, transaction_, 
                                            topoChangeEvent, currSetDownSw, 
                                            prev_dag_id, init, nxtDAG, 
                                            setRemovableIRs, currIR, 
                                            currIRInDAG, nxtDAGVertices, 
-                                           setIRsInDAG, prev_dag, seqEvent, 
-                                           worker, toBeScheduledIRs, nextIR, 
-                                           transaction_, stepOfFailure_c, 
+                                           setIRsInDAG, prev_dag, 
+                                           toBeScheduledIRs, nextIR, 
+                                           transaction_c, stepOfFailure_c, 
                                            currDAG, IRSet, key, op1_, op2, 
                                            debug, transaction_O, IRQueueTmp, 
                                            NIBMsg_O, isBootStrap, localIRSet, 
-                                           NIBIRSet, nextIRToSent, rowIndex, 
-                                           rowRemove, stepOfFailure_co, 
-                                           transaction_c, NIBMsg, op1, IRQueue, 
+                                           NIBIRSet, newIRSet, newIR, 
+                                           nextIRToSent, rowIndex, rowRemove, 
+                                           stepOfFailure_co, transaction_co, 
+                                           NIBMsg, op1, IRQueue, 
                                            op_ir_status_change_, removeIR, 
                                            monitoringEvent, setIRsToReset, 
                                            resetIR, stepOfFailure, 
-                                           transaction_co, topo_change, irID, 
+                                           transaction_con, topo_change, irID, 
                                            removedIR, msg, op_ir_status_change, 
                                            op_first_install, transaction >>
 
@@ -10671,13 +10533,13 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                     /\ controllerIsMaster(self[1])
                                     /\ moduleIsUp(self)
                                     /\ swSeqChangedStatus # <<>>
-                                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                     /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                     /\ monitoringEvent' = [monitoringEvent EXCEPT ![self] = Head(swSeqChangedStatus)]
                                     /\ IF shouldSuspendSw(monitoringEvent'[self]) /\ SwSuspensionStatusOFC[monitoringEvent'[self].swID] = SW_RUN
                                           THEN /\ pc' = [pc EXCEPT ![self] = "OFCSuspendSWLocally"]
                                           ELSE /\ Assert(FALSE, 
-                                                         "Failure of assertion at line 2594, column 13.")
+                                                         "Failure of assertion at line 2550, column 13.")
                                                /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                     /\ UNCHANGED << switchLock, controllerLock, 
                                                     FirstInstallOFC, 
@@ -10707,12 +10569,13 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     SetScheduledIRsRC, 
                                                     FlagRCNIBEventHandlerFailover, 
                                                     FlagRCSequencerFailover, 
-                                                    RC_READY, TEEventQueue, 
+                                                    RC_READY, IRChangeForRC, 
+                                                    TopoChangeForRC, 
+                                                    TEEventQueue, 
                                                     DAGEventQueue, DAGQueue, 
                                                     DAGID, MaxDAGID, DAGState, 
                                                     nxtRCIRID, 
                                                     idWorkerWorkingOnDAG, 
-                                                    RCSeqWorkerStatus, 
                                                     IRDoneSet, 
                                                     idThreadWorkingOnIR, 
                                                     workerThreadRanking, 
@@ -10756,6 +10619,7 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     stepOfFailure_N, IRIndex, 
                                                     debug_N, NIBMsg_, 
                                                     isBootStrap_, sw_id, 
+                                                    transaction_, 
                                                     topoChangeEvent, 
                                                     currSetDownSw, prev_dag_id, 
                                                     init, nxtDAG, 
@@ -10763,23 +10627,23 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     currIRInDAG, 
                                                     nxtDAGVertices, 
                                                     setIRsInDAG, prev_dag, 
-                                                    seqEvent, worker, 
                                                     toBeScheduledIRs, nextIR, 
-                                                    transaction_, 
+                                                    transaction_c, 
                                                     stepOfFailure_c, currDAG, 
                                                     IRSet, key, op1_, op2, 
                                                     debug, transaction_O, 
                                                     IRQueueTmp, NIBMsg_O, 
                                                     isBootStrap, localIRSet, 
-                                                    NIBIRSet, nextIRToSent, 
-                                                    rowIndex, rowRemove, 
+                                                    NIBIRSet, newIRSet, newIR, 
+                                                    nextIRToSent, rowIndex, 
+                                                    rowRemove, 
                                                     stepOfFailure_co, 
-                                                    transaction_c, NIBMsg, op1, 
-                                                    IRQueue, 
+                                                    transaction_co, NIBMsg, 
+                                                    op1, IRQueue, 
                                                     op_ir_status_change_, 
                                                     removeIR, setIRsToReset, 
                                                     resetIR, stepOfFailure, 
-                                                    transaction_co, 
+                                                    transaction_con, 
                                                     topo_change, irID, 
                                                     removedIR, msg, 
                                                     op_ir_status_change, 
@@ -10787,7 +10651,7 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     transaction >>
 
 ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEvenHanlderRemoveEventFromQueue"
-                                                   /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                    /\ IF (controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
                                                          THEN /\ \E num \in 0..2:
@@ -10840,6 +10704,8 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    FlagRCNIBEventHandlerFailover, 
                                                                    FlagRCSequencerFailover, 
                                                                    RC_READY, 
+                                                                   IRChangeForRC, 
+                                                                   TopoChangeForRC, 
                                                                    TEEventQueue, 
                                                                    DAGEventQueue, 
                                                                    DAGQueue, 
@@ -10848,7 +10714,6 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    DAGState, 
                                                                    nxtRCIRID, 
                                                                    idWorkerWorkingOnDAG, 
-                                                                   RCSeqWorkerStatus, 
                                                                    IRDoneSet, 
                                                                    idThreadWorkingOnIR, 
                                                                    workerThreadRanking, 
@@ -10913,6 +10778,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg_, 
                                                                    isBootStrap_, 
                                                                    sw_id, 
+                                                                   transaction_, 
                                                                    topoChangeEvent, 
                                                                    currSetDownSw, 
                                                                    prev_dag_id, 
@@ -10924,11 +10790,9 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    nxtDAGVertices, 
                                                                    setIRsInDAG, 
                                                                    prev_dag, 
-                                                                   seqEvent, 
-                                                                   worker, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
-                                                                   transaction_, 
+                                                                   transaction_c, 
                                                                    stepOfFailure_c, 
                                                                    currDAG, 
                                                                    IRSet, key, 
@@ -10940,11 +10804,13 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    isBootStrap, 
                                                                    localIRSet, 
                                                                    NIBIRSet, 
+                                                                   newIRSet, 
+                                                                   newIR, 
                                                                    nextIRToSent, 
                                                                    rowIndex, 
                                                                    rowRemove, 
                                                                    stepOfFailure_co, 
-                                                                   transaction_c, 
+                                                                   transaction_co, 
                                                                    NIBMsg, op1, 
                                                                    IRQueue, 
                                                                    op_ir_status_change_, 
@@ -10952,7 +10818,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    monitoringEvent, 
                                                                    setIRsToReset, 
                                                                    resetIR, 
-                                                                   transaction_co, 
+                                                                   transaction_con, 
                                                                    topo_change, 
                                                                    irID, 
                                                                    removedIR, 
@@ -10962,7 +10828,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    transaction >>
 
 OFCSuspendSWLocally(self) == /\ pc[self] = "OFCSuspendSWLocally"
-                             /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                             /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
                              /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
                                             controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
@@ -10997,11 +10863,11 @@ OFCSuspendSWLocally(self) == /\ pc[self] = "OFCSuspendSWLocally"
                                              SetScheduledIRsRC, 
                                              FlagRCNIBEventHandlerFailover, 
                                              FlagRCSequencerFailover, RC_READY, 
+                                             IRChangeForRC, TopoChangeForRC, 
                                              TEEventQueue, DAGEventQueue, 
                                              DAGQueue, DAGID, MaxDAGID, 
                                              DAGState, nxtRCIRID, 
-                                             idWorkerWorkingOnDAG, 
-                                             RCSeqWorkerStatus, IRDoneSet, 
+                                             idWorkerWorkingOnDAG, IRDoneSet, 
                                              idThreadWorkingOnIR, 
                                              workerThreadRanking, 
                                              controllerStateOFC, IRStatusOFC, 
@@ -11032,30 +10898,31 @@ OFCSuspendSWLocally(self) == /\ pc[self] = "OFCSuspendSWLocally"
                                              value, rowRemove_N, IR2Remove, 
                                              send_NIB_back, stepOfFailure_N, 
                                              IRIndex, debug_N, NIBMsg_, 
-                                             isBootStrap_, sw_id, 
+                                             isBootStrap_, sw_id, transaction_, 
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, nxtDAG, 
                                              setRemovableIRs, currIR, 
                                              currIRInDAG, nxtDAGVertices, 
-                                             setIRsInDAG, prev_dag, seqEvent, 
-                                             worker, toBeScheduledIRs, nextIR, 
-                                             transaction_, stepOfFailure_c, 
+                                             setIRsInDAG, prev_dag, 
+                                             toBeScheduledIRs, nextIR, 
+                                             transaction_c, stepOfFailure_c, 
                                              currDAG, IRSet, key, op1_, op2, 
                                              debug, transaction_O, IRQueueTmp, 
                                              NIBMsg_O, isBootStrap, localIRSet, 
-                                             NIBIRSet, nextIRToSent, rowIndex, 
-                                             rowRemove, stepOfFailure_co, 
-                                             transaction_c, NIBMsg, op1, 
-                                             IRQueue, op_ir_status_change_, 
-                                             removeIR, monitoringEvent, 
-                                             setIRsToReset, resetIR, 
-                                             stepOfFailure, transaction_co, 
-                                             topo_change, irID, removedIR, msg, 
+                                             NIBIRSet, newIRSet, newIR, 
+                                             nextIRToSent, rowIndex, rowRemove, 
+                                             stepOfFailure_co, transaction_co, 
+                                             NIBMsg, op1, IRQueue, 
+                                             op_ir_status_change_, removeIR, 
+                                             monitoringEvent, setIRsToReset, 
+                                             resetIR, stepOfFailure, 
+                                             transaction_con, topo_change, 
+                                             irID, removedIR, msg, 
                                              op_ir_status_change, 
                                              op_first_install, transaction >>
 
 OFCSuspendSWRemotely(self) == /\ pc[self] = "OFCSuspendSWRemotely"
-                              /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                              /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                               /\ switchLock = <<NO_LOCK, NO_LOCK>>
                               /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
                                              controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
@@ -11069,12 +10936,12 @@ OFCSuspendSWRemotely(self) == /\ pc[self] = "OFCSuspendSWRemotely"
                               /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
                                     THEN /\ isNIBUp(NIBThreadID)
                                          /\ topo_change' = [topo_change EXCEPT ![self] = [table |-> NIBT_SW_STATUS, key |-> monitoringEvent[self].swID, value |-> SW_SUSPEND]]
-                                         /\ transaction_co' = [transaction_co EXCEPT ![self] = [name |-> "SwitchDown", ops |-> <<topo_change'[self]>>]]
-                                         /\ OFC2NIB' = OFC2NIB \o <<transaction_co'[self]>>
+                                         /\ transaction_con' = [transaction_con EXCEPT ![self] = [name |-> "SwitchDown", ops |-> <<topo_change'[self]>>]]
+                                         /\ OFC2NIB' = OFC2NIB \o <<transaction_con'[self]>>
                                          /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                     ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerEventHandlerStateReconciliation"]
                                          /\ UNCHANGED << OFC2NIB, 
-                                                         transaction_co, 
+                                                         transaction_con, 
                                                          topo_change >>
                               /\ UNCHANGED << switchLock, controllerLock, 
                                               FirstInstallOFC, FirstInstallNIB, 
@@ -11097,11 +10964,11 @@ OFCSuspendSWRemotely(self) == /\ pc[self] = "OFCSuspendSWRemotely"
                                               SetScheduledIRsRC, 
                                               FlagRCNIBEventHandlerFailover, 
                                               FlagRCSequencerFailover, 
-                                              RC_READY, TEEventQueue, 
+                                              RC_READY, IRChangeForRC, 
+                                              TopoChangeForRC, TEEventQueue, 
                                               DAGEventQueue, DAGQueue, DAGID, 
                                               MaxDAGID, DAGState, nxtRCIRID, 
-                                              idWorkerWorkingOnDAG, 
-                                              RCSeqWorkerStatus, IRDoneSet, 
+                                              idWorkerWorkingOnDAG, IRDoneSet, 
                                               idThreadWorkingOnIR, 
                                               workerThreadRanking, 
                                               controllerStateOFC, IRStatusOFC, 
@@ -11136,20 +11003,21 @@ OFCSuspendSWRemotely(self) == /\ pc[self] = "OFCSuspendSWRemotely"
                                               IR2Remove, send_NIB_back, 
                                               stepOfFailure_N, IRIndex, 
                                               debug_N, NIBMsg_, isBootStrap_, 
-                                              sw_id, topoChangeEvent, 
-                                              currSetDownSw, prev_dag_id, init, 
-                                              nxtDAG, setRemovableIRs, currIR, 
+                                              sw_id, transaction_, 
+                                              topoChangeEvent, currSetDownSw, 
+                                              prev_dag_id, init, nxtDAG, 
+                                              setRemovableIRs, currIR, 
                                               currIRInDAG, nxtDAGVertices, 
-                                              setIRsInDAG, prev_dag, seqEvent, 
-                                              worker, toBeScheduledIRs, nextIR, 
-                                              transaction_, stepOfFailure_c, 
+                                              setIRsInDAG, prev_dag, 
+                                              toBeScheduledIRs, nextIR, 
+                                              transaction_c, stepOfFailure_c, 
                                               currDAG, IRSet, key, op1_, op2, 
                                               debug, transaction_O, IRQueueTmp, 
                                               NIBMsg_O, isBootStrap, 
-                                              localIRSet, NIBIRSet, 
-                                              nextIRToSent, rowIndex, 
+                                              localIRSet, NIBIRSet, newIRSet, 
+                                              newIR, nextIRToSent, rowIndex, 
                                               rowRemove, stepOfFailure_co, 
-                                              transaction_c, NIBMsg, op1, 
+                                              transaction_co, NIBMsg, op1, 
                                               IRQueue, op_ir_status_change_, 
                                               removeIR, monitoringEvent, 
                                               setIRsToReset, resetIR, 
@@ -11161,8 +11029,7 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                    /\ controllerIsMaster(self[1])
                                                    /\ moduleIsUp(self)
                                                    /\ swSeqChangedStatus # <<>>
-                                                   /\ \/ controllerLock = self
-                                                      \/ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                                    /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                                    /\ IF (controllerStateNIB[self].type = START_RESET_IR)
@@ -11203,6 +11070,8 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    FlagRCNIBEventHandlerFailover, 
                                                                    FlagRCSequencerFailover, 
                                                                    RC_READY, 
+                                                                   IRChangeForRC, 
+                                                                   TopoChangeForRC, 
                                                                    TEEventQueue, 
                                                                    DAGEventQueue, 
                                                                    DAGQueue, 
@@ -11211,7 +11080,6 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    DAGState, 
                                                                    nxtRCIRID, 
                                                                    idWorkerWorkingOnDAG, 
-                                                                   RCSeqWorkerStatus, 
                                                                    IRDoneSet, 
                                                                    idThreadWorkingOnIR, 
                                                                    workerThreadRanking, 
@@ -11276,6 +11144,7 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    NIBMsg_, 
                                                                    isBootStrap_, 
                                                                    sw_id, 
+                                                                   transaction_, 
                                                                    topoChangeEvent, 
                                                                    currSetDownSw, 
                                                                    prev_dag_id, 
@@ -11287,11 +11156,9 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    nxtDAGVertices, 
                                                                    setIRsInDAG, 
                                                                    prev_dag, 
-                                                                   seqEvent, 
-                                                                   worker, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
-                                                                   transaction_, 
+                                                                   transaction_c, 
                                                                    stepOfFailure_c, 
                                                                    currDAG, 
                                                                    IRSet, key, 
@@ -11303,11 +11170,13 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    isBootStrap, 
                                                                    localIRSet, 
                                                                    NIBIRSet, 
+                                                                   newIRSet, 
+                                                                   newIR, 
                                                                    nextIRToSent, 
                                                                    rowIndex, 
                                                                    rowRemove, 
                                                                    stepOfFailure_co, 
-                                                                   transaction_c, 
+                                                                   transaction_co, 
                                                                    NIBMsg, op1, 
                                                                    IRQueue, 
                                                                    op_ir_status_change_, 
@@ -11316,7 +11185,7 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    setIRsToReset, 
                                                                    resetIR, 
                                                                    stepOfFailure, 
-                                                                   transaction_co, 
+                                                                   transaction_con, 
                                                                    topo_change, 
                                                                    irID, 
                                                                    removedIR, 
@@ -11333,25 +11202,22 @@ controllerEventHandler(self) == ControllerEventHandlerProc(self)
 
 OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                 /\ switch2Controller # <<>>
+                                /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                /\ controllerLock' = self
                                 /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                 /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY, FLOW_STAT_REPLY}, 
-                                          "Failure of assertion at line 2660, column 9.")
-                                /\ IF msg'[self].type \in {INSTALLED_SUCCESSFULLY}
+                                          "Failure of assertion at line 2617, column 9.")
+                                /\ IF msg'[self].type \in {INSTALLED_SUCCESSFULLY, DELETED_SUCCESSFULLY}
                                       THEN /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow, msg'[self].type)]
-                                           /\ Assert(msg'[self].from = IR2SW[irID'[self]], 
-                                                     "Failure of assertion at line 2667, column 17.")
+                                           /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
+                                                     "Failure of assertion at line 2623, column 17.")
                                            /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRDone"]
-                                      ELSE /\ IF msg'[self].type \in {DELETED_SUCCESSFULLY}
-                                                 THEN /\ irID' = [irID EXCEPT ![self] = getRemovedIRID(msg'[self].flow)]
-                                                      /\ Assert(msg'[self].from = IR2SW[removedIR[self]], 
-                                                                "Failure of assertion at line 2694, column 13.")
-                                                      /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRNone"]
-                                                 ELSE /\ Assert(FALSE, 
-                                                                "Failure of assertion at line 2717, column 13.")
-                                                      /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
-                                                      /\ irID' = irID
-                                /\ UNCHANGED << switchLock, controllerLock, 
-                                                FirstInstallOFC, 
+                                      ELSE /\ Assert(FALSE, 
+                                                     "Failure of assertion at line 2677, column 13.")
+                                           /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
+                                           /\ irID' = irID
+                                /\ UNCHANGED << switchLock, FirstInstallOFC, 
                                                 FirstInstallNIB, 
                                                 sw_fail_ordering_var, 
                                                 ContProcSet, SwProcSet, 
@@ -11376,12 +11242,12 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                                 IRQueueRC, SetScheduledIRsRC, 
                                                 FlagRCNIBEventHandlerFailover, 
                                                 FlagRCSequencerFailover, 
-                                                RC_READY, TEEventQueue, 
+                                                RC_READY, IRChangeForRC, 
+                                                TopoChangeForRC, TEEventQueue, 
                                                 DAGEventQueue, DAGQueue, DAGID, 
                                                 MaxDAGID, DAGState, nxtRCIRID, 
                                                 idWorkerWorkingOnDAG, 
-                                                RCSeqWorkerStatus, IRDoneSet, 
-                                                idThreadWorkingOnIR, 
+                                                IRDoneSet, idThreadWorkingOnIR, 
                                                 workerThreadRanking, 
                                                 controllerStateOFC, 
                                                 IRStatusOFC, IRQueueOFC, 
@@ -11418,32 +11284,31 @@ OFCMonitorCheckIfMastr(self) == /\ pc[self] = "OFCMonitorCheckIfMastr"
                                                 send_NIB_back, stepOfFailure_N, 
                                                 IRIndex, debug_N, NIBMsg_, 
                                                 isBootStrap_, sw_id, 
-                                                topoChangeEvent, currSetDownSw, 
-                                                prev_dag_id, init, nxtDAG, 
-                                                setRemovableIRs, currIR, 
-                                                currIRInDAG, nxtDAGVertices, 
-                                                setIRsInDAG, prev_dag, 
-                                                seqEvent, worker, 
-                                                toBeScheduledIRs, nextIR, 
-                                                transaction_, stepOfFailure_c, 
-                                                currDAG, IRSet, key, op1_, op2, 
-                                                debug, transaction_O, 
-                                                IRQueueTmp, NIBMsg_O, 
-                                                isBootStrap, localIRSet, 
-                                                NIBIRSet, nextIRToSent, 
-                                                rowIndex, rowRemove, 
-                                                stepOfFailure_co, 
-                                                transaction_c, NIBMsg, op1, 
+                                                transaction_, topoChangeEvent, 
+                                                currSetDownSw, prev_dag_id, 
+                                                init, nxtDAG, setRemovableIRs, 
+                                                currIR, currIRInDAG, 
+                                                nxtDAGVertices, setIRsInDAG, 
+                                                prev_dag, toBeScheduledIRs, 
+                                                nextIR, transaction_c, 
+                                                stepOfFailure_c, currDAG, 
+                                                IRSet, key, op1_, op2, debug, 
+                                                transaction_O, IRQueueTmp, 
+                                                NIBMsg_O, isBootStrap, 
+                                                localIRSet, NIBIRSet, newIRSet, 
+                                                newIR, nextIRToSent, rowIndex, 
+                                                rowRemove, stepOfFailure_co, 
+                                                transaction_co, NIBMsg, op1, 
                                                 IRQueue, op_ir_status_change_, 
                                                 removeIR, monitoringEvent, 
                                                 setIRsToReset, resetIR, 
-                                                stepOfFailure, transaction_co, 
+                                                stepOfFailure, transaction_con, 
                                                 topo_change, removedIR, 
                                                 op_ir_status_change, 
                                                 op_first_install, transaction >>
 
 MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFromQueue"
-                                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                                         /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                          /\ IF (controllerSubmoduleFailStat[self] = NotFailed /\
                                                         controllerSubmoduleFailNum[self[1]] < getMaxNumSubModuleFailure(self[1]))
@@ -11489,13 +11354,14 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          FlagRCNIBEventHandlerFailover, 
                                                          FlagRCSequencerFailover, 
                                                          RC_READY, 
+                                                         IRChangeForRC, 
+                                                         TopoChangeForRC, 
                                                          TEEventQueue, 
                                                          DAGEventQueue, 
                                                          DAGQueue, DAGID, 
                                                          MaxDAGID, DAGState, 
                                                          nxtRCIRID, 
                                                          idWorkerWorkingOnDAG, 
-                                                         RCSeqWorkerStatus, 
                                                          IRDoneSet, 
                                                          idThreadWorkingOnIR, 
                                                          workerThreadRanking, 
@@ -11548,7 +11414,7 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          stepOfFailure_N, 
                                                          IRIndex, debug_N, 
                                                          NIBMsg_, isBootStrap_, 
-                                                         sw_id, 
+                                                         sw_id, transaction_, 
                                                          topoChangeEvent, 
                                                          currSetDownSw, 
                                                          prev_dag_id, init, 
@@ -11557,9 +11423,8 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          currIR, currIRInDAG, 
                                                          nxtDAGVertices, 
                                                          setIRsInDAG, prev_dag, 
-                                                         seqEvent, worker, 
                                                          toBeScheduledIRs, 
-                                                         nextIR, transaction_, 
+                                                         nextIR, transaction_c, 
                                                          stepOfFailure_c, 
                                                          currDAG, IRSet, key, 
                                                          op1_, op2, debug, 
@@ -11567,18 +11432,19 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          IRQueueTmp, NIBMsg_O, 
                                                          isBootStrap, 
                                                          localIRSet, NIBIRSet, 
+                                                         newIRSet, newIR, 
                                                          nextIRToSent, 
                                                          rowIndex, rowRemove, 
                                                          stepOfFailure_co, 
-                                                         transaction_c, NIBMsg, 
-                                                         op1, IRQueue, 
+                                                         transaction_co, 
+                                                         NIBMsg, op1, IRQueue, 
                                                          op_ir_status_change_, 
                                                          removeIR, 
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, 
                                                          stepOfFailure, 
-                                                         transaction_co, 
+                                                         transaction_con, 
                                                          topo_change, irID, 
                                                          removedIR, msg, 
                                                          op_ir_status_change, 
@@ -11586,7 +11452,7 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          transaction >>
 
 OFCUpdateIRDone(self) == /\ pc[self] = "OFCUpdateIRDone"
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                         /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
                          /\ IF isOFCFailed(self)
                                THEN /\ FlagOFCMonitorFailover' = TRUE
@@ -11615,10 +11481,10 @@ OFCUpdateIRDone(self) == /\ pc[self] = "OFCUpdateIRDone"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRQueueOFC, 
@@ -11648,26 +11514,29 @@ OFCUpdateIRDone(self) == /\ pc[self] = "OFCUpdateIRDone"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
+                                         transaction_con, topo_change, irID, 
                                          removedIR, msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF isOFCFailed(self)
                                   THEN /\ FlagOFCMonitorFailover' = TRUE
                                        /\ pc' = [pc EXCEPT ![self] = "OFCMonitorFailover"]
@@ -11681,7 +11550,7 @@ OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
                                        /\ transaction' = [transaction EXCEPT ![self] = [name |-> "FirstInstallIR",
                                                                                         ops |-> <<op_ir_status_change'[self], op_first_install'[self]>>]]
                                        /\ OFC2NIB' = OFC2NIB \o <<transaction'[self]>>
-                                       /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
+                                       /\ pc' = [pc EXCEPT ![self] = "OFCUpdateIRNone"]
                                        /\ UNCHANGED FlagOFCMonitorFailover
                             /\ UNCHANGED << switchLock, controllerLock, 
                                             FirstInstallOFC, FirstInstallNIB, 
@@ -11703,11 +11572,11 @@ OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -11738,40 +11607,49 @@ OFCUpdateNIBIRDONE(self) == /\ pc[self] = "OFCUpdateNIBIRDONE"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg >>
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg >>
 
 OFCUpdateIRNone(self) == /\ pc[self] = "OFCUpdateIRNone"
-                         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
-                         /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                         /\ IF isOFCFailed(self)
-                               THEN /\ FlagOFCMonitorFailover' = TRUE
-                                    /\ pc' = [pc EXCEPT ![self] = "OFCMonitorFailover"]
-                                    /\ UNCHANGED IRStatusOFC
-                               ELSE /\ IRStatusOFC' = [IRStatusOFC EXCEPT ![irID[self]] = IR_NONE]
-                                    /\ pc' = [pc EXCEPT ![self] = "OFCUpdateNIBIRNone"]
-                                    /\ UNCHANGED FlagOFCMonitorFailover
+                         /\ IF msg[self].type = DELETED_SUCCESSFULLY
+                               THEN /\ removedIR' = [removedIR EXCEPT ![self] = getRemovedIRID(msg[self].flow)]
+                                    /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                    /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                    /\ IF isOFCFailed(self)
+                                          THEN /\ FlagOFCMonitorFailover' = TRUE
+                                               /\ pc' = [pc EXCEPT ![self] = "OFCMonitorFailover"]
+                                               /\ UNCHANGED << FirstInstallOFC, 
+                                                               IRStatusOFC >>
+                                          ELSE /\ IRStatusOFC' = [IRStatusOFC EXCEPT ![removedIR'[self]] = IR_NONE]
+                                               /\ FirstInstallOFC' = [FirstInstallOFC EXCEPT ![removedIR'[self]] = 0]
+                                               /\ pc' = [pc EXCEPT ![self] = "OFCUpdateNIBIRNone"]
+                                               /\ UNCHANGED FlagOFCMonitorFailover
+                               ELSE /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
+                                    /\ UNCHANGED << FirstInstallOFC, 
+                                                    IRStatusOFC, 
+                                                    FlagOFCMonitorFailover, 
+                                                    removedIR >>
                          /\ UNCHANGED << switchLock, controllerLock, 
-                                         FirstInstallOFC, FirstInstallNIB, 
-                                         sw_fail_ordering_var, ContProcSet, 
-                                         SwProcSet, irTypeMapping, 
+                                         FirstInstallNIB, sw_fail_ordering_var, 
+                                         ContProcSet, SwProcSet, irTypeMapping, 
                                          swSeqChangedStatus, controller2Switch, 
                                          switch2Controller, switchStatus, 
                                          installedIRs, NicAsic2OfaBuff, 
@@ -11787,10 +11665,10 @@ OFCUpdateIRNone(self) == /\ pc[self] = "OFCUpdateIRNone"
                                          SetScheduledIRsRC, 
                                          FlagRCNIBEventHandlerFailover, 
                                          FlagRCSequencerFailover, RC_READY, 
+                                         IRChangeForRC, TopoChangeForRC, 
                                          TEEventQueue, DAGEventQueue, DAGQueue, 
                                          DAGID, MaxDAGID, DAGState, nxtRCIRID, 
-                                         idWorkerWorkingOnDAG, 
-                                         RCSeqWorkerStatus, IRDoneSet, 
+                                         idWorkerWorkingOnDAG, IRDoneSet, 
                                          idThreadWorkingOnIR, 
                                          workerThreadRanking, 
                                          controllerStateOFC, IRQueueOFC, 
@@ -11820,36 +11698,41 @@ OFCUpdateIRNone(self) == /\ pc[self] = "OFCUpdateIRNone"
                                          rowRemove_N, IR2Remove, send_NIB_back, 
                                          stepOfFailure_N, IRIndex, debug_N, 
                                          NIBMsg_, isBootStrap_, sw_id, 
-                                         topoChangeEvent, currSetDownSw, 
-                                         prev_dag_id, init, nxtDAG, 
-                                         setRemovableIRs, currIR, currIRInDAG, 
-                                         nxtDAGVertices, setIRsInDAG, prev_dag, 
-                                         seqEvent, worker, toBeScheduledIRs, 
-                                         nextIR, transaction_, stepOfFailure_c, 
+                                         transaction_, topoChangeEvent, 
+                                         currSetDownSw, prev_dag_id, init, 
+                                         nxtDAG, setRemovableIRs, currIR, 
+                                         currIRInDAG, nxtDAGVertices, 
+                                         setIRsInDAG, prev_dag, 
+                                         toBeScheduledIRs, nextIR, 
+                                         transaction_c, stepOfFailure_c, 
                                          currDAG, IRSet, key, op1_, op2, debug, 
                                          transaction_O, IRQueueTmp, NIBMsg_O, 
                                          isBootStrap, localIRSet, NIBIRSet, 
-                                         nextIRToSent, rowIndex, rowRemove, 
-                                         stepOfFailure_co, transaction_c, 
-                                         NIBMsg, op1, IRQueue, 
+                                         newIRSet, newIR, nextIRToSent, 
+                                         rowIndex, rowRemove, stepOfFailure_co, 
+                                         transaction_co, NIBMsg, op1, IRQueue, 
                                          op_ir_status_change_, removeIR, 
                                          monitoringEvent, setIRsToReset, 
                                          resetIR, stepOfFailure, 
-                                         transaction_co, topo_change, irID, 
-                                         removedIR, msg, op_ir_status_change, 
+                                         transaction_con, topo_change, irID, 
+                                         msg, op_ir_status_change, 
                                          op_first_install, transaction >>
 
 OFCUpdateNIBIRNone(self) == /\ pc[self] = "OFCUpdateNIBIRNone"
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ IF isOFCFailed(self)
                                   THEN /\ FlagOFCMonitorFailover' = TRUE
                                        /\ pc' = [pc EXCEPT ![self] = "OFCMonitorFailover"]
                                        /\ UNCHANGED << OFC2NIB, 
                                                        op_ir_status_change, 
+                                                       op_first_install, 
                                                        transaction >>
                                   ELSE /\ isNIBUp(NIBThreadID)
-                                       /\ op_ir_status_change' = [op_ir_status_change EXCEPT ![self] = [table |-> NIBT_IR_STATUS, key |-> irID[self], value |-> IR_NONE]]
-                                       /\ transaction' = [transaction EXCEPT ![self] = [name |-> "ChangeIRDoneToNone",
-                                                                                        ops |-> <<op_ir_status_change'[self]>>]]
+                                       /\ op_ir_status_change' = [op_ir_status_change EXCEPT ![self] = [table |-> NIBT_IR_STATUS, key |-> removedIR[self], value |-> IR_NONE]]
+                                       /\ op_first_install' = [op_first_install EXCEPT ![self] = [table |-> NIBT_FIRST_INSTALL, key |-> removedIR[self], value |-> 0]]
+                                       /\ transaction' = [transaction EXCEPT ![self] =    [name |-> "FirstInstallIR",
+                                                                                       ops |-> <<op_ir_status_change'[self], op_first_install'[self]>>]]
                                        /\ OFC2NIB' = OFC2NIB \o <<transaction'[self]>>
                                        /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED FlagOFCMonitorFailover
@@ -11873,11 +11756,11 @@ OFCUpdateNIBIRNone(self) == /\ pc[self] = "OFCUpdateNIBIRNone"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -11908,29 +11791,29 @@ OFCUpdateNIBIRNone(self) == /\ pc[self] = "OFCUpdateNIBIRNone"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
-                                            op_first_install >>
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg >>
 
 OFCMonitorFailover(self) == /\ pc[self] = "OFCMonitorFailover"
-                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
+                            /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                             /\ switchLock = <<NO_LOCK, NO_LOCK>>
                             /\ isOFCUp(OFCThreadID)
                             /\ pc' = [pc EXCEPT ![self] = "OFCMonitorCheckIfMastr"]
@@ -11954,11 +11837,11 @@ OFCMonitorFailover(self) == /\ pc[self] = "OFCMonitorFailover"
                                             SetScheduledIRsRC, 
                                             FlagRCNIBEventHandlerFailover, 
                                             FlagRCSequencerFailover, RC_READY, 
+                                            IRChangeForRC, TopoChangeForRC, 
                                             TEEventQueue, DAGEventQueue, 
                                             DAGQueue, DAGID, MaxDAGID, 
                                             DAGState, nxtRCIRID, 
-                                            idWorkerWorkingOnDAG, 
-                                            RCSeqWorkerStatus, IRDoneSet, 
+                                            idWorkerWorkingOnDAG, IRDoneSet, 
                                             idThreadWorkingOnIR, 
                                             workerThreadRanking, 
                                             controllerStateOFC, IRStatusOFC, 
@@ -11990,25 +11873,26 @@ OFCMonitorFailover(self) == /\ pc[self] = "OFCMonitorFailover"
                                             rowRemove_N, IR2Remove, 
                                             send_NIB_back, stepOfFailure_N, 
                                             IRIndex, debug_N, NIBMsg_, 
-                                            isBootStrap_, sw_id, 
+                                            isBootStrap_, sw_id, transaction_, 
                                             topoChangeEvent, currSetDownSw, 
                                             prev_dag_id, init, nxtDAG, 
                                             setRemovableIRs, currIR, 
                                             currIRInDAG, nxtDAGVertices, 
-                                            setIRsInDAG, prev_dag, seqEvent, 
-                                            worker, toBeScheduledIRs, nextIR, 
-                                            transaction_, stepOfFailure_c, 
+                                            setIRsInDAG, prev_dag, 
+                                            toBeScheduledIRs, nextIR, 
+                                            transaction_c, stepOfFailure_c, 
                                             currDAG, IRSet, key, op1_, op2, 
                                             debug, transaction_O, IRQueueTmp, 
                                             NIBMsg_O, isBootStrap, localIRSet, 
-                                            NIBIRSet, nextIRToSent, rowIndex, 
-                                            rowRemove, stepOfFailure_co, 
-                                            transaction_c, NIBMsg, op1, 
-                                            IRQueue, op_ir_status_change_, 
-                                            removeIR, monitoringEvent, 
-                                            setIRsToReset, resetIR, 
-                                            stepOfFailure, transaction_co, 
-                                            topo_change, irID, removedIR, msg, 
+                                            NIBIRSet, newIRSet, newIR, 
+                                            nextIRToSent, rowIndex, rowRemove, 
+                                            stepOfFailure_co, transaction_co, 
+                                            NIBMsg, op1, IRQueue, 
+                                            op_ir_status_change_, removeIR, 
+                                            monitoringEvent, setIRsToReset, 
+                                            resetIR, stepOfFailure, 
+                                            transaction_con, topo_change, irID, 
+                                            removedIR, msg, 
                                             op_ir_status_change, 
                                             op_first_install, transaction >>
 
@@ -12035,8 +11919,8 @@ Next == (\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
            \/ (\E self \in ({"proc"} \X {RC_FAILOVER}): RCFailoverProc(self))
            \/ (\E self \in ({rc0} \X {CONT_RC_NIB_EVENT}): RCNIBEventHandler(self))
            \/ (\E self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self))
-           \/ (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): controllerBossSequencer(self))
            \/ (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self))
+           \/ (\E self \in ( {"proc"} \X {NIB_FAILURE}): NIBFailureProc(self))
            \/ (\E self \in ({"proc"} \X {OFC_FAILOVER}): OFCFailoverProc(self))
            \/ (\E self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}): OFCNIBEventHandler(self))
            \/ (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
@@ -12060,8 +11944,8 @@ Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in ({"proc"} \X {RC_FAILOVER}) : WF_vars(RCFailoverProc(self))
         /\ \A self \in ({rc0} \X {CONT_RC_NIB_EVENT}) : WF_vars(RCNIBEventHandler(self))
         /\ \A self \in ({rc0} \X {CONT_TE}) : WF_vars(controllerTrafficEngineering(self))
-        /\ \A self \in ({rc0} \X {CONT_BOSS_SEQ}) : WF_vars(controllerBossSequencer(self))
         /\ \A self \in ({rc0} \X {CONT_WORKER_SEQ}) : WF_vars(controllerSequencer(self))
+        /\ \A self \in ( {"proc"} \X {NIB_FAILURE}) : WF_vars(NIBFailureProc(self))
         /\ \A self \in ({"proc"} \X {OFC_FAILOVER}) : WF_vars(OFCFailoverProc(self))
         /\ \A self \in ({ofc0} \X {CONT_OFC_NIB_EVENT}) : WF_vars(OFCNIBEventHandler(self))
         /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_vars(controllerWorkerThreads(self))
@@ -12201,6 +12085,6 @@ EachIRAtMostOnce == ~\E x, y \in DOMAIN installedIRs: /\ x # y
 
 =============================================================================
 \* Modification History
-\* Last modified Thu Jun 24 11:48:54 PDT 2021 by zmy
+\* Last modified Thu Jul 08 16:17:22 PDT 2021 by zmy
 \* Last modified Sun Feb 14 21:50:09 PST 2021 by root
 \* Created Thu Nov 19 19:02:15 PST 2020 by root

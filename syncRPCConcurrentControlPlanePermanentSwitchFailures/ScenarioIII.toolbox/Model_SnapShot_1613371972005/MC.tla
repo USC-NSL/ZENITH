@@ -12,60 +12,60 @@ t0
 ----
 
 \* MV CONSTANT definitions SW
-const_1624295748279324000 == 
+const_1625786338431198000 == 
 {s0, s1, s2}
 ----
 
 \* MV CONSTANT definitions CONTROLLER_THREAD_POOL
-const_1624295748279325000 == 
+const_1625786338431199000 == 
 {t0}
 ----
 
 \* CONSTANT definitions @modelParameterConstants:18SW_FAIL_ORDERING
-const_1624295748279326000 == 
+const_1625786338431200000 == 
 <<{[sw |-> s0, partial |-> 0, transient |-> 0]}>>
 ----
 
 \* CONSTANT definitions @modelParameterConstants:28MaxNumIRs
-const_1624295748279327000 == 
-5
+const_1625786338431201000 == 
+3
 ----
 
 \* CONSTANT definitions @modelParameterConstants:40MAX_NUM_CONTROLLER_SUB_FAILURE
-const_1624295748279328000 == 
+const_1625786338431202000 == 
 [ofc0 |-> 0, rc0 |-> 0, nib0 |-> 0]
 ----
 
 \* CONSTANT definitions @modelParameterConstants:52WHICH_SWITCH_MODEL
-const_1624295748279329000 == 
+const_1625786338431203000 == 
 (s0 :> SW_SIMPLE_MODEL) @@ (s1 :> SW_SIMPLE_MODEL)@@ (s2 :> SW_SIMPLE_MODEL)
 ----
 
 \* CONSTANT definitions @modelParameterConstants:75IR2FLOW
-const_1624295748279330000 == 
+const_1625786338431204000 == 
 [x \in 1..MaxNumIRs |-> x]
 ----
 
 \* CONSTANT definitions @modelParameterConstants:81IR2SW
-const_1624295748279331000 == 
-(1 :> s0) @@ (2 :> s1) @@ (3 :> s2) @@ (4 :> s1) @@ (5 :> s2)
+const_1625786338431205000 == 
+(1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
 ----
 
 \* CONSTANT definitions @modelParameterConstants:90MaxNumFlows
-const_1624295748279332000 == 
-5
+const_1625786338431206000 == 
+3
 ----
 
 \* CONSTANT definitions @modelParameterConstants:91TOPO_DAG_MAPPING
-const_1624295748279333000 == 
-({} :> [v |-> {1, 2, 3}, e |-> {<<1, 2>>, <<1, 3>>}]) @@ ({s0} :> [v |-> {4, 5}, e |-> {<<5, 4>>}])
+const_1625786338431207000 == 
+({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ ({s0} :> [v |-> {3}, e |-> {}])
 ----
 
 \* CONSTANT definitions @modelParameterConstants:92FINAL_DAG
-const_1624295748279334000 == 
-[v |-> {4, 5}, e |-> {<<5, 4>>}]
+const_1625786338431208000 == 
+[v |-> {3}, e |-> {}]
 ----
 
 =============================================================================
 \* Modification History
-\* Created Mon Jun 21 10:15:48 PDT 2021 by zmy
+\* Created Thu Jul 08 16:18:58 PDT 2021 by zmy
