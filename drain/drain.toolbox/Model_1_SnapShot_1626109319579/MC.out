@@ -1,0 +1,1950 @@
+@!@!@STARTMSG 2262:0 @!@!@
+TLC2 Version 2.16 of 31 December 2020 (rev: cdddf55)
+@!@!@ENDMSG 2262 @!@!@
+@!@!@STARTMSG 2187:0 @!@!@
+Running breadth-first search Model-Checking with fp 108 and seed 1587660157342552814 with 2 workers on 4 cores with 608MB heap and 1365MB offheap memory [pid: 24932] (Mac OS X 10.16 x86_64, AdoptOpenJDK 14.0.1 x86_64, OffHeapDiskFPSet, DiskStateQueue).
+@!@!@ENDMSG 2187 @!@!@
+@!@!@STARTMSG 2220:0 @!@!@
+Starting SANY...
+@!@!@ENDMSG 2220 @!@!@
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/drain/drain.toolbox/Model_1_SnapShot_1626109319579/MC.tla
+Parsing file /Users/zmy/Documents/codes/RoutingConsistency/drain/drain.toolbox/Model_1_SnapShot_1626109319579/drain.tla
+Warning: symbols were renamed.
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/TLC.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/Integers.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/Sequences.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/FiniteSets.tla
+Parsing file /Applications/TLA+ Toolbox.app/Contents/Eclipse/plugins/org.lamport.tlatools_1.0.0.202012311918/tla2sany/StandardModules/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module drain
+Semantic processing of module MC
+@!@!@STARTMSG 2219:0 @!@!@
+SANY finished.
+@!@!@ENDMSG 2219 @!@!@
+@!@!@STARTMSG 2185:0 @!@!@
+Starting... (2021-07-21 20:32:05)
+@!@!@ENDMSG 2185 @!@!@
+@!@!@STARTMSG 2212:0 @!@!@
+Implied-temporal checking--satisfiability problem has 1 branches.
+@!@!@ENDMSG 2212 @!@!@
+@!@!@STARTMSG 2189:0 @!@!@
+Computing initial states...
+@!@!@ENDMSG 2189 @!@!@
+@!@!@STARTMSG 2190:0 @!@!@
+Finished computing initial states: 1 distinct state generated at 2021-07-21 20:32:07.
+@!@!@ENDMSG 2190 @!@!@
+@!@!@STARTMSG 2192:0 @!@!@
+Checking temporal properties for the current state space with 616 total distinct states at (2021-07-21 20:32:10)
+@!@!@ENDMSG 2192 @!@!@
+@!@!@STARTMSG 2267:0 @!@!@
+Finished checking temporal properties in 00s at 2021-07-21 20:32:11
+@!@!@ENDMSG 2267 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(14) at 2021-07-21 20:32:11: 2,334 states generated (2,334 s/min), 919 distinct states found (919 ds/min), 306 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2132:1 @!@!@
+The first argument of Assert evaluated to FALSE; the second argument was:
+"Failure of assertion at line 620, column 17."
+@!@!@ENDMSG 2132 @!@!@
+@!@!@STARTMSG 2121:1 @!@!@
+The behavior up to this point is:
+@!@!@ENDMSG 2121 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+1: <Initial predicate>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> NULL])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> NULL])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> NULL)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> NULL] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> 0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderThread" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> NULL)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+2: <UpgraderThread line 776, col 25 to line 877, col 78 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> NULL])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> NULL])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> NULL] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<>>
+/\ DrainRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED]>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+3: <REWorkerProc line 1853, col 23 to line 1874, col 81 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> NULL])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> NULL] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<[type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED]>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+4: <SWIRProc line 2004, col 19 to line 2039, col 68 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> NULL])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+5: <RESWEventHandlerProc line 1878, col 31 to line 1904, col 51 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> NULL])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+6: <NIBEventHandlerForREProc line 1780, col 35 to line 1812, col 59 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+7: <UpgraderNIBEventHandlerProc line 1245, col 38 to line 1273, col 68 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWDrained4" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+8: <UpgraderWaitSWDrained4 line 1205, col 33 to line 1227, col 57 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "DequeueManagementRequest_" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> DRAIN_SW, sw |-> s0], [type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+9: <DequeueManagementRequest_ line 879, col 36 to line 904, col 60 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_UNDRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderThread" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+10: <UpgraderThread line 776, col 25 to line 877, col 78 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED]>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+11: <ExpanderNIBEventHandlerProc line 1748, col 38 to line 1776, col 68 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderThread" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED]>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> 0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> NULL)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+12: <ExpanderThread line 1277, col 25 to line 1378, col 78 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderAwaitSwDown1" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED]>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> DOWN_SW, sw |-> s0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> s0)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> SW_DRAINED)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<[type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN]>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+13: <REWorkerProc line 1853, col 23 to line 1874, col 81 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderAwaitSwDown1" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> DOWN_SW, sw |-> s0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> NULL])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<[type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED]>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> s0)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> SW_DRAINED)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<[type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN]>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+14: <OFCProc line 1908, col 18 to line 1925, col 71 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> DRAIN_SW, sw |-> s0, value |-> SW_DRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<[type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN]>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderAwaitSwDown1" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> DOWN_SW, sw |-> s0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<[type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED]>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> s0)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> SW_DRAINED)
+/\ SwStatus = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2217:4 @!@!@
+15: <SWIRProc line 2004, col 19 to line 2039, col 68 of module drain>
+/\ sw_status_update_N = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update_R = (<<RE, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ transaction = (<<EXPANDER, CONT_WORKER>> :> <<>>)
+/\ req_ = (<<RE, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED])
+/\ sw_status_update_e = (<<EXPANDER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_status_update = (<<OFC, CONT_EVENT_HANDLER>> :> [type |-> NULL])
+/\ sw_status_update_NI = (<<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> [type |-> NULL])
+/\ SwStatusOFC = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ sw_status_ = (<<UPGRADER, CONT_WORKER>> :> SW_DRAINED)
+/\ op = (<<SW_SIMPLE_ID, s0>> :> [type |-> UNDRAIN_SW, sw |-> s0, value |-> SW_UNDRAINED] @@ <<SW_SIMPLE_ID, s1>> :> [type |-> NULL])
+/\ opRequest_ = (<<UPGRADER, CONT_WORKER>> :> [type |-> UNDRAIN_SW, sw |-> s0])
+/\ OFC2SW = (s0 :> <<[type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN]>> @@ s1 :> <<>>)
+/\ RE2NIB = <<>>
+/\ pc = (<<OFC, CONT_SW_MANAGEMENT>> :> "OFCProc" @@ <<OFC, CONT_EVENT_HANDLER>> :> "OFCSWEventHandlingProc" @@ <<SW_MANAGE_PROC, s0>> :> "SWManagementProc" @@ <<SW_MANAGE_PROC, s1>> :> "SWManagementProc" @@ <<UPGRADER, CONT_WORKER>> :> "UpgraderWaitSWUndrained1" @@ <<UPGRADER, CONT_EVENT_HANDLER>> :> "UpgraderNIBEventHandlerProc" @@ <<EXPANDER, CONT_WORKER>> :> "ExpanderAwaitSwDown1" @@ <<EXPANDER, CONT_EVENT_HANDLER>> :> "ExpanderNIBEventHandlerProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_RE>> :> "NIBEventHandlerForREProc" @@ <<NIB, CONT_EVENT_HANDLER_NIB_FOR_OFC>> :> "NIBEventHandlerForOFCProc" @@ <<RE, CONT_WORKER>> :> "REWorkerProc" @@ <<RE, CONT_EVENT_HANDLER>> :> "RESWEventHandlerProc" @@ <<SW_SIMPLE_ID, s0>> :> "SWIRProc" @@ <<SW_SIMPLE_ID, s1>> :> "SWIRProc")
+/\ SwStatusRE = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ transaction_ = (<<UPGRADER, CONT_WORKER>> :> <<>>)
+/\ Upgrader2NIB = <<>>
+/\ SW2OFC = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED], [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_UNDRAINED]>>
+/\ DrainRequestQueue = <<>>
+/\ sw_ = (<<UPGRADER, CONT_WORKER>> :> s0)
+/\ ExpanderRequestQueue = <<[type |-> DOWN_SW, sw |-> s0]>>
+/\ opRequest = (<<EXPANDER, CONT_WORKER>> :> [type |-> DOWN_SW, sw |-> s0])
+/\ NIB2Upgrader = <<>>
+/\ req = (<<OFC, CONT_SW_MANAGEMENT>> :> [type |-> DOWN_SW, sw |-> s0, value |-> SW_DOWN])
+/\ NIB2Expander = <<>>
+/\ OFC2NIB = <<>>
+/\ RE2SW = (s0 :> <<>> @@ s1 :> <<>>)
+/\ sw_e = (<<EXPANDER, CONT_WORKER>> :> s0)
+/\ sw = (<<SW_SIMPLE_ID, s0>> :> s0 @@ <<SW_SIMPLE_ID, s1>> :> s1)
+/\ sw_status_update_ = (<<UPGRADER, CONT_EVENT_HANDLER>> :> [type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_DRAINED])
+/\ sw_s = (<<SW_MANAGE_PROC, s0>> :> s0 @@ <<SW_MANAGE_PROC, s1>> :> s1)
+/\ sw_status = (<<EXPANDER, CONT_WORKER>> :> SW_DRAINED)
+/\ SwStatus = (s0 :> SW_UNDRAINED @@ s1 :> SW_UNDRAINED)
+/\ SWManagementQueue = <<>>
+/\ Expander2NIB = <<>>
+/\ SW2RE = <<[type |-> MSG_SW_STATUS_CHANGE, sw |-> s0, value |-> SW_UNDRAINED]>>
+/\ op_ = (<<SW_MANAGE_PROC, s0>> :> [type |-> NULL] @@ <<SW_MANAGE_PROC, s1>> :> [type |-> NULL])
+/\ SwStatusUpgrader = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ SwStatusExpander = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+/\ UpgraderRequestQueue = <<[type |-> UNDRAIN_SW, sw |-> s0]>>
+/\ SwStatusNIB = (s0 :> SW_DRAINED @@ s1 :> SW_UNDRAINED)
+
+@!@!@ENDMSG 2217 @!@!@
+@!@!@STARTMSG 2103:1 @!@!@
+The error occurred when TLC was evaluating the nested
+expressions at the following positions:
+0. Line 1960, column 27 to line 2000, column 75 in drain
+1. Line 1960, column 30 to line 1960, column 58 in drain
+2. Line 1961, column 30 to line 1961, column 54 in drain
+3. Line 1962, column 30 to line 1962, column 83 in drain
+4. Line 1963, column 30 to line 1964, column 83 in drain
+5. Line 1965, column 30 to line 1965, column 95 in drain
+6. Line 1966, column 30 to line 1975, column 80 in drain
+7. Line 1968, column 38 to line 1975, column 80 in drain
+8. Line 1968, column 41 to line 1975, column 80 in drain
+9. Line 1969, column 49 to line 1971, column 104 in drain
+10. Line 1969, column 52 to line 1970, column 105 in drain
+
+
+@!@!@ENDMSG 2103 @!@!@
+@!@!@STARTMSG 2201:0 @!@!@
+The coverage statistics at 2021-07-21 20:32:12
+@!@!@ENDMSG 2201 @!@!@
+@!@!@STARTMSG 2773:0 @!@!@
+<Init line 710, col 1 to line 710, col 4 of module drain>: 2:2
+@!@!@ENDMSG 2773 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 711, col 9 to line 774, col 89 of module drain: 2
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderThread line 776, col 1 to line 776, col 20 of module drain>: 18:285
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 776, col 28 to line 776, col 54 of module drain: 1714
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 776, col 28 to line 776, col 35 of module drain: 1429
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 777, col 28 to line 777, col 54 of module drain: 570
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 777, col 28 to line 777, col 47 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 777, col 51 to line 777, col 54 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 778, col 28 to line 778, col 97 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 779, col 28 to line 779, col 77 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 780, col 28 to line 781, col 79 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 782, col 31 to line 782, col 62 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 783, col 39 to line 783, col 110 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 785, col 50 to line 787, col 115 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 788, col 50 to line 788, col 99 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 789, col 50 to line 789, col 76 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 791, col 61 to line 791, col 115 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 792, col 61 to line 793, col 93 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 795, col 72 to line 797, col 141 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 798, col 72 to line 798, col 124 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 799, col 72 to line 799, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 801, col 83 to line 803, col 150 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 804, col 83 to line 804, col 132 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 807, col 83 to line 807, col 137 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 808, col 83 to line 808, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 809, col 72 to line 809, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 810, col 42 to line 810, col 76 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 811, col 50 to line 811, col 121 of module drain: 164
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 812, col 53 to line 812, col 82 of module drain: 164
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 813, col 61 to line 815, col 133 of module drain: 164
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 816, col 61 to line 816, col 114 of module drain: 164
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 817, col 61 to line 817, col 87 of module drain: 164
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 819, col 72 to line 821, col 137 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 822, col 72 to line 822, col 117 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 823, col 72 to line 823, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 825, col 83 to line 827, col 153 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 828, col 83 to line 828, col 130 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 833, col 83 to line 833, col 137 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 834, col 83 to line 834, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 835, col 72 to line 835, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 836, col 53 to line 836, col 85 of module drain: 121
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 837, col 61 to line 837, col 132 of module drain: 121
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 838, col 64 to line 838, col 93 of module drain: 121
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 839, col 72 to line 839, col 126 of module drain: 53
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 840, col 72 to line 841, col 104 of module drain: 53
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 842, col 75 to line 842, col 101 of module drain: 68
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 843, col 83 to line 845, col 148 of module drain: 2
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 846, col 83 to line 846, col 128 of module drain: 2
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 847, col 83 to line 847, col 109 of module drain: 2
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 848, col 86 to line 848, col 128 of module drain: 66
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 849, col 91 to line 852, col 145 of module drain: 66
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 855, col 94 to line 855, col 148 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 856, col 94 to line 856, col 120 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 857, col 83 to line 857, col 109 of module drain: 66
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 860, col 61 to line 860, col 115 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 861, col 61 to line 863, col 86 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 864, col 28 to line 877, col 78 of module drain: 285
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<DequeueManagementRequest_ line 879, col 1 to line 879, col 31 of module drain>: 13:238
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 879, col 39 to line 879, col 76 of module drain: 1665
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 879, col 39 to line 879, col 46 of module drain: 1427
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 880, col 39 to line 880, col 88 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 881, col 39 to line 881, col 82 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 882, col 39 to line 904, col 60 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderAwaitSwDown1 line 906, col 1 to line 906, col 26 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 906, col 34 to line 906, col 66 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 908, col 34 to line 908, col 88 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 909, col 34 to line 928, col 51 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderAwaitSwDrained1 line 930, col 1 to line 930, col 29 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 930, col 37 to line 930, col 72 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 932, col 48 to line 932, col 102 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 933, col 48 to line 933, col 74 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 935, col 48 to line 937, col 107 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 938, col 48 to line 938, col 97 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 939, col 37 to line 957, col 58 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderAwaitSwDown2 line 959, col 1 to line 959, col 26 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 959, col 34 to line 959, col 66 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 961, col 34 to line 961, col 88 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 962, col 34 to line 981, col 51 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderAwaitSwDown3 line 983, col 1 to line 983, col 26 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 983, col 34 to line 983, col 66 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 985, col 34 to line 985, col 88 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 986, col 34 to line 1005, col 51 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderWaitSWUndrained1 line 1007, col 1 to line 1007, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1007, col 38 to line 1007, col 74 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1008, col 38 to line 1008, col 79 of module drain: 284
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1009, col 38 to line 1009, col 92 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1010, col 38 to line 1031, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderDrainSW1 line 1033, col 1 to line 1033, col 22 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1033, col 30 to line 1033, col 58 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1035, col 30 to line 1037, col 96 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1038, col 30 to line 1038, col 77 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1039, col 30 to line 1055, col 80 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderUndrainSW1 line 1057, col 1 to line 1057, col 24 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1057, col 32 to line 1057, col 62 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1059, col 32 to line 1061, col 100 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1062, col 32 to line 1062, col 84 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1063, col 32 to line 1080, col 49 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderWaitSWUndrained line 1082, col 1 to line 1082, col 29 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1082, col 37 to line 1082, col 72 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1084, col 37 to line 1084, col 91 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1085, col 37 to line 1104, col 58 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderUndrainSW2 line 1106, col 1 to line 1106, col 24 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1106, col 32 to line 1106, col 62 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1108, col 32 to line 1110, col 100 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1111, col 32 to line 1111, col 85 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1112, col 32 to line 1129, col 49 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderWaitSWUndrained2 line 1131, col 1 to line 1131, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1131, col 38 to line 1131, col 74 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1133, col 38 to line 1133, col 92 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1134, col 38 to line 1155, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderDrainSW2 line 1157, col 1 to line 1157, col 22 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1157, col 30 to line 1157, col 58 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1159, col 30 to line 1161, col 96 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1162, col 30 to line 1162, col 81 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1163, col 30 to line 1179, col 80 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderWaitSWDrained3 line 1181, col 1 to line 1181, col 28 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1181, col 36 to line 1181, col 70 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1183, col 36 to line 1183, col 90 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1184, col 36 to line 1203, col 57 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderWaitSWDrained4 line 1205, col 1 to line 1205, col 28 of module drain>: 11:278
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1205, col 36 to line 1205, col 70 of module drain: 1704
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1205, col 36 to line 1205, col 43 of module drain: 1426
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1206, col 36 to line 1206, col 75 of module drain: 900
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1206, col 36 to line 1206, col 62 of module drain: 622
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1206, col 66 to line 1206, col 75 of module drain: 622
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1207, col 36 to line 1207, col 90 of module drain: 278
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1208, col 36 to line 1227, col 57 of module drain: 278
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<UpgraderNIBEventHandlerProc line 1245, col 1 to line 1245, col 33 of module drain>: 147:608
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1245, col 41 to line 1245, col 80 of module drain: 2033
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1245, col 41 to line 1245, col 48 of module drain: 1425
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1246, col 41 to line 1246, col 59 of module drain: 2033
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1246, col 41 to line 1246, col 52 of module drain: 1425
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1246, col 56 to line 1246, col 59 of module drain: 1425
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1247, col 41 to line 1247, col 116 of module drain: 608
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1248, col 41 to line 1248, col 74 of module drain: 608
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1249, col 41 to line 1249, col 149 of module drain: 608
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1250, col 41 to line 1250, col 97 of module drain: 608
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1251, col 41 to line 1273, col 68 of module drain: 608
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderThread line 1277, col 1 to line 1277, col 20 of module drain>: 21:109
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1277, col 28 to line 1277, col 54 of module drain: 1533
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1277, col 28 to line 1277, col 35 of module drain: 1424
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1278, col 28 to line 1278, col 54 of module drain: 218
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1278, col 28 to line 1278, col 47 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1278, col 51 to line 1278, col 54 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1279, col 28 to line 1279, col 95 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1280, col 28 to line 1280, col 78 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1281, col 28 to line 1282, col 80 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1283, col 31 to line 1283, col 61 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1284, col 39 to line 1284, col 109 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1285, col 42 to line 1285, col 70 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1286, col 50 to line 1288, col 115 of module drain: 49
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1289, col 50 to line 1289, col 99 of module drain: 49
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1290, col 50 to line 1290, col 76 of module drain: 49
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1291, col 53 to line 1291, col 78 of module drain: 60
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1292, col 61 to line 1292, col 114 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1293, col 61 to line 1294, col 93 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1295, col 64 to line 1295, col 94 of module drain: 60
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1296, col 72 to line 1298, col 141 of module drain: 60
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1299, col 72 to line 1299, col 124 of module drain: 60
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1300, col 72 to line 1300, col 98 of module drain: 60
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1302, col 83 to line 1304, col 150 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1305, col 83 to line 1305, col 132 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1308, col 83 to line 1308, col 136 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1309, col 83 to line 1309, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1310, col 72 to line 1310, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1312, col 50 to line 1312, col 120 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1314, col 61 to line 1316, col 133 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1317, col 61 to line 1317, col 114 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1318, col 61 to line 1318, col 87 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1320, col 72 to line 1322, col 137 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1323, col 72 to line 1323, col 117 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1324, col 72 to line 1324, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1326, col 83 to line 1328, col 153 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1329, col 83 to line 1329, col 130 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1334, col 83 to line 1334, col 136 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1335, col 83 to line 1335, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1336, col 72 to line 1336, col 98 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1338, col 61 to line 1338, col 131 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1340, col 72 to line 1340, col 125 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1341, col 72 to line 1342, col 104 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1344, col 83 to line 1346, col 148 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1347, col 83 to line 1347, col 128 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1348, col 83 to line 1348, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1350, col 94 to line 1352, col 164 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1353, col 94 to line 1353, col 147 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1356, col 94 to line 1356, col 147 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1357, col 94 to line 1357, col 120 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1358, col 83 to line 1358, col 109 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1361, col 61 to line 1361, col 114 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1362, col 61 to line 1364, col 85 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1365, col 28 to line 1378, col 78 of module drain: 109
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<DequeueManagementRequest line 1380, col 1 to line 1380, col 30 of module drain>: 6:6
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1380, col 38 to line 1380, col 74 of module drain: 1429
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1380, col 38 to line 1380, col 45 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1381, col 38 to line 1381, col 87 of module drain: 6
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1382, col 38 to line 1382, col 81 of module drain: 6
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1383, col 38 to line 1403, col 59 of module drain: 6
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderAwaitSwDown1 line 1405, col 1 to line 1405, col 26 of module drain>: 6:6
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1405, col 34 to line 1405, col 66 of module drain: 1429
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1405, col 34 to line 1405, col 41 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1406, col 34 to line 1406, col 71 of module drain: 171
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1406, col 34 to line 1406, col 61 of module drain: 165
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1406, col 65 to line 1406, col 71 of module drain: 165
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1407, col 34 to line 1407, col 87 of module drain: 6
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1408, col 34 to line 1427, col 51 of module drain: 6
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderAwaitSwDrained1 line 1429, col 1 to line 1429, col 29 of module drain>: 50:268
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1429, col 37 to line 1429, col 72 of module drain: 1691
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1429, col 37 to line 1429, col 44 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1430, col 40 to line 1430, col 77 of module drain: 570
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1431, col 48 to line 1431, col 101 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1432, col 48 to line 1432, col 74 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1433, col 48 to line 1433, col 88 of module drain: 838
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1433, col 48 to line 1433, col 75 of module drain: 570
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1433, col 79 to line 1433, col 88 of module drain: 570
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1434, col 48 to line 1436, col 107 of module drain: 268
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1437, col 48 to line 1437, col 97 of module drain: 268
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1438, col 37 to line 1456, col 58 of module drain: 268
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderAwaitSwDown2 line 1458, col 1 to line 1458, col 26 of module drain>: 14:14
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1458, col 34 to line 1458, col 66 of module drain: 1437
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1458, col 34 to line 1458, col 41 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1459, col 34 to line 1459, col 71 of module drain: 588
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1459, col 34 to line 1459, col 61 of module drain: 574
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1459, col 65 to line 1459, col 71 of module drain: 574
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1460, col 34 to line 1460, col 87 of module drain: 14
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1461, col 34 to line 1480, col 51 of module drain: 14
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderAwaitSwDown3 line 1482, col 1 to line 1482, col 26 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1482, col 34 to line 1482, col 66 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1484, col 34 to line 1484, col 87 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1485, col 34 to line 1504, col 51 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderWaitSWUndrained1 line 1506, col 1 to line 1506, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1506, col 38 to line 1506, col 74 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1508, col 38 to line 1508, col 91 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1509, col 38 to line 1530, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderDrainSW1 line 1532, col 1 to line 1532, col 22 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1532, col 30 to line 1532, col 58 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1534, col 30 to line 1536, col 96 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1537, col 30 to line 1537, col 77 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1538, col 30 to line 1554, col 80 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderUndrainSW1 line 1556, col 1 to line 1556, col 24 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1556, col 32 to line 1556, col 62 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1558, col 32 to line 1560, col 100 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1561, col 32 to line 1561, col 84 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1562, col 32 to line 1579, col 49 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderWaitSWUndrained line 1581, col 1 to line 1581, col 29 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1581, col 37 to line 1581, col 72 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1583, col 37 to line 1583, col 90 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1584, col 37 to line 1603, col 58 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderUndrainSW2 line 1605, col 1 to line 1605, col 24 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1605, col 32 to line 1605, col 62 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1607, col 32 to line 1609, col 100 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1610, col 32 to line 1610, col 85 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1611, col 32 to line 1628, col 49 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderWaitSWUndrained2 line 1630, col 1 to line 1630, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1630, col 38 to line 1630, col 74 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1632, col 38 to line 1632, col 91 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1633, col 38 to line 1654, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderDrainSW2 line 1656, col 1 to line 1656, col 22 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1656, col 30 to line 1656, col 58 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1658, col 30 to line 1660, col 96 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1661, col 30 to line 1661, col 83 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1662, col 30 to line 1678, col 80 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderWaitSWUndrained3 line 1680, col 1 to line 1680, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1680, col 38 to line 1680, col 74 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1682, col 38 to line 1682, col 91 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1683, col 38 to line 1704, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderWaitSWUndrained4 line 1706, col 1 to line 1706, col 30 of module drain>: 0:0
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1706, col 38 to line 1706, col 74 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1708, col 38 to line 1708, col 91 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1709, col 38 to line 1730, col 59 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<ExpanderNIBEventHandlerProc line 1748, col 1 to line 1748, col 33 of module drain>: 248:601
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1748, col 41 to line 1748, col 80 of module drain: 2024
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1748, col 41 to line 1748, col 48 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1749, col 41 to line 1749, col 59 of module drain: 2024
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1749, col 41 to line 1749, col 52 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1749, col 56 to line 1749, col 59 of module drain: 1423
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1750, col 41 to line 1750, col 118 of module drain: 601
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1751, col 41 to line 1751, col 74 of module drain: 601
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1752, col 41 to line 1752, col 151 of module drain: 601
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1753, col 41 to line 1753, col 97 of module drain: 601
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1754, col 41 to line 1776, col 68 of module drain: 601
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<NIBEventHandlerForREProc line 1780, col 1 to line 1780, col 30 of module drain>: 109:395
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1780, col 38 to line 1780, col 74 of module drain: 1817
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1780, col 38 to line 1780, col 45 of module drain: 1422
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1781, col 38 to line 1781, col 50 of module drain: 1817
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1781, col 38 to line 1781, col 43 of module drain: 1422
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1781, col 47 to line 1781, col 50 of module drain: 1422
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1782, col 38 to line 1782, col 109 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1783, col 38 to line 1783, col 59 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1784, col 38 to line 1784, col 138 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1785, col 38 to line 1788, col 55 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1789, col 38 to line 1792, col 55 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1793, col 38 to line 1793, col 91 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1794, col 38 to line 1812, col 59 of module drain: 395
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<NIBEventHandlerForOFCProc line 1816, col 1 to line 1816, col 31 of module drain>: 242:399
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1816, col 39 to line 1816, col 76 of module drain: 1820
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1816, col 39 to line 1816, col 46 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1817, col 39 to line 1817, col 52 of module drain: 1820
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1817, col 39 to line 1817, col 45 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1817, col 49 to line 1817, col 52 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1818, col 39 to line 1818, col 113 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1819, col 39 to line 1819, col 62 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1820, col 39 to line 1820, col 141 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1821, col 39 to line 1824, col 56 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1825, col 39 to line 1828, col 56 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1829, col 39 to line 1829, col 93 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1830, col 39 to line 1849, col 60 of module drain: 399
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<REWorkerProc line 1853, col 1 to line 1853, col 18 of module drain>: 47:359
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1853, col 26 to line 1853, col 50 of module drain: 1780
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1853, col 26 to line 1853, col 33 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1854, col 26 to line 1854, col 49 of module drain: 1780
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1854, col 26 to line 1854, col 42 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1854, col 46 to line 1854, col 49 of module drain: 1421
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1855, col 26 to line 1855, col 80 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1856, col 26 to line 1857, col 79 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1858, col 26 to line 1858, col 69 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1859, col 26 to line 1859, col 111 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1860, col 26 to line 1860, col 67 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1861, col 26 to line 1874, col 81 of module drain: 359
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<RESWEventHandlerProc line 1878, col 1 to line 1878, col 26 of module drain>: 194:606
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1878, col 34 to line 1878, col 66 of module drain: 2025
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1878, col 34 to line 1878, col 41 of module drain: 1419
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1879, col 34 to line 1879, col 45 of module drain: 2025
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1879, col 34 to line 1879, col 38 of module drain: 1419
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1879, col 42 to line 1879, col 45 of module drain: 1419
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1880, col 34 to line 1880, col 104 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1881, col 34 to line 1881, col 53 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1882, col 34 to line 1882, col 132 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1883, col 34 to line 1886, col 46 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1887, col 34 to line 1887, col 83 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1888, col 34 to line 1904, col 51 of module drain: 606
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<OFCProc line 1908, col 1 to line 1908, col 13 of module drain>: 79:238
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1908, col 21 to line 1908, col 40 of module drain: 1656
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1908, col 21 to line 1908, col 28 of module drain: 1418
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1909, col 21 to line 1909, col 44 of module drain: 1656
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1909, col 21 to line 1909, col 37 of module drain: 1418
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1909, col 41 to line 1909, col 44 of module drain: 1418
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1910, col 21 to line 1910, col 73 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1911, col 21 to line 1911, col 64 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1912, col 21 to line 1912, col 106 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1913, col 21 to line 1913, col 57 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1914, col 21 to line 1925, col 71 of module drain: 238
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<OFCSWEventHandlingProc line 1929, col 1 to line 1929, col 28 of module drain>: 428:611
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1929, col 36 to line 1929, col 70 of module drain: 2028
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1929, col 36 to line 1929, col 43 of module drain: 1417
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1930, col 36 to line 1930, col 48 of module drain: 2028
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1930, col 36 to line 1930, col 41 of module drain: 1417
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1930, col 45 to line 1930, col 48 of module drain: 1417
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1931, col 36 to line 1931, col 103 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1932, col 36 to line 1932, col 57 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1933, col 36 to line 1933, col 132 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1934, col 36 to line 1937, col 48 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1938, col 36 to line 1938, col 87 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1939, col 36 to line 1956, col 63 of module drain: 611
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<SWManagementProc line 1960, col 1 to line 1960, col 22 of module drain>: 161:168
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1960, col 30 to line 1960, col 58 of module drain: 3000
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1960, col 30 to line 1960, col 37 of module drain: 2832
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1961, col 30 to line 1961, col 54 of module drain: 3000
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1961, col 30 to line 1961, col 47 of module drain: 2832
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1961, col 51 to line 1961, col 54 of module drain: 2832
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1962, col 30 to line 1962, col 83 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1962, col 37 to line 1962, col 83 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1963, col 30 to line 1964, col 83 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1963, col 37 to line 1963, col 72 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1965, col 30 to line 1965, col 95 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1965, col 40 to line 1965, col 95 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1966, col 33 to line 1966, col 61 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1967, col 41 to line 1967, col 96 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1968, col 44 to line 1968, col 69 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1969, col 52 to line 1970, col 105 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 1969, col 59 to line 1969, col 93 of module drain: 170
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1971, col 52 to line 1971, col 104 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1973, col 63 to line 1973, col 113 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1975, col 63 to line 1975, col 80 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1976, col 30 to line 1979, col 42 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1980, col 30 to line 1983, col 42 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1984, col 30 to line 1984, col 75 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 1985, col 30 to line 2000, col 75 of module drain: 168
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2772:0 @!@!@
+<SWIRProc line 2004, col 1 to line 2004, col 14 of module drain>: 241:254
+@!@!@ENDMSG 2772 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2004, col 22 to line 2004, col 42 of module drain: 3082
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 2004, col 22 to line 2004, col 29 of module drain: 2828
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2005, col 22 to line 2005, col 43 of module drain: 3082
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 2005, col 22 to line 2005, col 36 of module drain: 2828
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  |line 2005, col 40 to line 2005, col 43 of module drain: 2828
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2006, col 22 to line 2006, col 70 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2007, col 22 to line 2008, col 75 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2009, col 22 to line 2010, col 75 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2011, col 22 to line 2011, col 80 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2012, col 25 to line 2012, col 52 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2013, col 30 to line 2013, col 86 of module drain: 185
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2014, col 36 to line 2014, col 65 of module drain: 69
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2015, col 41 to line 2015, col 99 of module drain: 69
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2018, col 44 to line 2018, col 61 of module drain: 0
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2019, col 22 to line 2022, col 34 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2023, col 22 to line 2026, col 34 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2027, col 22 to line 2027, col 59 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2221:0 @!@!@
+  line 2028, col 22 to line 2039, col 68 of module drain: 254
+@!@!@ENDMSG 2221 @!@!@
+@!@!@STARTMSG 2202:0 @!@!@
+End of statistics.
+@!@!@ENDMSG 2202 @!@!@
+@!@!@STARTMSG 2200:0 @!@!@
+Progress(16) at 2021-07-21 20:32:12: 5,421 states generated (37,096 s/min), 2,036 distinct states found (13,932 ds/min), 622 states left on queue.
+@!@!@ENDMSG 2200 @!@!@
+@!@!@STARTMSG 2199:0 @!@!@
+5421 states generated, 2036 distinct states found, 622 states left on queue.
+@!@!@ENDMSG 2199 @!@!@
+@!@!@STARTMSG 2186:0 @!@!@
+Finished in 8775ms at (2021-07-21 20:32:12)
+@!@!@ENDMSG 2186 @!@!@

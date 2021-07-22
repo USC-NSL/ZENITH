@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.lamport.tla.toolbox.tool.tlc.modelCheck">
+    <stringAttribute key="configurationName" value="Model_1"/>
+    <intAttribute key="distributedFPSetCount" value="0"/>
+    <stringAttribute key="distributedNetworkInterface" value="192.168.1.27"/>
+    <intAttribute key="distributedNodesCount" value="1"/>
+    <stringAttribute key="distributedTLC" value="off"/>
+    <intAttribute key="fpIndex" value="95"/>
+    <intAttribute key="maxHeapSize" value="25"/>
+    <stringAttribute key="modelBehaviorInit" value=""/>
+    <stringAttribute key="modelBehaviorNext" value=""/>
+    <stringAttribute key="modelBehaviorSpec" value="Spec"/>
+    <intAttribute key="modelBehaviorSpecType" value="1"/>
+    <stringAttribute key="modelBehaviorVars" value="sw_status_update_N, sw_status_update_R, transaction, req_, sw_status_update, SwStatusOFC, op, OFC2SW, RE2NIB, pc, SwStatusRE, Upgrader2NIB, SW2OFC, DrainRequestQueue, sw_, ExpanderRequestQueue, opRequest, NIB2Upgrader, req, NIB2Expander, OFC2NIB, RE2SW, sw, sw_status_update_, sw_status, sw_id, SwStatus, SWManagementQueue, Expander2NIB, SW2RE, op_, SwStatusUpgrader, SwStatusExpander, UpgraderRequestQueue, SwStatusNIB"/>
+    <stringAttribute key="modelComments" value=""/>
+    <booleanAttribute key="modelCorrectnessCheckDeadlock" value="false"/>
+    <listAttribute key="modelCorrectnessInvariants"/>
+    <listAttribute key="modelCorrectnessProperties">
+        <listEntry value="1DrainLivenessProp"/>
+    </listAttribute>
+    <intAttribute key="modelEditorOpenTabs" value="8"/>
+    <stringAttribute key="modelExpressionEval" value=""/>
+    <listAttribute key="modelParameterConstants">
+        <listEntry value="OFC;;OFC;1;0"/>
+        <listEntry value="SW_UNDRAINED;;SW_UNDRAINED;1;0"/>
+        <listEntry value="SW_DRAINED;;SW_DRAINED;1;0"/>
+        <listEntry value="SW_MANAGE_PROC;;SW_MANAGE_PROC;1;0"/>
+        <listEntry value="UPGRADER;;UPGRADER;1;0"/>
+        <listEntry value="DRAINER;;DRAINER;1;0"/>
+        <listEntry value="EXPANDER;;EXPANDER;1;0"/>
+        <listEntry value="CONT_WORKER;;CONT_WORKER;1;0"/>
+        <listEntry value="CONT_SW_MANAGEMENT;;CONT_SW_MANAGEMENT;1;0"/>
+        <listEntry value="NULL;;NULL;1;0"/>
+        <listEntry value="MSG_SW_STATUS_CHANGE;;MSG_SW_STATUS_CHANGE;1;0"/>
+        <listEntry value="NIB;;NIB;1;0"/>
+        <listEntry value="RE;;RE;1;0"/>
+        <listEntry value="CONT_EVENT_HANDLER;;CONT_EVENT_HANDLER;1;0"/>
+        <listEntry value="SW_SIMPLE_ID;;SW_SIMPLE_ID;1;0"/>
+        <listEntry value="SW;;{s0, s1};1;0"/>
+        <listEntry value="SW_DOWN;;SW_DOWN;1;0"/>
+        <listEntry value="DRAIN_SW;;DRAIN_SW;1;0"/>
+        <listEntry value="UNDRAIN_SW;;UNDRAIN_SW;1;0"/>
+        <listEntry value="UPGRADER_REQUEST_QUEUE;;&lt;&lt;[type |-&gt; REMOVE_SW, sw |-&gt; s0], [type |-&gt; RUN_SW, sw |-&gt; s0]&gt;&gt;;0;0"/>
+        <listEntry value="EXPANDER_REQUEST_QUEUE;;&lt;&lt;[type |-&gt; REMOVE_SW, sw |-&gt; s0]&gt;&gt;;0;0"/>
+        <listEntry value="SW_UP;;SW_UP;1;0"/>
+        <listEntry value="DOWN_SW;;DOWN_SW;1;0"/>
+        <listEntry value="UP_SW;;UP_SW;1;0"/>
+    </listAttribute>
+    <intAttribute key="modelVersion" value="20191005"/>
+    <intAttribute key="numberOfWorkers" value="2"/>
+    <stringAttribute key="result.mail.address" value=""/>
+    <stringAttribute key="specName" value="drain"/>
+    <stringAttribute key="tlcResourcesProfile" value="local custom"/>
+</launchConfiguration>
