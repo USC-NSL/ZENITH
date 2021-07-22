@@ -28,7 +28,11 @@ CONSTANTS DRAIN_SW,
 CONSTANTS SW_DRAINED,
           SW_UNDRAINED,
           SW_DOWN,
-          SW_UP
+          SW_UP,
+          UP_ONGO,
+          DOWN_ONGO,
+          DRAIN_ONGO,
+          UNDRAIN_ONGO
           
 (************************ Messag Types************************)
 CONSTANTS MSG_SW_STATUS_CHANGE
@@ -444,83 +448,6 @@ end define
         end while;
     end process;
     
-\*    fair process NIBEventHandlerForDrainer \in ({NIB} \X {CONT_EVENT_HANDLER_NIB_FOR_DRAINER})
-\*    variables sw_status_update = [type |-> NULL]
-\*    begin
-\*    NIBEventHandlerForDrainerProc:
-\*        while TRUE do
-\*            await Drainer2NIB # <<>>;
-\*            sw_status_update := Head(Drainer2NIB);
-\*            Drainer2NIB :=  Tail(Drainer2NIB);
-\*            SwStatusNIB[sw_status_update.sw] := sw_status_update.value;
-\*            NIB2RE := Append(NIB2RE, [type |-> MSG_SW_STATUS_CHANGE,
-\*                       sw |-> sw_status_update.sw, 
-\*                       value|-> sw_status_update.value
-\*                       ]);
-\*            NIB2Expander := Append(NIB2Expander, [type |-> MSG_SW_STATUS_CHANGE,
-\*                       sw |-> sw_status_update.sw, 
-\*                       value|-> sw_status_update.value
-\*                       ]);
-\*        end while;
-\*    end process;
- 
-\*    (*******************************************************************)
-\*    (*                               Drainer                              *)
-\*    (*******************************************************************)
-\*    \*---------------- Drainer worker for drain request--------------------------
-\*    fair process DrainerDrainWorkerProcess \in ({DRAINER} \X {CONT_DRAIN_WORKER})
-\*    variables req = [type |-> NULL]
-\*    begin
-\*    REWorkerProc:
-\*        while TRUE do
-\*            await DrainRequestQueue # <<>>;
-\*            req := Head(DrainRequestQueue);
-\*            DrainRequestQueue := Tail(DrainRequestQueue);
-\*            Drainer2NIB[req.sw] := Append(Drainer2NIB[req.sw], req);
-\*        end while;
-\*    end process;
-\*    
-\*    \*---------------- Drainer worker for sw_updown request--------------------------
-\*    fair process DrainerUpDownWorkerProcess \in ({DRAINER} \X {CONT_UPDOWN_WORKER})
-\*    variables req = [type |-> NULL]
-\*    begin
-\*    REWorkerProc:
-\*        while TRUE do
-\*            await SWManagementQueue # <<>>;
-\*            req := Head(SWManagementQueue);
-\*            SWManagementQueue := Tail(SWManagementQueue);
-\*            Drainer2NIB[req.sw] := Append(Drainer2NIB[req.sw], req);
-\*        end while;
-\*    end process;
-\* 
-\*    \*---------------------- Drainer NIB Event Handler-----------------------------
-\*    fair process DrainerNIBEventHandlerProcess \in ({DRAINER} \X {CONT_EVENT_HANDLER})
-\*    variables nib_update = [type |-> NULL]
-\*    begin
-\*    RESWEventHandlerProc:
-\*        while TRUE do
-\*            await NIB2Drainer # <<>>;
-\*            nib_update := Head(NIB2Drainer);
-\*            \* Requests from applications. 
-\*            \* Forward those to RE/OFC if legal (ie, state machine is respected)
-\*            if nib_update.type \in {UP_SW, DOWN_SW, DRAIN_SW, UNDRAIN_SW} then
-\*                
-\*                
-\*            elsif nib_update.type = MSG_SW_STATUS_CHANGE then  \* Switch status update
-\*                
-\*            
-\*            else 
-\*                assert FALSE;
-\*            end if;
-\*            
-\*            SW2RE :=  Tail(SW2RE);
-\*            SwStatusRE[sw_status_update.sw] := sw_status_update.value;
-\*            RE2NIB := Append(RE2NIB, [type |-> MSG_SW_STATUS_CHANGE,
-\*                       sw |-> sw_status_update.sw, 
-\*                       value|-> sw_status_update.value
-\*                       ]);
-\*        end while;
-\*    end process;
  
     (***********************************************************************)
     (*                                 RE/Drainer                          *)
@@ -536,15 +463,16 @@ end define
             req := Head(DrainRequestQueue);
             assert req.type \in {DRAIN_SW, UNDRAIN_SW};
             DrainRequestQueue := Tail(DrainRequestQueue);
-\*            if SwStatusRE[req.sw] \notin {UP_ONGO, DOWN_ONGO, DRAIN_ONGO, UNDRAIN_ONGO} then
-\*                if req.type = DRAIN_SW then
-\*                    
-\*                elsif req.type = UNDRAIN_SW then
-\*                    
-\*                end if;
-\*            else
-\*            end if;
+            if SwStatusRE[req.sw] \notin {OP_ONGO} then
+                if req.type = DRAIN_SW then
+                    
+                elsif req.type = UNDRAIN_SW then
+                    
+                end if;
+            else
+            end if;
             
+            if 
             RE2SW[req.sw] := Append(RE2SW[req.sw], req);
         end while;
     end process;
