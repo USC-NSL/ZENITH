@@ -13,7 +13,7 @@ CONSTANTS TOPO_MOD, IR_MOD
 CONSTANTS STATUS_START_SCHEDULING, STATUS_LOCKING, STATUS_SENT_DONE, START_RESET_IR
 CONSTANTS INSTALL_FLOW, DELETE_FLOW, INSTALLED_SUCCESSFULLY, DELETED_SUCCESSFULLY, KEEP_ALIVE
 CONSTANTS NIC_ASIC_DOWN, OFA_DOWN, INSTALLER_DOWN, INSTALLER_UP
-CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
+CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, DeleteIRIDStart
                  
 (*--fair algorithm stateConsistency
     variables
@@ -56,12 +56,13 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
         \* Local RC variables that need persistence
         RCIRStatus = [y \in 1..MaxNumIRs |-> IR_NONE],
         RCSwSuspensionStatus = [y \in SW |-> SW_RUN],
-        nxtRCIRID = MaxNumIRs + 10,
+        nxtRCIRID = DeleteIRIDStart,
         IRDoneSet = {},
         seqWorkerIsBusy = FALSE,
 
-        \* 
-        idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> NADIR_NULL] @@ [x \in (MaxNumIRs + 10)..(MaxNumIRs + 20) |-> NADIR_NULL]
+        \* Semaphore for locking IRs to worker pool threads
+        idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> NADIR_NULL] @@                                 \* Installation IRs
+                              [x \in DeleteIRIDStart..(DeleteIRIDStart + MaxNumIRs) |-> NADIR_NULL]  \* Deletion IRs
     define
         min(set) == CHOOSE x \in set: \A y \in set: x \leq y 
         rangeSeq(seq) == {seq[i]: i \in DOMAIN seq}
@@ -140,7 +141,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
         getRemovedIRID(flowID) == CHOOSE x \in DOMAIN irTypeMapping: /\ irTypeMapping[x].type = INSTALL_FLOW
                                                                      /\ irTypeMapping[x].flow = flowID
         
-        isFinished == \A x \in 1..MaxNumIRs: NIBIRStatus[x] = IR_DONE                                                                              
+        isFinished == \A x \in 1..MaxNumIRs: NIBIRStatus[x] = IR_DONE                                                     
     end define
     
     macro controllerSendIR(s)
@@ -168,6 +169,19 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
     begin
         rowRemove := getFirstIndexWith(nextIRToSent, self);
         IRQueueNIB := removeFromSeq(IRQueueNIB, rowRemove);
+    end macro;
+
+    macro getNextIRID()
+    begin
+        nxtRCIRID := nxtRCIRID + 1;
+    end macro;
+
+    macro prepareDeletionIR(forWhat)
+    begin
+        RCIRStatus    := RCIRStatus    @@ (nxtRCIRID :> IR_NONE);
+        NIBIRStatus   := NIBIRStatus   @@ (nxtRCIRID :> IR_NONE);
+        irTypeMapping := irTypeMapping @@ (nxtRCIRID :> [type |-> DELETE_FLOW, flow |-> IR2FLOW[forWhat]]);
+        ir2sw         := ir2sw         @@ (nxtRCIRID :> ir2sw[forWhat]);
     end macro;
     
     fair process rcNibEventHandler \in ({rc0} \X {NIB_EVENT_HANDLER})
@@ -246,10 +260,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
                 currIR := CHOOSE x \in setRemovableIRs: TRUE;
                 setRemovableIRs := setRemovableIRs \ {currIR};
                 
-                RCIRStatus := RCIRStatus @@ (nxtRCIRID :> IR_NONE);
-                NIBIRStatus := NIBIRStatus @@ (nxtRCIRID :> IR_NONE);
-                irTypeMapping := irTypeMapping @@ (nxtRCIRID :> [type |-> DELETE_FLOW, flow |-> IR2FLOW[currIR]]);
-                ir2sw := ir2sw @@ (nxtRCIRID :> ir2sw[currIR]);
+                prepareDeletionIR(currIR);
                 nxtDAG.dag.v := nxtDAG.dag.v \cup {nxtRCIRID};
                 setIRsInDAG := getSetIRsForSwitchInDAG(ir2sw[currIR], nxtDAGVertices);
 
@@ -259,7 +270,8 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
                         setIRsInDAG := setIRsInDAG \ {currIRInDAG};
                         nxtDAG.dag.e := nxtDAG.dag.e \cup {<<nxtRCIRID, currIRInDAG>>};
                     end while;
-                    nxtRCIRID := nxtRCIRID + 1;
+
+                    getNextIRID();
             end while;
             SetScheduledIRs := [x \in SW |-> (SetScheduledIRs[x] \ nxtDAG.dag.v)];
             
@@ -372,14 +384,11 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
             SetScheduledIRs[ir2sw[currIRMon]] := SetScheduledIRs[ir2sw[currIRMon]] \cup {currIRMon};
             modifiedEnqueue(currIRMon);
         else
-            RCIRStatus := RCIRStatus @@ (nxtRCIRID :> IR_NONE);
-            NIBIRStatus := NIBIRStatus @@ (nxtRCIRID :> IR_NONE);
-            irTypeMapping := irTypeMapping @@ (nxtRCIRID :> [type |-> DELETE_FLOW, flow |-> IR2FLOW[currIRMon]]);
-            ir2sw := ir2sw @@ (nxtRCIRID :> ir2sw[currIRMon]);
+            prepareDeletionIR(currIRMon);
         
             SetScheduledIRs[ir2sw[nxtRCIRID]] := SetScheduledIRs[ir2sw[nxtRCIRID]] \cup {nxtRCIRID};
             modifiedEnqueue(nxtRCIRID);
-            nxtRCIRID := nxtRCIRID + 1;   
+            getNextIRID();
         end if;
     end while
     end process
