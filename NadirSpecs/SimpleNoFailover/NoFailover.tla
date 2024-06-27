@@ -559,8 +559,7 @@ ENUM_SET_RC_SCHEDULER_INTERNAL_STATE == {STATUS_START_SCHEDULING}
 ENUM_SET_OFC_WORKER_POOL_INTERNAL_STATE == {STATUS_LOCKING, STATUS_SENT_DONE}
 ENUM_SET_OFC_EVENT_HANDLER_INTERNAL_STATE == {START_RESET_IR}
 
-NadirEnumSet == ("EnumOperationalStatus" :> ENUM_SET_OPERATIONAL_STATUS) @@
-                ("EnumInstallerStatus" :> ENUM_SET_INSTALLER_STATUS) @@
+NadirEnumSet == ("EnumInstallerStatus" :> ENUM_SET_INSTALLER_STATUS) @@
                 ("EnumOpenFlowCMD" :> ENUM_SET_OF_CMD) @@
                 ("EnumOpenFlowACK" :> ENUM_SET_OF_ACK) @@
                 ("EnumSwitchState" :> ENUM_SET_SW_STATE) @@
