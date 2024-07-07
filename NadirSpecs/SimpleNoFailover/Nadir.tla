@@ -1,5 +1,6 @@
 ---- MODULE Nadir ----
-EXTENDS Integers, Sequences
+LOCAL INSTANCE Integers
+LOCAL INSTANCE Sequences
 
 (**********************************************************************)
 (* This constant represents any Null-like value the implementation.   *)
