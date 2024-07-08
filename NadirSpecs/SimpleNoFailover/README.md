@@ -27,4 +27,6 @@ Thus, we completely removed anything that looks like `self[1]` or `[rc0]` indexi
 - Intorduced the macro `getNextIRID`, since its implementation actually has some subtle practical qualities.
 - Introduced the macro `prepareDeletionIR(forWhat)` which prepares a deletion for an IR with identifier `forWhat`. Can be used for both the RC scheduler and the RC IR monitor.
 
+- Introduced the macro `getNextDAGID`, this will make the changes in implementation much easier.
+
 > For now, we have also removed any code that is not supposed to be implemented (which would be anything related to the switches). In the future, we might allow for implementation via inferred refinement of the spec, instead of having to butcher it.
