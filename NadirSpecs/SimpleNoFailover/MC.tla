@@ -29,9 +29,9 @@ const_161819923046085000 ==
 15
 ----
 
-\* CONSTANT definitions @modelParameterConstants:10DeleteIRIDStart
+\* CONSTANT definitions @modelParameterConstants:10TOTAL_IR_DEL_SET
 const_161819923046086000 ==
-15
+(MaxDAGID + 1)..(2 * MaxDAGID)
 ----
 
 \* CONSTANT definitions @modelParameterConstants:33MaxNumIRs
@@ -48,6 +48,19 @@ const_161819923046088000 ==
 const_161819923046089000 == 
 [x \in 1..MaxNumIRs |-> x]
 ----
+
+\* CONSTANT definitions @modelParameterConstants:44TOTAL_IR_SET
+const_161819923046090000 ==
+1..MaxNumIRs
+----
+
+\* CONSTANT definitions @modelParameterConstants:45TOTAL_DAG_SET
+const_161819923046091000 ==
+1..MaxDAGID
+
+\* CONSTANT definitions @modelParameterConstants:46TOTAL_FLOW_SET
+const_161819923046093000 ==
+1..MaxNumFlows
 
 \* CONSTANT definitions @modelParameterConstants:47TOPO_DAG_MAPPING
 const_161819923046092000 == 

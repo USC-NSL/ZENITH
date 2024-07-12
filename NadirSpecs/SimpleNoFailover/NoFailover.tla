@@ -13,7 +13,8 @@ CONSTANTS TOPO_MOD, IR_MOD
 CONSTANTS STATUS_START_SCHEDULING, STATUS_LOCKING, STATUS_SENT_DONE, START_RESET_IR
 CONSTANTS INSTALL_FLOW, DELETE_FLOW, INSTALLED_SUCCESSFULLY, DELETED_SUCCESSFULLY, KEEP_ALIVE
 CONSTANTS NIC_ASIC_DOWN, OFA_DOWN, INSTALLER_DOWN, INSTALLER_UP
-CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, DeleteIRIDStart
+CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID
+CONSTANTS TOTAL_IR_SET, TOTAL_IR_DEL_SET, TOTAL_DAG_SET, TOTAL_FLOW_SET
                  
 (*--fair algorithm stateConsistency
     variables
@@ -24,7 +25,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
             ({ofc0} \X CONTROLLER_THREAD_POOL),
 
         \* We need to think more about these two ...
-        irTypeMapping = [x \in 1.. MaxNumIRs |-> [type |-> INSTALL_FLOW, flow |-> IR2FLOW[x]]],
+        irTypeMapping = [x \in TOTAL_IR_SET |-> [type |-> INSTALL_FLOW, flow |-> IR2FLOW[x]]],
         ir2sw = IR2SW,
 
         \* The queue of messages between OFC and the switches
@@ -45,8 +46,8 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
         DAGQueue = <<>>,
 
         \* NIB tables
-        NIBIRStatus = [x \in 1..MaxNumIRs |-> IR_NONE],
-        DAGState = [x \in 1..MaxDAGID |-> DAG_NONE],
+        NIBIRStatus = [x \in TOTAL_IR_SET |-> IR_NONE],
+        DAGState = [x \in TOTAL_DAG_SET |-> DAG_NONE],
         SwSuspensionStatus = [x \in SW |-> SW_RUN],
         SetScheduledIRs = [y \in SW |-> {}],
 
@@ -54,15 +55,15 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
         IRQueueNIB = <<>>,
 
         \* Local RC variables that need persistence
-        RCIRStatus = [y \in 1..MaxNumIRs |-> IR_NONE],
+        RCIRStatus = [y \in TOTAL_IR_SET |-> IR_NONE],
         RCSwSuspensionStatus = [y \in SW |-> SW_RUN],
-        nxtRCIRID = DeleteIRIDStart,
+        nxtRCIRID = MaxNumIRs + 1,
         IRDoneSet = {},
         seqWorkerIsBusy = FALSE,
 
         \* Semaphore for locking IRs to worker pool threads
-        idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> NADIR_NULL] @@                                 \* Installation IRs
-                              [x \in DeleteIRIDStart..(DeleteIRIDStart + MaxNumIRs) |-> NADIR_NULL]  \* Deletion IRs
+        idThreadWorkingOnIR = [x \in TOTAL_IR_SET |-> NADIR_NULL] @@                                 \* Installation IRs
+                              [x \in TOTAL_IR_DEL_SET |-> NADIR_NULL]                                \* Deletion IRs
     define
         min(set) == CHOOSE x \in set: \A y \in set: x \leq y 
         rangeSeq(seq) == {seq[i]: i \in DOMAIN seq}
@@ -80,7 +81,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
                                                                               /\ IRQueueNIB[x].tag = NADIR_NULL
         getFirstIndexWith(RID, threadID) == CHOOSE x \in DOMAIN IRQueueNIB: /\ IRQueueNIB[x].tag = threadID
                                                                             /\ IRQueueNIB[x].IR = RID
-        getSetRemovableIRs(swSet, nxtDAGV) == {x \in 1..MaxNumIRs: /\ \/ RCIRStatus[x] # IR_NONE
+        getSetRemovableIRs(swSet, nxtDAGV) == {x \in TOTAL_IR_SET: /\ \/ RCIRStatus[x] # IR_NONE
                                                                       \/ x \in SetScheduledIRs[ir2sw[x]]
                                                                    /\ x \notin nxtDAGV
                                                                    /\ ir2sw[x] \in swSet}
@@ -104,13 +105,13 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
                                               /\ RCIRStatus[irID] = IR_NONE
                                               /\ RCSwSuspensionStatus[IR2SW[irID]] = SW_RUN
                                               /\ ~existIRInSetScheduledIRs(ir2sw[irID], INSTALL_FLOW, irTypeMapping[irID].flow)
-                                           \/ /\ irID \in (1..MaxNumIRs) \ IRDoneSet
+                                           \/ /\ irID \in (TOTAL_IR_SET) \ IRDoneSet
                                               /\ RCIRStatus[irID] = IR_DONE
                                               /\ RCSwSuspensionStatus[IR2SW[irID]] = SW_RUN
                                               /\ ~ existIRInSetScheduledIRs(ir2sw[irID], DELETE_FLOW, irTypeMapping[irID].flow)
                                               /\ ~ existIRDeletionInIRSent(ir2sw[irID], irTypeMapping[irID].flow)
         
-        setIRMonitorShouldSchedule == {x \in 1..MaxNumIRs: irMonitorShouldScheduleIR(x)}                                         
+        setIRMonitorShouldSchedule == {x \in TOTAL_IR_SET: irMonitorShouldScheduleIR(x)}                                         
                                                     
         isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
         
@@ -129,7 +130,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
         canfreeSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
                                         /\ monEvent.status.installerStatus = INSTALLER_UP
         
-        getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ ir2sw[x] = SID
+        getIRSetToReset(SID) == {x \in TOTAL_IR_SET: /\ ir2sw[x] = SID
                                                      /\ NIBIRStatus[x] \notin {IR_NONE}}
 
         getIRIDForFlow(flowID, irType) == CHOOSE x \in DOMAIN irTypeMapping: /\ \/ /\ irType = INSTALLED_SUCCESSFULLY
@@ -141,13 +142,13 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
         getRemovedIRID(flowID) == CHOOSE x \in DOMAIN irTypeMapping: /\ irTypeMapping[x].type = INSTALL_FLOW
                                                                      /\ irTypeMapping[x].flow = flowID
         
-        isFinished == \A x \in 1..MaxNumIRs: NIBIRStatus[x] = IR_DONE                                                     
+        isFinished == \A x \in TOTAL_IR_SET: NIBIRStatus[x] = IR_DONE                                                     
     end define
     
     macro controllerSendIR(s)
     begin
         assert irTypeMapping[s].type \in {INSTALL_FLOW, DELETE_FLOW};
-        assert irTypeMapping[s].flow \in 1..MaxNumFlows;
+        assert irTypeMapping[s].flow \in TOTAL_FLOW_SET;
         controller2Switch[ir2sw[s]] := Append(controller2Switch[ir2sw[s]], [type |-> irTypeMapping[s].type,
                                                                             to |-> ir2sw[s],
                                                                             flow |-> irTypeMapping[s].flow]);
@@ -536,7 +537,7 @@ CONSTANTS MaxNumIRs, TOPO_DAG_MAPPING, IR2SW, IR2FLOW, MaxNumFlows, MaxDAGID, De
         
         msg := Head(switch2Controller);
 
-        assert msg.flow \in 1..MaxNumFlows;
+        assert msg.flow \in TOTAL_FLOW_SET;
         assert msg.type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY};
         
         irID := getIRIDForFlow(msg.flow, msg.type);
@@ -716,9 +717,12 @@ TypeOK ==  /\ NadirFunctionTypeCheck(Nat, [type: {INSTALL_FLOW, DELETE_FLOW}, fl
 
 NadirConstantAssumptions == /\ NadirFunctionTypeCheck(NADIR_INT_ID_SET, SW, IR2SW)
                             /\ MaxDAGID \in Nat
-                            /\ DeleteIRIDStart \in Nat
                             /\ MaxNumIRs \in Nat
                             /\ MaxNumFlows \in Nat
+                            /\ TOTAL_IR_SET \in SUBSET NADIR_INT_ID_SET
+                            /\ TOTAL_IR_DEL_SET \in SUBSET NADIR_INT_ID_SET
+                            /\ TOTAL_DAG_SET \in SUBSET NADIR_INT_ID_SET
+                            /\ TOTAL_FLOW_SET \in SUBSET NADIR_INT_ID_SET
                             /\ NadirFunctionTypeCheck(NADIR_INT_ID_SET, Nat, IR2FLOW)
                             /\ NadirFunctionTypeCheck(SUBSET SW, STRUCT_SET_RC_DAG, TOPO_DAG_MAPPING)
 
