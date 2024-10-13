@@ -39,25 +39,58 @@ VARIABLES ContProcSet,
           monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
           controllerFailedModules 
 
+(* Each time either of the switches OR Zenith take a step, these CAN change *)
+shared_vars == <<
+    switchLock, controllerLock,
+    swSeqChangedStatus, controller2Switch, switch2Controller,
+    pc
+>>
+
+(* Each time Zenith takes a step, these remain unchanged *)
+internal_switch_vars == <<
+    installedIRs,
+    sw_fail_ordering_var, SwProcSet, 
+    switchStatus, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
+    Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
+    RecoveryStatus, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
+    ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
+    failedElem, obj, failedSet, statusResolveMsg, recoveredElem
+>>
+
+(* Each time a switch takes a step, these remain unchanged *)
+internal_zenith_vars == <<
+    dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
+    ContProcSet, 
+    controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
+    IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
+    SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
+    switchOrdering, workerThreadRanking, toBeScheduledIRs, nextIR, 
+    stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
+    monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
+    controllerFailedModules
+>>
+
+(* Any one of these variables can stutter ... *)
 vars == <<
     switchLock, controllerLock,
     swSeqChangedStatus, controller2Switch, switch2Controller,
-    installedIRs, pc,
-    dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
+    pc,
+    installedIRs,
     sw_fail_ordering_var, SwProcSet, 
     switchStatus, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
     Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
     RecoveryStatus, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
+    dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
     ContProcSet, 
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-    dependencyGraph, IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
-    IRStatus, SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
+    IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
+    SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
     switchOrdering, workerThreadRanking, toBeScheduledIRs, nextIR, 
     stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
     monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
-    controllerFailedModules 
+    controllerFailedModules
 >>
 
 (* All of our processes *)
@@ -92,6 +125,8 @@ Init == (* Locks *)
                             (({ofc0} \X {CONT_MONITOR})))
         /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
         /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
+        /\ switchOrdering = (CHOOSE x \in [SW -> 1..Cardinality(SW)]:
+                        ~\E y, z \in SW: y # z /\ x[y] = x[z])
         /\ IR2SW = (CHOOSE x \in [1..MaxNumIRs -> SW]:
                     ~\E y, z \in DOMAIN x: /\ y > z
                                            /\ switchOrdering[x[y]] =< switchOrdering[x[z]])
@@ -104,8 +139,6 @@ Init == (* Locks *)
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
         /\ IRQueueNIB = <<>>
         /\ SetScheduledIRs = [y \in SW |-> {}]
-        /\ switchOrdering = (CHOOSE x \in [SW -> 1..Cardinality(SW)]:
-                             ~\E y, z \in SW: y # z /\ x[y] = x[z])
         /\ workerThreadRanking = (CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]:
                                   ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
         /\ toBeScheduledIRs = [self \in ({rc0} \X {CONT_SEQ}) |-> {}]
@@ -169,6 +202,7 @@ Init == (* Locks *)
                                         [] self \in ({SW_FAILURE_PROC} \X SW) -> "SwitchFailure"
                                         [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
                                         [] self \in ({GHOST_UNLOCK_PROC} \X SW) -> "ghostProc"
+                                        [] self \in ({rc0} \X {CONT_SEQ}) -> "ControllerSeqProc"
                                         [] self \in ({ofc0} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
                                         [] self \in ({ofc0} \X {CONT_EVENT}) -> "ControllerEventHandlerProc"
                                         [] self \in ({ofc0} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"
@@ -177,25 +211,32 @@ Init == (* Locks *)
 (* Get instances of Zenith and the topology and create the `Next` predicate *)
 Switch == INSTANCE switch
 Zenith == INSTANCE zenith
-Next == Switch!Next \/ Zenith!Next
+
+SwitchStep == /\ Switch!Next
+              /\ UNCHANGED internal_zenith_vars
+ZenithStep == /\ Zenith!Next
+              /\ UNCHANGED internal_switch_vars
+
+Next == \/ SwitchStep
+        \/ ZenithStep
 
 (* Evaluation specification *)
 Spec == /\ Init /\ [][Next]_vars
         /\ WF_vars(Next)
-        /\ \A self \in ({SW_SIMPLE_ID} \X SW) : WF_vars(Switch!swProcess(self))
-        /\ \A self \in ({NIC_ASIC_IN} \X SW) : WF_vars(Switch!swNicAsicProcPacketIn(self))
-        /\ \A self \in ({NIC_ASIC_OUT} \X SW) : WF_vars(Switch!swNicAsicProcPacketOut(self))
-        /\ \A self \in ({OFA_IN} \X SW) : WF_vars(Switch!ofaModuleProcPacketIn(self))
-        /\ \A self \in ({OFA_OUT} \X SW) : WF_vars(Switch!ofaModuleProcPacketOut(self))
-        /\ \A self \in ({INSTALLER} \X SW) : WF_vars(Switch!installerModuleProc(self))
-        /\ \A self \in ({SW_FAILURE_PROC} \X SW) : WF_vars(Switch!swFailureProc(self))
-        /\ \A self \in ({SW_RESOLVE_PROC} \X SW) : WF_vars(Switch!swResolveFailure(self))
-        /\ \A self \in ({GHOST_UNLOCK_PROC} \X SW) : WF_vars(Switch!ghostUnlockProcess(self))
-        /\ \A self \in ({rc0} \X {CONT_SEQ}) : WF_vars(Zenith!controllerSequencer(self))
-        /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_vars(Zenith!controllerWorkerThreads(self))
-        /\ \A self \in ({ofc0} \X {CONT_EVENT}) : WF_vars(Zenith!controllerEventHandler(self))
-        /\ \A self \in ({ofc0} \X {CONT_MONITOR}) : WF_vars(Zenith!controllerMonitoringServer(self))
-        /\ \A self \in ({ofc0, rc0} \X {WATCH_DOG}) : WF_vars(Zenith!watchDog(self))
+        /\ \A self \in ({SW_SIMPLE_ID} \X SW) : WF_internal_switch_vars(Switch!swProcess(self))
+        /\ \A self \in ({NIC_ASIC_IN} \X SW) : WF_internal_switch_vars(Switch!swNicAsicProcPacketIn(self))
+        /\ \A self \in ({NIC_ASIC_OUT} \X SW) : WF_internal_switch_vars(Switch!swNicAsicProcPacketOut(self))
+        /\ \A self \in ({OFA_IN} \X SW) : WF_internal_switch_vars(Switch!ofaModuleProcPacketIn(self))
+        /\ \A self \in ({OFA_OUT} \X SW) : WF_internal_switch_vars(Switch!ofaModuleProcPacketOut(self))
+        /\ \A self \in ({INSTALLER} \X SW) : WF_internal_switch_vars(Switch!installerModuleProc(self))
+        /\ \A self \in ({SW_FAILURE_PROC} \X SW) : WF_internal_switch_vars(Switch!swFailureProc(self))
+        /\ \A self \in ({SW_RESOLVE_PROC} \X SW) : WF_internal_switch_vars(Switch!swResolveFailure(self))
+        /\ \A self \in ({GHOST_UNLOCK_PROC} \X SW) : WF_internal_switch_vars(Switch!ghostUnlockProcess(self))
+        /\ \A self \in ({rc0} \X {CONT_SEQ}) : WF_internal_zenith_vars(Zenith!controllerSequencer(self))
+        /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_internal_zenith_vars(Zenith!controllerWorkerThreads(self))
+        /\ \A self \in ({ofc0} \X {CONT_EVENT}) : WF_internal_zenith_vars(Zenith!controllerEventHandler(self))
+        /\ \A self \in ({ofc0} \X {CONT_MONITOR}) : WF_internal_zenith_vars(Zenith!controllerMonitoringServer(self))
+        /\ \A self \in ({ofc0, rc0} \X {WATCH_DOG}) : WF_internal_zenith_vars(Zenith!watchDog(self))
 
 OperationsRanking == <<
     "ControllerSeqProc",
@@ -344,6 +385,14 @@ const_161337196895836000 ==
 
 const_161337196895837000 == 
 (s0 :> SW_COMPLEX_MODEL) @@ (s1 :> SW_COMPLEX_MODEL)
+----
+
+const_161337196895838000 ==
+[cpu |-> 1, nicAsic |-> 1, ofa |-> 1, installer |-> 1]
+----
+
+const_161337196895839000 ==
+2
 ----
 
 =============================================================================

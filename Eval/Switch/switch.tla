@@ -68,7 +68,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
                                      /\ pc[<<NIC_ASIC_OUT, swID>>] = "SwitchFromOFAPacket"
         getInstallerStatus(stat) == IF stat = NotFailed 
                                     THEN INSTALLER_UP
-                                    ELSE INSTALLER_DOWN                                        
+                                    ELSE INSTALLER_DOWN     
     end define
     
     (*******************************************************************)

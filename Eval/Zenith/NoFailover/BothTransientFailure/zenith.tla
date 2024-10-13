@@ -157,7 +157,7 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
             [
                 type |-> INSTALL_FLOW,
                 to |-> IR2SW[s],
-                IR |-> s
+                flow |-> s
             ]
         );
         if whichSwitchModel(IR2SW[s]) = SW_COMPLEX_MODEL then 
