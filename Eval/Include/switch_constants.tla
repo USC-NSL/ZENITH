@@ -16,4 +16,11 @@ CONSTANTS ALL_FLOW, FLOW_STAT_REQ, FLOW_STAT_REPLY, NO_ENTRY, ENTRY_FOUND
 (* Module failure/recovery event types *)
 CONSTANTS NIC_ASIC_DOWN, OFA_DOWN, INSTALLER_DOWN, INSTALLER_UP
 
+\* (* (ONLY FOR FAILOVER) Process for creating failures *)
+\* CONSTANTS ASYNC_NET_EVE_GEN
+
+\* (* (ONLY FOR FAILOVER) Role of the controller stored in the switch *)
+\* CONSTANTS ROLE_SLAVE, ROLE_MASTER, ROLE_EQUAL
+\* CONSTANTS ROLE_EMPTY
+
 =============================================================================

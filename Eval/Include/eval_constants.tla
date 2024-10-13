@@ -1,6 +1,12 @@
 --------------------- MODULE eval_constants ---------------------
 EXTENDS Integers, FiniteSets, TLC
 
+(***************************************************************************)
+(* This module contains definitions that we use for writing our evaluation *)
+(* modules. All modules that would be involved in that process (i.e. the   *)
+(* switches, Zenith, etc.) MUST extend this module.                        *)
+(***************************************************************************)
+
 (* Set of model values for our switch instances *)
 CONSTANTS SW
 
@@ -25,15 +31,31 @@ CONSTANTS SW_SIMPLE_MODEL, SW_COMPLEX_MODEL
 (*****************************************************************************)
 CONSTANTS SW_FAIL_ORDERING
 
+(*******************************************************************************)
+(* Maximum number of flows to consider. A flow maps directly to an instruction *)
+(* that can be sent to a switch via `INSTALL_FLOW`.                            *)
+(*******************************************************************************)
 CONSTANTS MaxNumFlows
+
+(* Tag, labeling that a lock was free. *)
 CONSTANTS NO_LOCK
 
+(* Map, showing which modules can or cannot fail in a complex switch *)
 CONSTANTS SW_MODULE_CAN_FAIL_OR_NOT
+
+(***************************************************************************)
+(* Map from control plane instances to the maximum number of failures they *) 
+(* can have during the same evaluaion run.                                 *)
+(***************************************************************************)
 CONSTANTS MAX_NUM_CONTROLLER_SUB_FAILURE
+
+(* Labels for distinguishing between living/dead modules *)
 CONSTANTS NotFailed, Failed
 
+(* All switches are accounted for in `WHICH_SWITCH_MODEL` *)
 ASSUME WHICH_SWITCH_MODEL \in [SW -> {SW_SIMPLE_MODEL, SW_COMPLEX_MODEL}]
 
+(* `SW_FAIL_ORDERING` must have correct form *)
 ASSUME \A x \in {
         SW_FAIL_ORDERING[z]: z \in DOMAIN SW_FAIL_ORDERING
     }: \/ x = {}
@@ -44,6 +66,7 @@ ASSUME \A x \in {
                       /\ y.sw \in SW          
                       /\ y.partial \in {0, 1}
 
+(* `SW_MODULE_CAN_FAIL_OR_NOT` must account for all sub-modules in a switch *)
 ASSUME /\ "cpu" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        /\ "nicAsic" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT
        /\ "ofa" \in DOMAIN SW_MODULE_CAN_FAIL_OR_NOT

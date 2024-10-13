@@ -1,8 +1,16 @@
 ---------------------------- MODULE dag ----------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC
 
+(***********************************************************************)
+(* This file contains definitions used to create dependency graphs for *)
+(* IRs. These are always in the form of a directed, acycilic graph.    *)
+(***********************************************************************)
+
 min(set) == CHOOSE x \in set: \A y \in set: x \leq y
 
+(************************************************************************)
+(* Get paths of a given length `n` within a graph with set of nodes `G` *)
+(************************************************************************)
 RECURSIVE Paths(_, _)
 Paths(n, G) ==  
     IF n = 1
@@ -15,17 +23,9 @@ Paths(n, G) ==
         IN
             UNION {nextPaths(p) : p \in Paths(n-1, G)} \cup Paths(n-1, G)
 
-RECURSIVE AllPossibleSizes(_, _)
-AllPossibleSizes(maxSize, sumUpToNow) == 
-    IF sumUpToNow = 0
-    THEN
-        {<<0>>}
-    ELSE
-        LET 
-            Upperbound == min({sumUpToNow, maxSize})
-        IN
-            UNION {{<<x>> \o y: y \in AllPossibleSizes(x, sumUpToNow-x)}: x \in 1..Upperbound}
-
+(*********************************************************************)
+(* Generate the set of all connected DAGs with elements from set `S` *)
+(*********************************************************************)
 generateConnectedDAG(S) == {
     x \in SUBSET (S \X S): 
         /\ ~\E y \in S: <<y, y>> \in x

@@ -157,7 +157,8 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
             [
                 type |-> INSTALL_FLOW,
                 to |-> IR2SW[s],
-                flow |-> s
+                flow |-> s,
+                from |-> self[1]
             ]
         );
         if whichSwitchModel(IR2SW[s]) = SW_COMPLEX_MODEL then 
@@ -490,15 +491,15 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         await switch2Controller # <<>>;
         controllerReleaseLock(self);
         msg := Head(switch2Controller);
-        assert msg.from = IR2SW[msg.IR];
+        assert msg.from = IR2SW[msg.flow];
         assert msg.type \in {INSTALLED_SUCCESSFULLY};
             if msg.type = INSTALLED_SUCCESSFULLY then
                 ControllerUpdateIR2:
                     controllerWaitForLockFree(); 
                     controllerModuleFailOrNot();
                     if (controllerSubmoduleFailStat[self] = NotFailed) then
-                        FirstInstall[msg.IR] := 1;
-                        IRStatus[msg.IR] := IR_DONE;
+                        FirstInstall[msg.flow] := 1;
+                        IRStatus[msg.flow] := IR_DONE;
                     else
                         goto ControllerMonitorCheckIfMastr;
                     end if;
@@ -533,9 +534,9 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
     end while; 
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "12cb0ef3")
-\* Process variable stepOfFailure of process controllerSequencer at line 194 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 253 col 64 changed to stepOfFailure_c
+\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "6d6356f6")
+\* Process variable stepOfFailure of process controllerSequencer at line 195 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 254 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
           switch2Controller, FirstInstall, ContProcSet, 
           controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
@@ -928,7 +929,8 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                                                                                                    [
                                                                                                                                        type |-> INSTALL_FLOW,
                                                                                                                                        to |-> IR2SW[nextIRToSent[self]],
-                                                                                                                                       IR |-> nextIRToSent[self]
+                                                                                                                                       flow |-> nextIRToSent[self],
+                                                                                                                                       from |-> self[1]
                                                                                                                                    ]
                                                                                                                                )]
                                               /\ IF whichSwitchModel(IR2SW[nextIRToSent[self]]) = SW_COMPLEX_MODEL
@@ -1603,14 +1605,14 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
-                                       /\ Assert(msg'[self].from = IR2SW[msg'[self].IR], 
-                                                 "Failure of assertion at line 493, column 9.")
-                                       /\ Assert(msg'[self].type \in {INSTALLED_SUCCESSFULLY}, 
+                                       /\ Assert(msg'[self].from = IR2SW[msg'[self].flow], 
                                                  "Failure of assertion at line 494, column 9.")
+                                       /\ Assert(msg'[self].type \in {INSTALLED_SUCCESSFULLY}, 
+                                                 "Failure of assertion at line 495, column 9.")
                                        /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                              ELSE /\ Assert(FALSE, 
-                                                            "Failure of assertion at line 505, column 18.")
+                                                            "Failure of assertion at line 506, column 18.")
                                                   /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED << switchLock, 
                                                        swSeqChangedStatus, 
@@ -1701,8 +1703,8 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                         /\ UNCHANGED << controllerSubmoduleFailNum, 
                                                         controllerSubmoduleFailStat >>
                              /\ IF (controllerSubmoduleFailStat'[self] = NotFailed)
-                                   THEN /\ FirstInstall' = [FirstInstall EXCEPT ![msg[self].IR] = 1]
-                                        /\ IRStatus' = [IRStatus EXCEPT ![msg[self].IR] = IR_DONE]
+                                   THEN /\ FirstInstall' = [FirstInstall EXCEPT ![msg[self].flow] = 1]
+                                        /\ IRStatus' = [IRStatus EXCEPT ![msg[self].flow] = IR_DONE]
                                         /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                    ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerMonitorCheckIfMastr"]
                                         /\ UNCHANGED << FirstInstall, IRStatus >>
@@ -1735,7 +1737,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 528, column 13.")
+                                               "Failure of assertion at line 529, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]

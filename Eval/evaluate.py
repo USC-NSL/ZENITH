@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import argparse
 import platform
 from typing import List
@@ -55,6 +56,13 @@ def get_libs(module_path, other_dirs: List[str]):
     return f"-DTLA-Library={':'.join(paths)}"
 
 
+def delete_states(module_path):
+    module_dir = os.path.dirname(module_path)
+    states_dir = os.path.join(module_dir, 'states')
+    if os.path.exists(states_dir):
+        shutil.rmtree(states_dir)
+
+
 class ACTIONS:
     TRANSLATE = 'translate'
     PARSE = 'parse'
@@ -71,6 +79,8 @@ if __name__ == '__main__':
                         help="List of library directories.")
     parser.add_argument('--config', 
                         help="Path to the TLC configuration file.")
+    parser.add_argument('--cleanup', action='store_true',
+                        help="Delete the `states` directory if it exists in the directory of the module")
     args = parser.parse_args()
 
     if not os.getenv('TLA_HOME'):
@@ -79,5 +89,8 @@ if __name__ == '__main__':
 
     opts = get_libs(args.module, args.libs if args.libs else [])
     cmd = get_cmd(args, opts)
-    print(cmd)
+
+    if args.cleanup:
+        delete_states(args.module)
+
     os.system(cmd)
