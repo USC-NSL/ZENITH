@@ -30,7 +30,10 @@ def get_cmd(args, java_opts):
     if action == ACTIONS.CHECK:
         config = args.config
         assert config is not None, f"For checking the spec, a TLC configuration MUST be provided."
-        return TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config))
+        if args.diff:
+            return TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config)) + ' -difftrace'
+        else:
+            return TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config))
     elif action == ACTIONS.PARSE:
         return SANY_CMD.format(module=module_name, java_opts=java_opts, jar=jar)
     elif action == ACTIONS.TRANSLATE:
@@ -81,6 +84,8 @@ if __name__ == '__main__':
                         help="Path to the TLC configuration file.")
     parser.add_argument('--cleanup', action='store_true',
                         help="Delete the `states` directory if it exists in the directory of the module")
+    parser.add_argument('--diff', action='store_true',
+                        help="Show only the DIFF between states when printing the trace")
     args = parser.parse_args()
 
     if not os.getenv('TLA_HOME'):

@@ -7,8 +7,14 @@ CONSTANTS IR_NONE, IR_SENT, IR_DONE
 (* Switch states to track within the NIB *)
 CONSTANTS SW_RUN, SW_SUSPEND
 
+(* DAG states to track within NIB *)
+CONSTANTS DAG_NONE, DAG_STALE, DAG_SUBMIT, DAG_NEW
+
 (* Label to declare an IR unlocked for other threads to work on *)
 CONSTANTS IR_UNLOCK
+
+(* Label to declare a DAG unlocked for other sequencer threads to work on *)
+CONSTANTS DAG_UNLOCK
 
 (**************************************************************************)
 (* Label for internal controller module states within NIB.                *)
@@ -17,11 +23,22 @@ CONSTANTS IR_UNLOCK
 CONSTANTS NO_STATUS, STATUS_START_SCHEDULING, STATUS_LOCKING, 
           STATUS_SENT_DONE, START_RESET_IR
 
+(**********************************************************)
+(* Internal labels for using a sequencer with a DAG queue *)
+(**********************************************************)
+CONSTANTS SEQ_WORKER_RUN, SEQ_WORKER_STALE_SIGNAL
+
 (* Label for noting that an enqueued IR was never tagged by a thread *)
 CONSTANTS NO_TAG
 
 (* Maximum number of INSTALL IRs to consider *)
 CONSTANTS MaxNumIRs
+
+(* Maximum number of distinct DAGs to consider *)
+CONSTANTS MaxDAGID
+
+(* TE event types *)
+CONSTANTS TOPO_MOD, IR_MOD
 
 \* CONSTANTS OFC_FAILOVER, SHOULD_FAILOVER
 
