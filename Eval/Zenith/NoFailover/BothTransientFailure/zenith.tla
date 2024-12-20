@@ -3,8 +3,10 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, 
 
 CONSTANTS ofc0, rc0
 CONSTANTS CONTROLLER_THREAD_POOL, CONT_SEQ, CONT_MONITOR, CONT_EVENT, WATCH_DOG
+CONSTANTS IR_TO_SWITCH_ASSIGNMENT
 
 ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
+ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
 
 (*--fair algorithm stateConsistency
     variables
@@ -24,9 +26,7 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed],
         
         dependencyGraph \in generateConnectedDAG(1..MaxNumIRs),              
-        IR2SW = CHOOSE x \in [1..MaxNumIRs -> SW]: 
-            ~\E y, z \in DOMAIN x: /\ y > z 
-                                   /\ switchOrdering[x[y]] =< switchOrdering[x[z]],
+        IR2SW = IR_TO_SWITCH_ASSIGNMENT,
         idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK],
         controllerStateNIB = [
             x \in ContProcSet |-> [
@@ -37,8 +37,6 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
         SwSuspensionStatus = [x \in SW |-> SW_RUN],
         IRQueueNIB = <<>>,
         SetScheduledIRs = [y \in SW |-> {}],
-        switchOrdering = CHOOSE x \in [SW -> 1..Cardinality(SW)]: 
-            ~\E y, z \in SW: y # z /\ x[y] = x[z],
         workerThreadRanking = CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]: 
             ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z],
     define
@@ -534,15 +532,15 @@ ASSUME {"ofc0", "rc0"} \subseteq DOMAIN MAX_NUM_CONTROLLER_SUB_FAILURE
     end while; 
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "6d6356f6")
-\* Process variable stepOfFailure of process controllerSequencer at line 195 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 254 col 64 changed to stepOfFailure_c
+\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "c79ae75d")
+\* Process variable stepOfFailure of process controllerSequencer at line 193 col 50 changed to stepOfFailure_
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 252 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
           switch2Controller, FirstInstall, ContProcSet, 
           controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
           dependencyGraph, IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
           IRStatus, SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
-          switchOrdering, workerThreadRanking, pc
+          workerThreadRanking, pc
 
 (* define statement *)
 removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
@@ -606,8 +604,8 @@ vars == << switchLock, controllerLock, swSeqChangedStatus, controller2Switch,
            controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
            dependencyGraph, IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
            IRStatus, SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
-           switchOrdering, workerThreadRanking, pc, toBeScheduledIRs, nextIR, 
-           stepOfFailure_, nextIRToSent, rowIndex, rowRemove, stepOfFailure_c, 
+           workerThreadRanking, pc, toBeScheduledIRs, nextIR, stepOfFailure_, 
+           nextIRToSent, rowIndex, rowRemove, stepOfFailure_c, 
            monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
            controllerFailedModules >>
 
@@ -627,9 +625,7 @@ Init == (* Global variables *)
         /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
         /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
         /\ dependencyGraph \in generateConnectedDAG(1..MaxNumIRs)
-        /\ IR2SW = (    CHOOSE x \in [1..MaxNumIRs -> SW]:
-                    ~\E y, z \in DOMAIN x: /\ y > z
-                                           /\ switchOrdering[x[y]] =< switchOrdering[x[z]])
+        /\ IR2SW = IR_TO_SWITCH_ASSIGNMENT
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK]
         /\ controllerStateNIB =                      [
                                     x \in ContProcSet |-> [
@@ -640,8 +636,6 @@ Init == (* Global variables *)
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
         /\ IRQueueNIB = <<>>
         /\ SetScheduledIRs = [y \in SW |-> {}]
-        /\ switchOrdering = (             CHOOSE x \in [SW -> 1..Cardinality(SW)]:
-                             ~\E y, z \in SW: y # z /\ x[y] = x[z])
         /\ workerThreadRanking = (                  CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]:
                                   ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
         (* Process controllerSequencer *)
@@ -686,7 +680,7 @@ ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                                            idThreadWorkingOnIR, 
                                            controllerStateNIB, IRStatus, 
                                            SwSuspensionStatus, IRQueueNIB, 
-                                           SetScheduledIRs, switchOrdering, 
+                                           SetScheduledIRs, 
                                            workerThreadRanking, nextIR, 
                                            stepOfFailure_, nextIRToSent, 
                                            rowIndex, rowRemove, 
@@ -730,8 +724,7 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             ContProcSet, dependencyGraph, 
                                             IR2SW, idThreadWorkingOnIR, 
                                             IRStatus, SwSuspensionStatus, 
-                                            IRQueueNIB, switchOrdering, 
-                                            workerThreadRanking, 
+                                            IRQueueNIB, workerThreadRanking, 
                                             toBeScheduledIRs, nextIRToSent, 
                                             rowIndex, rowRemove, 
                                             stepOfFailure_c, monitoringEvent, 
@@ -776,12 +769,11 @@ ScheduleTheIR(self) == /\ pc[self] = "ScheduleTheIR"
                                        ContProcSet, dependencyGraph, IR2SW, 
                                        idThreadWorkingOnIR, IRStatus, 
                                        SwSuspensionStatus, SetScheduledIRs, 
-                                       switchOrdering, workerThreadRanking, 
-                                       nextIR, nextIRToSent, rowIndex, 
-                                       rowRemove, stepOfFailure_c, 
-                                       monitoringEvent, setIRsToReset, resetIR, 
-                                       stepOfFailure, msg, 
-                                       controllerFailedModules >>
+                                       workerThreadRanking, nextIR, 
+                                       nextIRToSent, rowIndex, rowRemove, 
+                                       stepOfFailure_c, monitoringEvent, 
+                                       setIRsToReset, resetIR, stepOfFailure, 
+                                       msg, controllerFailedModules >>
 
 ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateReconciliation"
                                           /\ moduleIsUp(self)
@@ -809,7 +801,6 @@ ControllerSeqStateReconciliation(self) == /\ pc[self] = "ControllerSeqStateRecon
                                                           IRStatus, 
                                                           SwSuspensionStatus, 
                                                           IRQueueNIB, 
-                                                          switchOrdering, 
                                                           workerThreadRanking, 
                                                           toBeScheduledIRs, 
                                                           nextIR, 
@@ -867,7 +858,7 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           FirstInstall, ContProcSet, 
                                           dependencyGraph, IR2SW, IRStatus, 
                                           SwSuspensionStatus, SetScheduledIRs, 
-                                          switchOrdering, workerThreadRanking, 
+                                          workerThreadRanking, 
                                           toBeScheduledIRs, nextIR, 
                                           stepOfFailure_, rowRemove, 
                                           monitoringEvent, setIRsToReset, 
@@ -906,7 +897,6 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 controllerStateNIB, 
                                                 SwSuspensionStatus, IRQueueNIB, 
                                                 SetScheduledIRs, 
-                                                switchOrdering, 
                                                 workerThreadRanking, 
                                                 toBeScheduledIRs, nextIR, 
                                                 stepOfFailure_, nextIRToSent, 
@@ -960,7 +950,6 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    IRStatus, 
                                                    SwSuspensionStatus, 
                                                    IRQueueNIB, SetScheduledIRs, 
-                                                   switchOrdering, 
                                                    workerThreadRanking, 
                                                    toBeScheduledIRs, nextIR, 
                                                    stepOfFailure_, 
@@ -1002,7 +991,6 @@ WaitForIRToHaveCorrectStatus(self) == /\ pc[self] = "WaitForIRToHaveCorrectStatu
                                                       SwSuspensionStatus, 
                                                       IRQueueNIB, 
                                                       SetScheduledIRs, 
-                                                      switchOrdering, 
                                                       workerThreadRanking, 
                                                       toBeScheduledIRs, nextIR, 
                                                       stepOfFailure_, 
@@ -1044,7 +1032,6 @@ ReScheduleifIRNone(self) == /\ pc[self] = "ReScheduleifIRNone"
                                             IR2SW, idThreadWorkingOnIR, 
                                             IRStatus, SwSuspensionStatus, 
                                             IRQueueNIB, SetScheduledIRs, 
-                                            switchOrdering, 
                                             workerThreadRanking, 
                                             toBeScheduledIRs, nextIR, 
                                             stepOfFailure_, nextIRToSent, 
@@ -1090,7 +1077,6 @@ ControllerThreadUnlockSemaphore(self) == /\ pc[self] = "ControllerThreadUnlockSe
                                                          SwSuspensionStatus, 
                                                          IRQueueNIB, 
                                                          SetScheduledIRs, 
-                                                         switchOrdering, 
                                                          workerThreadRanking, 
                                                          toBeScheduledIRs, 
                                                          nextIR, 
@@ -1145,7 +1131,6 @@ RemoveFromScheduledIRSet(self) == /\ pc[self] = "RemoveFromScheduledIRSet"
                                                   dependencyGraph, IR2SW, 
                                                   idThreadWorkingOnIR, 
                                                   IRStatus, SwSuspensionStatus, 
-                                                  switchOrdering, 
                                                   workerThreadRanking, 
                                                   toBeScheduledIRs, nextIR, 
                                                   stepOfFailure_, nextIRToSent, 
@@ -1175,7 +1160,6 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
                                                       IRStatus, 
                                                       SwSuspensionStatus, 
                                                       SetScheduledIRs, 
-                                                      switchOrdering, 
                                                       workerThreadRanking, 
                                                       toBeScheduledIRs, nextIR, 
                                                       stepOfFailure_, 
@@ -1228,7 +1212,6 @@ ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStat
                                                              controllerStateNIB, 
                                                              SwSuspensionStatus, 
                                                              IRQueueNIB, 
-                                                             switchOrdering, 
                                                              workerThreadRanking, 
                                                              toBeScheduledIRs, 
                                                              nextIR, 
@@ -1279,7 +1262,6 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     SwSuspensionStatus, 
                                                     IRQueueNIB, 
                                                     SetScheduledIRs, 
-                                                    switchOrdering, 
                                                     workerThreadRanking, 
                                                     toBeScheduledIRs, nextIR, 
                                                     stepOfFailure_, 
@@ -1325,7 +1307,6 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    SwSuspensionStatus, 
                                                                    IRQueueNIB, 
                                                                    SetScheduledIRs, 
-                                                                   switchOrdering, 
                                                                    workerThreadRanking, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
@@ -1367,7 +1348,6 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              IR2SW, idThreadWorkingOnIR, 
                                              controllerStateNIB, IRStatus, 
                                              IRQueueNIB, SetScheduledIRs, 
-                                             switchOrdering, 
                                              workerThreadRanking, 
                                              toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, nextIRToSent, 
@@ -1409,7 +1389,6 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    idThreadWorkingOnIR, 
                                                    IRStatus, IRQueueNIB, 
                                                    SetScheduledIRs, 
-                                                   switchOrdering, 
                                                    workerThreadRanking, 
                                                    toBeScheduledIRs, nextIR, 
                                                    stepOfFailure_, 
@@ -1453,7 +1432,6 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           SwSuspensionStatus, 
                                                           IRQueueNIB, 
                                                           SetScheduledIRs, 
-                                                          switchOrdering, 
                                                           workerThreadRanking, 
                                                           toBeScheduledIRs, 
                                                           nextIR, 
@@ -1496,7 +1474,7 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            idThreadWorkingOnIR, 
                                            controllerStateNIB, IRStatus, 
                                            SwSuspensionStatus, IRQueueNIB, 
-                                           SetScheduledIRs, switchOrdering, 
+                                           SetScheduledIRs, 
                                            workerThreadRanking, 
                                            toBeScheduledIRs, nextIR, 
                                            stepOfFailure_, nextIRToSent, 
@@ -1538,11 +1516,11 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      ContProcSet, dependencyGraph, IR2SW, 
                                      idThreadWorkingOnIR, controllerStateNIB, 
                                      SwSuspensionStatus, IRQueueNIB, 
-                                     SetScheduledIRs, switchOrdering, 
-                                     workerThreadRanking, toBeScheduledIRs, 
-                                     nextIR, stepOfFailure_, nextIRToSent, 
-                                     rowIndex, rowRemove, stepOfFailure_c, 
-                                     monitoringEvent, stepOfFailure, msg, 
+                                     SetScheduledIRs, workerThreadRanking, 
+                                     toBeScheduledIRs, nextIR, stepOfFailure_, 
+                                     nextIRToSent, rowIndex, rowRemove, 
+                                     stepOfFailure_c, monitoringEvent, 
+                                     stepOfFailure, msg, 
                                      controllerFailedModules >>
 
 ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEventHandlerStateReconciliation"
@@ -1572,7 +1550,6 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    IRStatus, 
                                                                    IRQueueNIB, 
                                                                    SetScheduledIRs, 
-                                                                   switchOrdering, 
                                                                    workerThreadRanking, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
@@ -1606,13 +1583,13 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                        /\ Assert(msg'[self].from = IR2SW[msg'[self].flow], 
-                                                 "Failure of assertion at line 494, column 9.")
+                                                 "Failure of assertion at line 492, column 9.")
                                        /\ Assert(msg'[self].type \in {INSTALLED_SUCCESSFULLY}, 
-                                                 "Failure of assertion at line 495, column 9.")
+                                                 "Failure of assertion at line 493, column 9.")
                                        /\ IF msg'[self].type = INSTALLED_SUCCESSFULLY
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIR2"]
                                              ELSE /\ Assert(FALSE, 
-                                                            "Failure of assertion at line 506, column 18.")
+                                                            "Failure of assertion at line 504, column 18.")
                                                   /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
                                        /\ UNCHANGED << switchLock, 
                                                        swSeqChangedStatus, 
@@ -1629,7 +1606,6 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        SwSuspensionStatus, 
                                                        IRQueueNIB, 
                                                        SetScheduledIRs, 
-                                                       switchOrdering, 
                                                        workerThreadRanking, 
                                                        toBeScheduledIRs, 
                                                        nextIR, stepOfFailure_, 
@@ -1674,7 +1650,6 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          SwSuspensionStatus, 
                                                          IRQueueNIB, 
                                                          SetScheduledIRs, 
-                                                         switchOrdering, 
                                                          workerThreadRanking, 
                                                          toBeScheduledIRs, 
                                                          nextIR, 
@@ -1716,7 +1691,7 @@ ControllerUpdateIR2(self) == /\ pc[self] = "ControllerUpdateIR2"
                                              idThreadWorkingOnIR, 
                                              controllerStateNIB, 
                                              SwSuspensionStatus, IRQueueNIB, 
-                                             SetScheduledIRs, switchOrdering, 
+                                             SetScheduledIRs, 
                                              workerThreadRanking, 
                                              toBeScheduledIRs, nextIR, 
                                              stepOfFailure_, nextIRToSent, 
@@ -1737,7 +1712,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 529, column 13.")
+                                               "Failure of assertion at line 527, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
@@ -1751,7 +1726,6 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                                 controllerStateNIB, IRStatus, 
                                                 SwSuspensionStatus, IRQueueNIB, 
                                                 SetScheduledIRs, 
-                                                switchOrdering, 
                                                 workerThreadRanking, 
                                                 toBeScheduledIRs, nextIR, 
                                                 stepOfFailure_, nextIRToSent, 

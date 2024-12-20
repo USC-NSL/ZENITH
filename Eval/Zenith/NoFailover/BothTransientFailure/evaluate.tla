@@ -3,6 +3,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, 
 
 CONSTANTS ofc0, rc0
 CONSTANTS CONTROLLER_THREAD_POOL, CONT_SEQ, CONT_MONITOR, CONT_EVENT, WATCH_DOG
+CONSTANTS IR_TO_SWITCH_ASSIGNMENT
 
 (* Lock for switch and controller for optimization, shared between the two *)
 VARIABLES switchLock, controllerLock
@@ -34,7 +35,7 @@ VARIABLES ContProcSet,
           controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
           IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
           SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
-          switchOrdering, workerThreadRanking, toBeScheduledIRs, nextIR, 
+          workerThreadRanking, toBeScheduledIRs, nextIR, 
           stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
           monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
           controllerFailedModules 
@@ -64,7 +65,7 @@ internal_zenith_vars == <<
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
     IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
     SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
-    switchOrdering, workerThreadRanking, toBeScheduledIRs, nextIR, 
+    workerThreadRanking, toBeScheduledIRs, nextIR, 
     stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
     monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
     controllerFailedModules
@@ -87,7 +88,7 @@ vars == <<
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
     IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
     SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
-    switchOrdering, workerThreadRanking, toBeScheduledIRs, nextIR, 
+    workerThreadRanking, toBeScheduledIRs, nextIR, 
     stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
     monitoringEvent, setIRsToReset, resetIR, stepOfFailure, msg, 
     controllerFailedModules
@@ -125,11 +126,7 @@ Init == (* Locks *)
                             (({ofc0} \X {CONT_MONITOR})))
         /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
         /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
-        /\ switchOrdering = (CHOOSE x \in [SW -> 1..Cardinality(SW)]:
-                        ~\E y, z \in SW: y # z /\ x[y] = x[z])
-        /\ IR2SW = (CHOOSE x \in [1..MaxNumIRs -> SW]:
-                    ~\E y, z \in DOMAIN x: /\ y > z
-                                           /\ switchOrdering[x[y]] =< switchOrdering[x[z]])
+        /\ IR2SW = IR_TO_SWITCH_ASSIGNMENT
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK]
         /\ controllerStateNIB = [
                                     x \in ContProcSet |-> [
@@ -360,39 +357,44 @@ s0, s1
 ----
 
 CONSTANTS
-t0
+t0, t1
 ----
 
-const_161337196895832000 == 
-{s0, s1}
+\* Consider a topology of 2 switches
+const_SW == {s0, s1}
 ----
 
-const_161337196895833000 == 
-{t0}
+\* Two threads in our worker pool
+const_CONTROLLER_THREAD_POOL == {t0, t1}
 ----
 
-const_161337196895834000 == 
-<<>>
+\* No particular fail ordering (this is a relic of debugging ...)
+const_SW_FAIL_ORDERING == <<>>
 ----
 
-const_161337196895835000 == 
-2
+\* Consider 3 instructions to install
+const_MaxNumIRs == 3
 ----
 
-const_161337196895836000 == 
-[ofc0 |-> 1, rc0 |-> 0]
+\* This spec is not robust to RC failures yet. Consider behaviors where OFC sub-modules can
+\* fail at most 2 times during each run (this can be 2 different modules, or the same module
+\* failing twice in the same behavior)
+const_MAX_NUM_CONTROLLER_SUB_FAILURE == [ofc0 |-> 2, rc0 |-> 0]
 ----
 
-const_161337196895837000 == 
-(s0 :> SW_COMPLEX_MODEL) @@ (s1 :> SW_COMPLEX_MODEL)
+\* Use the complex switch model
+const_WHICH_SWITCH_MODEL == (s0 :> SW_COMPLEX_MODEL) @@ (s1 :> SW_COMPLEX_MODEL)
 ----
 
-const_161337196895838000 ==
-[cpu |-> 1, nicAsic |-> 1, ofa |-> 1, installer |-> 1]
+\* Consider behaviors where any switch module can fail
+const_SW_MODULE_CAN_FAIL_OR_NOT == [cpu |-> 1, nicAsic |-> 1, ofa |-> 1, installer |-> 1]
 ----
 
-const_161337196895839000 ==
-2
+\* Consider behaviors that need 3 flows
+const_MaxNumFlows == 3
 ----
+
+\* Where to install each IR?
+const_IR_TO_SWITCH_ASSIGNMENT == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
 
 =============================================================================
