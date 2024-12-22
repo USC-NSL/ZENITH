@@ -23,11 +23,6 @@ CONSTANTS DAG_UNLOCK
 CONSTANTS NO_STATUS, STATUS_START_SCHEDULING, STATUS_LOCKING, 
           STATUS_SENT_DONE, START_RESET_IR
 
-(**********************************************************)
-(* Internal labels for using a sequencer with a DAG queue *)
-(**********************************************************)
-CONSTANTS SEQ_WORKER_RUN, SEQ_WORKER_STALE_SIGNAL
-
 (* Label for noting that an enqueued IR was never tagged by a thread *)
 CONSTANTS NO_TAG
 

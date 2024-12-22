@@ -20,7 +20,7 @@ SANY_CMD = "java {java_opts} -cp {jar} tla2sany.SANY {module}"
 PCAL_TRANS_CMD = "java {java_opts} -cp {jar} pcal.trans -nocfg -unixEOL {module}"
 
 
-def get_cmd(args, java_opts):
+def get_cmd(args, java_opts) -> List[str]:
     action = args.action
     module_name = os.path.abspath(args.module)
 
@@ -29,15 +29,25 @@ def get_cmd(args, java_opts):
     
     if action == ACTIONS.CHECK:
         config = args.config
+        if config is None:
+            config_path = module_name.replace(".tla", ".cfg")
+            assert os.path.exists(config_path), "Could not find default config for this spec, and no config file was provided"
+            print(f"Using inferred config file at {config_path}")
+            config = config_path
         assert config is not None, f"For checking the spec, a TLC configuration MUST be provided."
         if args.diff:
-            return TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config)) + ' -difftrace'
+            return [TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config)) + ' -difftrace']
         else:
-            return TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config))
+            return [TLC_CMD.format(module=module_name, java_opts=java_opts, jar=jar, config=os.path.abspath(config))]
     elif action == ACTIONS.PARSE:
-        return SANY_CMD.format(module=module_name, java_opts=java_opts, jar=jar)
+        return [SANY_CMD.format(module=module_name, java_opts=java_opts, jar=jar)]
     elif action == ACTIONS.TRANSLATE:
-        return PCAL_TRANS_CMD.format(module=module_name, java_opts=java_opts, jar=jar)
+        return [PCAL_TRANS_CMD.format(module=module_name, java_opts=java_opts, jar=jar)]
+    elif action == ACTIONS.BUILD:
+        return [
+            PCAL_TRANS_CMD.format(module=module_name, java_opts=java_opts, jar=jar),
+            SANY_CMD.format(module=module_name, java_opts=java_opts, jar=jar)
+        ]
 
     raise ValueError(f"Unknown action \'{action}\'")
 
@@ -67,17 +77,18 @@ def delete_states(module_path):
 
 
 class ACTIONS:
-    TRANSLATE = 'translate'
-    PARSE = 'parse'
-    CHECK = 'check'
+    TRANSLATE = 'translate'  # Convert PlusCal to TLA+
+    PARSE = 'parse'          # Run SANY and check the form of the spec
+    BUILD = 'build'          # Combination of translation and parsing
+    CHECK = 'check'          # Run TLC on the spec with a given configuration file
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Run TLC on a specification')
-    parser.add_argument('action', choices=[ACTIONS.TRANSLATE, ACTIONS.PARSE, ACTIONS.CHECK], 
-                        help="Do what?")
     parser.add_argument('module', 
                         help="Path the TLA+ module to evaluate.")
+    parser.add_argument('--action', choices=[ACTIONS.TRANSLATE, ACTIONS.PARSE, ACTIONS.BUILD, ACTIONS.CHECK], 
+                        help="Do what?", default=ACTIONS.BUILD)
     parser.add_argument('--libs', nargs='+', type=str, 
                         help="List of library directories.")
     parser.add_argument('--config', 
@@ -93,9 +104,10 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     opts = get_libs(args.module, args.libs if args.libs else [])
-    cmd = get_cmd(args, opts)
+    cmds = get_cmd(args, opts)
 
     if args.cleanup:
         delete_states(args.module)
 
-    os.system(cmd)
+    for cmd in cmds:
+        os.system(cmd)

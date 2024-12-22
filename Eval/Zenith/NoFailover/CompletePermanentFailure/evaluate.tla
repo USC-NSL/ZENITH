@@ -33,11 +33,13 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
 
 \* For zenith
 VARIABLES TEEventQueue, DAGEventQueue, DAGQueue, 
-          IRQueueNIB, RCNIBEventQueue, ContProcSet, 
+          IRQueueNIB, RCNIBEventQueue, 
+          ContProcSet, RCProcSet, OFCProcSet, 
           controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
           RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-          controllerStateNIB, RCSeqWorkerStatus, SetScheduledIRs, 
-          irTypeMapping, ir2sw, DAGID, nxtRCIRID, idWorkerWorkingOnDAG, 
+          rcInternalState, ofcInternalState,
+          SetScheduledIRs, 
+          irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
           idThreadWorkingOnIR, workerThreadRanking,
           monitoringEvent, rowIndex, toBeScheduledIRs, 
           stepOfFailure, stepOfFailure_, stepOfFailure_c,
@@ -69,11 +71,13 @@ internal_switch_vars == <<
 internal_zenith_vars == <<
     NIBIRStatus, FirstInstall, nextIRToSent,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, ContProcSet, 
+    IRQueueNIB, RCNIBEventQueue, 
+    ContProcSet, RCProcSet, OFCProcSet, 
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
     RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-    controllerStateNIB, RCSeqWorkerStatus, SetScheduledIRs, 
-    irTypeMapping, ir2sw, DAGID, nxtRCIRID, idWorkerWorkingOnDAG, 
+    rcInternalState, ofcInternalState,
+    SetScheduledIRs, 
+    irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
     idThreadWorkingOnIR, workerThreadRanking,
     monitoringEvent, rowIndex, toBeScheduledIRs, 
     stepOfFailure, stepOfFailure_, stepOfFailure_c,
@@ -98,11 +102,13 @@ vars == <<
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
     NIBIRStatus, FirstInstall, nextIRToSent,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, ContProcSet, 
+    IRQueueNIB, RCNIBEventQueue, 
+    ContProcSet, RCProcSet, OFCProcSet, 
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
     RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-    controllerStateNIB, RCSeqWorkerStatus, SetScheduledIRs, 
-    irTypeMapping, ir2sw, DAGID, nxtRCIRID, idWorkerWorkingOnDAG, 
+    rcInternalState, ofcInternalState,
+    SetScheduledIRs, 
+    irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
     idThreadWorkingOnIR, workerThreadRanking,
     monitoringEvent, rowIndex, toBeScheduledIRs, 
     stepOfFailure, stepOfFailure_, stepOfFailure_c,
@@ -138,28 +144,27 @@ Init == (* Locks *)
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
         /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         (* Hidden Zenith variables *)
-        /\ TEEventQueue = [x \in {rc0} |-> <<>>]
-        /\ DAGEventQueue = [x \in {rc0} |-> <<>>]
-        /\ DAGQueue = [x \in {rc0} |-> <<>>]
+        /\ TEEventQueue = <<>>
+        /\ DAGEventQueue = <<>>
+        /\ DAGQueue = <<>>
         /\ IRQueueNIB = <<>>
-        /\ RCNIBEventQueue = [x \in {rc0} |-> <<>>]
-        /\ ContProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ,
-                                       NIB_EVENT_HANDLER, CONT_TE}) \cup
-                               ({ofc0} \X {CONT_EVENT, CONT_MONITOR}) \cup
-                               ({ofc0} \X CONTROLLER_THREAD_POOL)
+        /\ RCNIBEventQueue = <<>>
+        /\ RCProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE})
+        /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
+                         (({ofc0} \X {CONT_EVENT})) \cup
+                         (({ofc0} \X {CONT_MONITOR})))
+        /\ ContProcSet = (RCProcSet \cup OFCProcSet)
         /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
         /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
-        /\ RCIRStatus = [x \in {rc0} |-> [y \in 1..MaxNumIRs |-> IR_NONE]]
-        /\ RCSwSuspensionStatus = [x \in {rc0} |-> [y \in SW |-> SW_RUN]]
+        /\ RCIRStatus = [y \in 1..MaxNumIRs |-> IR_NONE]
+        /\ RCSwSuspensionStatus = [y \in SW |-> SW_RUN]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
-        /\ controllerStateNIB = [x \in ContProcSet |-> [type |-> NO_STATUS]]
-        /\ RCSeqWorkerStatus = (CONT_WORKER_SEQ :> SEQ_WORKER_RUN)
+        /\ rcInternalState = [x \in RCProcSet |-> [type |-> NO_STATUS]]
+        /\ ofcInternalState = [x \in OFCProcSet |-> [type |-> NO_STATUS]]
         /\ SetScheduledIRs = [y \in SW |-> {}]
         /\ irTypeMapping = [x \in 1.. MaxNumIRs |-> [type |-> INSTALL_FLOW, flow |-> IR2FLOW[x]]]
         /\ ir2sw = IR2SW
-        /\ DAGID = 0
-        /\ nxtRCIRID = MaxNumIRs + 1
         /\ idWorkerWorkingOnDAG = [x \in 1..MaxDAGID |-> DAG_UNLOCK]
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK] @@ [x \in (MaxNumIRs + 1)..(2*MaxNumIRs + 1) |-> IR_UNLOCK]
         /\ workerThreadRanking = (CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]:
@@ -169,7 +174,9 @@ Init == (* Locks *)
         /\ currSetDownSw = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ prev_dag_id = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ init = [self \in ({rc0} \X {CONT_TE}) |-> 1]
+        /\ DAGID = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ nxtDAG = [self \in ({rc0} \X {CONT_TE}) |-> [type |-> 0]]
+        /\ deleterID = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ setRemovableIRs = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ currIR = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ currIRInDAG = [self \in ({rc0} \X {CONT_TE}) |-> 0]
