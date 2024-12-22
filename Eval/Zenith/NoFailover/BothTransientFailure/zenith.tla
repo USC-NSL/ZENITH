@@ -46,7 +46,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
         getMaxNumSubModuleFailure(controllerID) == CASE controllerID = rc0 -> MAX_NUM_CONTROLLER_SUB_FAILURE.rc0
                                                      [] controllerID = ofc0 -> MAX_NUM_CONTROLLER_SUB_FAILURE.ofc0 
         
-        NoEntryTaggedWith(threadID) == ~\E x \in rangeSeq(IRQueueNIB): x.tag = threadID 
+        NoEntryTaggedWith(threadID) == ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].tag = threadID
         FirstUntaggedEntry(threadID, num) == ~\E x \in DOMAIN IRQueueNIB: /\ IRQueueNIB[x].tag = NO_TAG
                                                                           /\ x < num
         getFirstIRIndexToRead(threadID) == CHOOSE x \in DOMAIN IRQueueNIB: \/ IRQueueNIB[x].tag = threadID
@@ -58,23 +58,23 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
 
         isDependencySatisfied(ir) == ~\E y \in 1..MaxNumIRs: /\ <<y, ir>> \in dependencyGraph
                                                              /\ IRStatus[y] # IR_DONE
-        getSetIRsCanBeScheduledNext(CID)  == {x \in 1..MaxNumIRs: /\ IRStatus[x] = IR_NONE
-                                                                  /\ isDependencySatisfied(x)
-                                                                  /\ SwSuspensionStatus[IR2SW[x]] = SW_RUN
-                                                                  /\ x \notin SetScheduledIRs[IR2SW[x]]}
+        getSetIRsCanBeScheduledNext == {x \in 1..MaxNumIRs: /\ IRStatus[x] = IR_NONE
+                                                            /\ isDependencySatisfied(x)
+                                                            /\ SwSuspensionStatus[IR2SW[x]] = SW_RUN
+                                                            /\ x \notin SetScheduledIRs[IR2SW[x]]}
 
         isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
         setFreeThreads(CID) == {y \in CONTROLLER_THREAD_POOL: /\ NoEntryTaggedWith(<<CID, y>>)
-                                                              /\ controllerSubmoduleFailStat[<<CID, y>>] = NotFailed}        
-        canWorkerThreadContinue(CID, threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
-                                                  \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG 
-                                                     /\ NoEntryTaggedWith(threadID) 
-                                                     /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(CID)})
+                                                              /\ controllerSubmoduleFailStat[<<CID, y>>] = NotFailed}
+        canWorkerThreadContinue(threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
+                                             \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG 
+                                                /\ NoEntryTaggedWith(threadID) 
+                                                /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(threadID[1])})
         setThreadsAttemptingForLock(CID, nIR, IRQueue) == {x \in CONTROLLER_THREAD_POOL: /\ \E y \in rangeSeq(IRQueue): /\ y.IR = nIR
                                                                                                                         /\ y.tag = <<CID, x>>
                                                                                          /\ pc[<<CID, x>>] = "ControllerThread"}
-        threadWithLowerIDGetsTheLock(CID, threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: 
-                                                                                                                z \in setThreadsAttemptingForLock(CID, nIR, IRQueue)}) 
+        threadWithLowerIDGetsTheLock(threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: 
+                                                                                                        z \in setThreadsAttemptingForLock(threadID[1], nIR, IRQueue)})
         existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                         /\ swSeqChangedStatus[x].num > monEvent.num
         shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
@@ -195,7 +195,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     while TRUE do
         await moduleIsUp(self);
         controllerWaitForLockFree();
-        toBeScheduledIRs := getSetIRsCanBeScheduledNext(self[1]);
+        toBeScheduledIRs := getSetIRsCanBeScheduledNext;
         await toBeScheduledIRs # {};
 
         SchedulerMechanism:
@@ -254,7 +254,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     while TRUE do
         await moduleIsUp(self);
         await IRQueueNIB # <<>>;
-        await canWorkerThreadContinue(self[1], self);
+        await canWorkerThreadContinue(self);
         controllerWaitForLockFree();
 
         modifiedRead();
@@ -269,7 +269,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
                 goto ControllerThreadStateReconciliation;
             else    
                 if idThreadWorkingOnIR[nextIRToSent] = IR_UNLOCK then
-                    await threadWithLowerIDGetsTheLock(self[1], self, nextIRToSent, IRQueueNIB); \* For Reducing Space
+                    await threadWithLowerIDGetsTheLock(self, nextIRToSent, IRQueueNIB);
                     idThreadWorkingOnIR[nextIRToSent] := self[2]
                 else
                     ControllerThreadRemoveQueue1: 
@@ -358,7 +358,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     ControllerThreadStateReconciliation:
         await moduleIsUp(self);
         await IRQueueNIB # <<>>;
-        await canWorkerThreadContinue(self[1], self);
+        await canWorkerThreadContinue(self);
         controllerReleaseLock(self);
         if (ofcInternalState[self].type = STATUS_LOCKING) then
             if (IRStatus[ofcInternalState[self].next] = IR_SENT) then
@@ -531,7 +531,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     end while; 
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "f48dd07d")
+\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "4177511f")
 \* Process variable stepOfFailure of process controllerSequencer at line 192 col 50 changed to stepOfFailure_
 \* Process variable stepOfFailure of process controllerWorkerThreads at line 251 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
@@ -549,7 +549,7 @@ moduleIsUp(threadID) == controllerSubmoduleFailStat[threadID] = NotFailed
 getMaxNumSubModuleFailure(controllerID) == CASE controllerID = rc0 -> MAX_NUM_CONTROLLER_SUB_FAILURE.rc0
                                              [] controllerID = ofc0 -> MAX_NUM_CONTROLLER_SUB_FAILURE.ofc0
 
-NoEntryTaggedWith(threadID) == ~\E x \in rangeSeq(IRQueueNIB): x.tag = threadID
+NoEntryTaggedWith(threadID) == ~\E x \in DOMAIN IRQueueNIB: IRQueueNIB[x].tag = threadID
 FirstUntaggedEntry(threadID, num) == ~\E x \in DOMAIN IRQueueNIB: /\ IRQueueNIB[x].tag = NO_TAG
                                                                   /\ x < num
 getFirstIRIndexToRead(threadID) == CHOOSE x \in DOMAIN IRQueueNIB: \/ IRQueueNIB[x].tag = threadID
@@ -561,23 +561,23 @@ getFirstIndexWith(RID, threadID) == CHOOSE x \in DOMAIN IRQueueNIB: /\ IRQueueNI
 
 isDependencySatisfied(ir) == ~\E y \in 1..MaxNumIRs: /\ <<y, ir>> \in dependencyGraph
                                                      /\ IRStatus[y] # IR_DONE
-getSetIRsCanBeScheduledNext(CID)  == {x \in 1..MaxNumIRs: /\ IRStatus[x] = IR_NONE
-                                                          /\ isDependencySatisfied(x)
-                                                          /\ SwSuspensionStatus[IR2SW[x]] = SW_RUN
-                                                          /\ x \notin SetScheduledIRs[IR2SW[x]]}
+getSetIRsCanBeScheduledNext == {x \in 1..MaxNumIRs: /\ IRStatus[x] = IR_NONE
+                                                    /\ isDependencySatisfied(x)
+                                                    /\ SwSuspensionStatus[IR2SW[x]] = SW_RUN
+                                                    /\ x \notin SetScheduledIRs[IR2SW[x]]}
 
 isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
 setFreeThreads(CID) == {y \in CONTROLLER_THREAD_POOL: /\ NoEntryTaggedWith(<<CID, y>>)
                                                       /\ controllerSubmoduleFailStat[<<CID, y>>] = NotFailed}
-canWorkerThreadContinue(CID, threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
-                                          \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG
-                                             /\ NoEntryTaggedWith(threadID)
-                                             /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(CID)})
+canWorkerThreadContinue(threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
+                                     \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG
+                                        /\ NoEntryTaggedWith(threadID)
+                                        /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(threadID[1])})
 setThreadsAttemptingForLock(CID, nIR, IRQueue) == {x \in CONTROLLER_THREAD_POOL: /\ \E y \in rangeSeq(IRQueue): /\ y.IR = nIR
                                                                                                                 /\ y.tag = <<CID, x>>
                                                                                  /\ pc[<<CID, x>>] = "ControllerThread"}
-threadWithLowerIDGetsTheLock(CID, threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]:
-                                                                                                        z \in setThreadsAttemptingForLock(CID, nIR, IRQueue)})
+threadWithLowerIDGetsTheLock(threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]:
+                                                                                                z \in setThreadsAttemptingForLock(threadID[1], nIR, IRQueue)})
 existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                 /\ swSeqChangedStatus[x].num > monEvent.num
 shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
@@ -664,7 +664,7 @@ ControllerSeqProc(self) == /\ pc[self] = "ControllerSeqProc"
                            /\ moduleIsUp(self)
                            /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                            /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                           /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNext(self[1])]
+                           /\ toBeScheduledIRs' = [toBeScheduledIRs EXCEPT ![self] = getSetIRsCanBeScheduledNext]
                            /\ toBeScheduledIRs'[self] # {}
                            /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                            /\ UNCHANGED << switchLock, controllerLock, 
@@ -827,7 +827,7 @@ controllerSequencer(self) == ControllerSeqProc(self)
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
                           /\ moduleIsUp(self)
                           /\ IRQueueNIB # <<>>
-                          /\ canWorkerThreadContinue(self[1], self)
+                          /\ canWorkerThreadContinue(self)
                           /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
                           /\ rowIndex' = [rowIndex EXCEPT ![self] = getFirstIRIndexToRead(self)]
@@ -850,7 +850,7 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
                                                 /\ UNCHANGED idThreadWorkingOnIR
                                            ELSE /\ IF idThreadWorkingOnIR[nextIRToSent'[self]] = IR_UNLOCK
-                                                      THEN /\ threadWithLowerIDGetsTheLock(self[1], self, nextIRToSent'[self], IRQueueNIB')
+                                                      THEN /\ threadWithLowerIDGetsTheLock(self, nextIRToSent'[self], IRQueueNIB')
                                                            /\ idThreadWorkingOnIR' = [idThreadWorkingOnIR EXCEPT ![nextIRToSent'[self]] = self[2]]
                                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                                                       ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveQueue1"]
@@ -1190,7 +1190,7 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
 ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStateReconciliation"
                                              /\ moduleIsUp(self)
                                              /\ IRQueueNIB # <<>>
-                                             /\ canWorkerThreadContinue(self[1], self)
+                                             /\ canWorkerThreadContinue(self)
                                              /\ \/ controllerLock = self
                                                 \/ controllerLock = <<NO_LOCK, NO_LOCK>>
                                              /\ switchLock = <<NO_LOCK, NO_LOCK>>

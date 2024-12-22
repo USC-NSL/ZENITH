@@ -86,15 +86,15 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
         isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
         setFreeThreads(CID) == {y \in CONTROLLER_THREAD_POOL: /\ NoEntryTaggedWith(<<CID, y>>)
                                                               /\ controllerSubmoduleFailStat[<<CID, y>>] = NotFailed}        
-        canWorkerThreadContinue(CID, threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
-                                                  \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG 
-                                                     /\ NoEntryTaggedWith(threadID)
-                                                     /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(CID)})
+        canWorkerThreadContinue(threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
+                                             \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG 
+                                                /\ NoEntryTaggedWith(threadID)
+                                                /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(threadID[1])})
         setThreadsAttemptingForLock(CID, nIR, IRQueue) == {x \in CONTROLLER_THREAD_POOL: /\ \E y \in rangeSeq(IRQueue): /\ y.IR = nIR
                                                                                                                         /\ y.tag = <<CID, x>>
                                                                                          /\ pc[<<CID, x>>] = "ControllerThread"}
-        threadWithLowerIDGetsTheLock(CID, threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: 
-                                                                                                                z \in setThreadsAttemptingForLock(CID, nIR, IRQueue)})  
+        threadWithLowerIDGetsTheLock(threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: 
+                                                                                                        z \in setThreadsAttemptingForLock(threadID[1], nIR, IRQueue)})
         existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                         /\ swSeqChangedStatus[x].num > monEvent.num
         shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
@@ -438,7 +438,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     while TRUE do
         await moduleIsUp(self);
         await IRQueueNIB # <<>>;
-        await canWorkerThreadContinue(self[1], self);
+        await canWorkerThreadContinue(self);
         controllerWaitForLockFree();
 
         modifiedRead();
@@ -454,7 +454,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
                 goto ControllerThreadStateReconciliation;
             else    
                 if idThreadWorkingOnIR[nextIRToSent] = IR_UNLOCK then
-                    await threadWithLowerIDGetsTheLock(self[1], self, nextIRToSent, IRQueueNIB);
+                    await threadWithLowerIDGetsTheLock(self, nextIRToSent, IRQueueNIB);
                     idThreadWorkingOnIR[nextIRToSent] := self[2]
                 else
                     ControllerThreadRemoveQueue1: 
@@ -527,7 +527,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     ControllerThreadStateReconciliation:
         await moduleIsUp(self);
         await IRQueueNIB # <<>>;
-        await canWorkerThreadContinue(self[1], self);
+        await canWorkerThreadContinue(self);
         controllerReleaseLock();
         if (ofcInternalState[self].type = STATUS_LOCKING) then
             if (NIBIRStatus[ofcInternalState[self].next] = IR_SENT) then
@@ -741,7 +741,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
     end while; 
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "2c620ace")
+\* BEGIN TRANSLATION (chksum(pcal) = "7c28162a" /\ chksum(tla) = "7eaa617c")
 \* Process variable stepOfFailure of process controllerSequencer at line 366 col 50 changed to stepOfFailure_
 \* Process variable stepOfFailure of process controllerWorkerThreads at line 435 col 64 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
@@ -786,15 +786,15 @@ isDAGStale(id) == DAGState[id] # DAG_SUBMIT
 isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
 setFreeThreads(CID) == {y \in CONTROLLER_THREAD_POOL: /\ NoEntryTaggedWith(<<CID, y>>)
                                                       /\ controllerSubmoduleFailStat[<<CID, y>>] = NotFailed}
-canWorkerThreadContinue(CID, threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
-                                          \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG
-                                             /\ NoEntryTaggedWith(threadID)
-                                             /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(CID)})
+canWorkerThreadContinue(threadID) == \/ \E x \in rangeSeq(IRQueueNIB): x.tag = threadID
+                                     \/ /\ \E x \in rangeSeq(IRQueueNIB): x.tag = NO_TAG
+                                        /\ NoEntryTaggedWith(threadID)
+                                        /\ workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]: z \in setFreeThreads(threadID[1])})
 setThreadsAttemptingForLock(CID, nIR, IRQueue) == {x \in CONTROLLER_THREAD_POOL: /\ \E y \in rangeSeq(IRQueue): /\ y.IR = nIR
                                                                                                                 /\ y.tag = <<CID, x>>
                                                                                  /\ pc[<<CID, x>>] = "ControllerThread"}
-threadWithLowerIDGetsTheLock(CID, threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]:
-                                                                                                        z \in setThreadsAttemptingForLock(CID, nIR, IRQueue)})
+threadWithLowerIDGetsTheLock(threadID, nIR, IRQueue) == workerThreadRanking[threadID[2]] = min({workerThreadRanking[z]:
+                                                                                                z \in setThreadsAttemptingForLock(threadID[1], nIR, IRQueue)})
 existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
                                                                                 /\ swSeqChangedStatus[x].num > monEvent.num
 shouldSuspendSw(monEvent) == \/ monEvent.type = OFA_DOWN
@@ -1769,7 +1769,7 @@ controllerSequencer(self) == ControllerWorkerSeqProc(self)
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
                           /\ moduleIsUp(self)
                           /\ IRQueueNIB # <<>>
-                          /\ canWorkerThreadContinue(self[1], self)
+                          /\ canWorkerThreadContinue(self)
                           /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                           /\ switchLock = <<NO_LOCK, NO_LOCK>>
                           /\ rowIndex' = [rowIndex EXCEPT ![self] = getFirstIRIndexToRead(self)]
@@ -1792,7 +1792,7 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerThreadStateReconciliation"]
                                                 /\ UNCHANGED idThreadWorkingOnIR
                                            ELSE /\ IF idThreadWorkingOnIR[nextIRToSent'[self]] = IR_UNLOCK
-                                                      THEN /\ threadWithLowerIDGetsTheLock(self[1], self, nextIRToSent'[self], IRQueueNIB')
+                                                      THEN /\ threadWithLowerIDGetsTheLock(self, nextIRToSent'[self], IRQueueNIB')
                                                            /\ idThreadWorkingOnIR' = [idThreadWorkingOnIR EXCEPT ![nextIRToSent'[self]] = self[2]]
                                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                                                       ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveQueue1"]
@@ -2130,7 +2130,7 @@ ControllerThreadRemoveQueue1(self) == /\ pc[self] = "ControllerThreadRemoveQueue
 ControllerThreadStateReconciliation(self) == /\ pc[self] = "ControllerThreadStateReconciliation"
                                              /\ moduleIsUp(self)
                                              /\ IRQueueNIB # <<>>
-                                             /\ canWorkerThreadContinue(self[1], self)
+                                             /\ canWorkerThreadContinue(self)
                                              /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
                                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
                                              /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
