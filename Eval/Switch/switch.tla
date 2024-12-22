@@ -35,7 +35,8 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
         TCAM = [x \in SW |-> <<>>], 
 
         controlMsgCounter = [x \in SW |-> 0],
-        RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]],
+        RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
+    
     define
         indexInSeq(seq, val) == CHOOSE i \in DOMAIN seq: seq[i] = val
         removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
@@ -78,7 +79,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
     begin
         assert obj \in Head(SeqSet);
         if Cardinality(Head(SeqSet)) = 1 then
-            SeqSet := Tail(SeqSet)
+            SeqSet := Tail(SeqSet);
         else
             SeqSet := <<(Head(SeqSet)\{obj})>> \o Tail(SeqSet);
         end if; 
