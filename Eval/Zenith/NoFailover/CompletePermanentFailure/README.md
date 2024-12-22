@@ -3,7 +3,7 @@
 This spec contains the `ZENITH` implementation robust to complete switch failures.
 The spec implements:
 - Full OFC, including Worker Pool, Event Handler and Monitoring Server
-- The Sequencer and Traffic Engineering sub-modules of RC
+- The Sequencer, Boss Sequencer and Traffic Engineering sub-modules of RC
 
 This builds on top of `BothTransientFailure` specification, and shares most of its inputs with it.
 
