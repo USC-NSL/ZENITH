@@ -31,9 +31,9 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
           failedElem, obj, failedSet, statusResolveMsg, recoveredElem
 
 \* For zenith
-VARIABLES ContProcSet, 
+VARIABLES ContProcSet, OFCProcSet, RCProcSet,
           controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-          IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
+          IR2SW, idThreadWorkingOnIR, ofcInternalState, rcInternalState, 
           SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
           workerThreadRanking, toBeScheduledIRs, nextIR, 
           stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
@@ -61,9 +61,9 @@ internal_switch_vars == <<
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
     dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
-    ContProcSet, 
+    ContProcSet, OFCProcSet, RCProcSet, 
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-    IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
+    IR2SW, idThreadWorkingOnIR, ofcInternalState, rcInternalState, 
     SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
     workerThreadRanking, toBeScheduledIRs, nextIR, 
     stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
@@ -84,9 +84,9 @@ vars == <<
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
     dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
-    ContProcSet, 
+    ContProcSet, OFCProcSet, RCProcSet,
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
-    IR2SW, idThreadWorkingOnIR, controllerStateNIB, 
+    IR2SW, idThreadWorkingOnIR, ofcInternalState, rcInternalState, 
     SwSuspensionStatus, IRQueueNIB, SetScheduledIRs, 
     workerThreadRanking, toBeScheduledIRs, nextIR, 
     stepOfFailure_, rowIndex, rowRemove, stepOfFailure_c, 
@@ -120,19 +120,17 @@ Init == (* Locks *)
         /\ IRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
         /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         (* Hidden Zenith variables *)
-        /\ ContProcSet = ((({rc0} \X {CONT_SEQ})) \cup
-                            (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
-                            (({ofc0} \X {CONT_EVENT})) \cup
-                            (({ofc0} \X {CONT_MONITOR})))
+        /\ RCProcSet = ({rc0} \X {CONT_SEQ})
+        /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
+                         (({ofc0} \X {CONT_EVENT})) \cup
+                         (({ofc0} \X {CONT_MONITOR})))
+        /\ ContProcSet = (RCProcSet \cup OFCProcSet)
         /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
         /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
         /\ IR2SW = IR_TO_SWITCH_ASSIGNMENT
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK]
-        /\ controllerStateNIB = [
-                                    x \in ContProcSet |-> [
-                                        type |-> NO_STATUS
-                                    ]
-                                ]
+        /\ rcInternalState = [x \in RCProcSet |-> [type |-> NO_STATUS]]
+        /\ ofcInternalState = [x \in OFCProcSet |-> [type |-> NO_STATUS]]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
         /\ IRQueueNIB = <<>>
         /\ SetScheduledIRs = [y \in SW |-> {}]
