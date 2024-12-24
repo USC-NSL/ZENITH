@@ -127,7 +127,7 @@ ProcSet ==
     (* Zenith *)
     (({rc0} \X {NIB_EVENT_HANDLER})) \cup (({rc0} \X {CONT_TE})) \cup 
     (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup 
-    ({rc0} \X {CONT_MONITOR}) \cup 
+    (({rc0} \X {CONT_MONITOR})) \cup 
     (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup 
     (({ofc0} \X {CONT_MONITOR})) \cup (({ofc0, rc0} \X {WATCH_DOG}))
 

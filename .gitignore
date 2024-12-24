@@ -1,3 +1,6 @@
 states
 drain
 *.old
+*.trace
+*.trace_out
+*.pyc
