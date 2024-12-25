@@ -5,7 +5,7 @@ it only works if they are clean (i.e. it is just the counterexample,
 and nothing more than that)
 """
 
-
+import chardet
 from typing import List, Tuple
 from lark import Lark, Transformer, v_args, Discard
 
@@ -148,7 +148,15 @@ TRANSFORMER = TreeToTrace()
 
 
 def load(path: str) -> Trace:
-    with open(path, 'r') as f:
+    # For windows, the encoding is often UTF-16-LE, so we should consider that
+    det = chardet.universaldetector.UniversalDetector()
+    with open(path, 'rb') as f:
+        for line in f:
+            det.feed(line)
+            if det.done:
+                break
+    det.close()
+    with open(path, 'r', encoding=det.result['encoding']) as f:
         trace_str = f.read() + "\n"
         ast = PARSER.parse(trace_str)
         return TRANSFORMER.transform(ast)

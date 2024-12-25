@@ -3,7 +3,7 @@
 This spec contains the `ZENITH` implementation robust to complete and transient switch failures.
 The spec implements:
 - Full OFC, including Worker Pool, Event Handler and Monitoring Server
-- Full RC, including Worker Sequencer, Boss Sequencer, TE and IR Monitor
+- Full RC, including Worker Sequencer, Boss Sequencer and TE
 
 This builds on top of `CompletePermanentFailure` specification, and shares all of its inputs with it.
 
@@ -25,6 +25,15 @@ is merely an application here, and while it too should be correct, it is not the
 We implement two versions of this spec, one that never uses any switch-side reconciliation (the `ZENITH-NR`), 
 and a version of it that uses _Directed Reconciliation_ (the `ZENITH-DR`), which means that it only inspects 
 certain switches when needed, not all of them at once. The two provide slightly different properties.
+
+> **Note:** In an earlier version of the spec (in fact the first version that was proven correct), a separate module existed in RC called the _IR Monitor_; the purpose of this module was to patch up a DAG if it noticed that the some IRs within that DAG had changed. This was done because there were edge-cases where the sequencer could erroneously decide that a DAG was finished, while a deletion IR was still in-flight.
+>
+> The IR Monitor proved to be too much. It enabled certain behaviours where it would needlessly reschedule some IRs that were going
+to be installed anyway, and it heavily increased the model checking time. It also used an extremely complicated `await` statement that
+had multiple ways that it could get enabled, and this made it extremely complicated to implement.
+>
+> For this reason, we changed the spec slightly (in particular, how deletion IRs work) so that we can remove this module. The current
+specification that we provide is robust enough to not have to work with IR Monitor. We provide this older spec for completion as well.
 
 ## Evaluation Parameters
 
@@ -72,4 +81,6 @@ We evaluated with the following configurations:
 - Set of downed switches to DAG mapping: `({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ `
                                          `({s0} :> [v |-> {3}, e |-> {}])`
 
-This generated 6988498 distinct states, with a graph of diameter 213. The model took 22 minutes and 47 seconds to be verified.
+- We tested both with and without the IR Monitor (the spec that uses the monitor is `zenith_nr_with_monitor`, and the de facto `ZENITH` spec without reconciliation is `zenith_nr` that no longer needs this module): 
+    - **With IR Monitor:** This generated 6988498 distinct states, with a graph of diameter 213. The model took 22 minutes and 47 seconds to be verified.
+    - **Without IR Monitor:** This generated 707374 distinct states, with a graph of diameter 166. The model took 1 minute and 42 seconds to be verified.

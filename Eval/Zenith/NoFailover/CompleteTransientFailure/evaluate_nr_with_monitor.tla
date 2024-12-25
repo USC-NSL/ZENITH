@@ -1,4 +1,4 @@
----------------------------- MODULE evaluate_nr ----------------------------
+---------------------------- MODULE evaluate_no_monitor ----------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, dag, nib_constants
 
 CONSTANTS ofc0, rc0
@@ -43,7 +43,7 @@ VARIABLES TEEventQueue, DAGEventQueue, DAGQueue,
           prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
           currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
           seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
-          currDAG, IRSet, rowIndex, 
+          currDAG, IRSet, currIRMon, deleterIDMon, rowIndex, 
           rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
           resetIR, stepOfFailure, msg, irID, removedIR, 
           controllerFailedModules 
@@ -80,7 +80,7 @@ internal_zenith_vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
-    currDAG, IRSet, nextIRToSent, rowIndex, 
+    currDAG, IRSet, currIRMon, deleterIDMon, nextIRToSent, rowIndex, 
     rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
     resetIR, stepOfFailure, msg, irID, removedIR, 
     controllerFailedModules 
@@ -110,7 +110,7 @@ vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
-    currDAG, IRSet, nextIRToSent, rowIndex, 
+    currDAG, IRSet, currIRMon, deleterIDMon, nextIRToSent, rowIndex, 
     rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
     resetIR, stepOfFailure, msg, irID, removedIR, 
     controllerFailedModules 
@@ -127,6 +127,7 @@ ProcSet ==
     (* Zenith *)
     (({rc0} \X {NIB_EVENT_HANDLER})) \cup (({rc0} \X {CONT_TE})) \cup 
     (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup 
+    (({rc0} \X {CONT_MONITOR})) \cup 
     (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup 
     (({ofc0} \X {CONT_MONITOR})) \cup (({ofc0, rc0} \X {WATCH_DOG}))
 
@@ -147,7 +148,7 @@ Init == (* Locks *)
         /\ DAGQueue = <<>>
         /\ IRQueueNIB = <<>>
         /\ RCNIBEventQueue = <<>>
-        /\ RCProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE})
+        /\ RCProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE, CONT_MONITOR})
         /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
                          (({ofc0} \X {CONT_EVENT})) \cup
                          (({ofc0} \X {CONT_MONITOR})))
@@ -189,6 +190,8 @@ Init == (* Locks *)
         /\ stepOfFailure_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
         /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> [dag |-> 0]]
         /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
+        /\ currIRMon = [self \in ({rc0} \X {CONT_MONITOR}) |-> 0]
+        /\ deleterIDMon = [self \in ({rc0} \X {CONT_MONITOR}) |-> 0]
         /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ rowRemove = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
@@ -254,6 +257,7 @@ Init == (* Locks *)
                                         [] self \in ({rc0} \X {CONT_TE}) -> "ControllerTEProc"
                                         [] self \in ({rc0} \X {CONT_BOSS_SEQ}) -> "ControllerBossSeqProc"
                                         [] self \in ({rc0} \X {CONT_WORKER_SEQ}) -> "ControllerWorkerSeqProc"
+                                        [] self \in ({rc0} \X {CONT_MONITOR}) -> "controllerIRMonitor"
                                         [] self \in ({ofc0} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
                                         [] self \in ({ofc0} \X {CONT_EVENT}) -> "ControllerEventHandlerProc"
                                         [] self \in ({ofc0} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"
@@ -261,7 +265,7 @@ Init == (* Locks *)
 
 (* Get instances of Zenith and the topology and create the `Next` predicate *)
 Switch == INSTANCE switch
-Zenith == INSTANCE zenith_nr
+Zenith == INSTANCE zenith_nr_with_monitor
 
 SwitchStep == /\ Switch!Next
               /\ UNCHANGED internal_zenith_vars
@@ -287,6 +291,7 @@ Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in ({rc0} \X {CONT_TE}) : WF_internal_zenith_vars(Zenith!controllerTrafficEngineering(self))
         /\ \A self \in ({rc0} \X {CONT_BOSS_SEQ}) : WF_internal_zenith_vars(Zenith!controllerBossSequencer(self))
         /\ \A self \in ({rc0} \X {CONT_WORKER_SEQ}) : WF_internal_zenith_vars(Zenith!controllerSequencer(self))
+        /\ \A self \in ({rc0} \X {CONT_MONITOR}) : WF_internal_zenith_vars(Zenith!rcIRMonitor(self))
         /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_internal_zenith_vars(Zenith!controllerWorkerThreads(self))
         /\ \A self \in ({ofc0} \X {CONT_EVENT}) : WF_internal_zenith_vars(Zenith!controllerEventHandler(self))
         /\ \A self \in ({ofc0} \X {CONT_MONITOR}) : WF_internal_zenith_vars(Zenith!controllerMonitoringServer(self))
