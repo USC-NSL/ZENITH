@@ -178,13 +178,13 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     macro modifiedRead()
     begin
         rowIndex := getFirstIRIndexToRead(self);
-        nextIRToSent := IRQueueNIB[rowIndex].IR;
+        nextIRIDToSend := IRQueueNIB[rowIndex].IR;
         IRQueueNIB[rowIndex].tag := self;
     end macro;
     
     macro modifiedRemove()
     begin
-        rowRemove := getFirstIndexWith(nextIRToSent, self);
+        rowRemove := getFirstIndexWith(nextIRIDToSend, self);
         IRQueueNIB := removeFromSeq(IRQueueNIB, rowRemove);
     end macro;
 
@@ -248,7 +248,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
     end process
 
     fair process controllerWorkerThreads \in ({ofc0} \X CONTROLLER_THREAD_POOL)
-    variables nextIRToSent = 0, rowIndex = -1, rowRemove = -1, stepOfFailure = 0; 
+    variables nextIRIDToSend = 0, rowIndex = -1, rowRemove = -1, stepOfFailure = 0; 
     begin
     ControllerThread:
     while TRUE do
@@ -263,14 +263,14 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerModuleFails();
             goto ControllerThreadStateReconciliation;
         else 
-            ofcInternalState[self] := [type |-> STATUS_LOCKING, next |-> nextIRToSent];
+            ofcInternalState[self] := [type |-> STATUS_LOCKING, next |-> nextIRIDToSend];
             if (stepOfFailure = 2) then
                 controllerModuleFails();
                 goto ControllerThreadStateReconciliation;
             else    
-                if idThreadWorkingOnIR[nextIRToSent] = IR_UNLOCK then
-                    await threadWithLowerIDGetsTheLock(self, nextIRToSent, IRQueueNIB);
-                    idThreadWorkingOnIR[nextIRToSent] := self[2]
+                if idThreadWorkingOnIR[nextIRIDToSend] = IR_UNLOCK then
+                    await threadWithLowerIDGetsTheLock(self, nextIRIDToSend, IRQueueNIB);
+                    idThreadWorkingOnIR[nextIRIDToSend] := self[2]
                 else
                     ControllerThreadRemoveQueue1: 
                         controllerWaitForLockFree();
@@ -284,15 +284,15 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerWaitForLockFree();
             controllerModuleFailOrNot();
             if (controllerSubmoduleFailStat[self] = NotFailed) then
-                if ~isSwitchSuspended(IR2SW[nextIRToSent]) /\ IRStatus[nextIRToSent] = IR_NONE then
-                    IRStatus[nextIRToSent] := IR_SENT;
+                if ~isSwitchSuspended(IR2SW[nextIRIDToSend]) /\ IRStatus[nextIRIDToSend] = IR_NONE then
+                    IRStatus[nextIRIDToSend] := IR_SENT;
                     ControllerThreadForwardIR:
                         controllerWaitForLockFree();
                         whichStepToFail(2);
                         if (stepOfFailure # 1) then
-                            controllerSendIR(nextIRToSent);
+                            controllerSendIR(nextIRIDToSend);
                             if (stepOfFailure # 2) then
-                               ofcInternalState[self] := [type |-> STATUS_SENT_DONE, next |-> nextIRToSent];
+                               ofcInternalState[self] := [type |-> STATUS_SENT_DONE, next |-> nextIRIDToSend];
                             end if;
                         end if;                          
                         if (stepOfFailure # 0) then
@@ -308,7 +308,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerWaitForLockFree();
             controllerModuleFailOrNot();
             if (controllerSubmoduleFailStat[self] = NotFailed) then 
-                await ~isSwitchSuspended(IR2SW[nextIRToSent]);
+                await ~isSwitchSuspended(IR2SW[nextIRIDToSend]);
             else
                 goto ControllerThreadStateReconciliation;
             end if;
@@ -317,8 +317,8 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerWaitForLockFree();
             controllerModuleFailOrNot();
             if (controllerSubmoduleFailStat[self] = NotFailed) then
-                if IRStatus[nextIRToSent] = IR_NONE then
-                    ofcInternalState[self] := [type |-> STATUS_LOCKING, next |-> nextIRToSent]; 
+                if IRStatus[nextIRIDToSend] = IR_NONE then
+                    ofcInternalState[self] := [type |-> STATUS_LOCKING, next |-> nextIRIDToSend]; 
                     goto ControllerThreadSendIR;
                 end if;
             else
@@ -329,8 +329,8 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerWaitForLockFree();
             controllerModuleFailOrNot();
             if (controllerSubmoduleFailStat[self] = NotFailed) then
-                if idThreadWorkingOnIR[nextIRToSent] = self[2] then
-                    idThreadWorkingOnIR[nextIRToSent] := IR_UNLOCK;
+                if idThreadWorkingOnIR[nextIRIDToSend] = self[2] then
+                    idThreadWorkingOnIR[nextIRIDToSend] := IR_UNLOCK;
                 end if;
             else
                 goto ControllerThreadStateReconciliation;
@@ -340,7 +340,7 @@ ASSUME DOMAIN IR_TO_SWITCH_ASSIGNMENT = 1..MaxNumIRs
             controllerWaitForLockFree();
             whichStepToFail(3);
             if (stepOfFailure # 1) then 
-                SetScheduledIRs[IR2SW[nextIRToSent]] := SetScheduledIRs[IR2SW[nextIRToSent]]\{nextIRToSent};
+                SetScheduledIRs[IR2SW[nextIRIDToSend]] := SetScheduledIRs[IR2SW[nextIRIDToSend]]\{nextIRIDToSend};
                 if (stepOfFailure # 2) then 
                     ofcInternalState[self] := [type |-> NO_STATUS];
                     if (stepOfFailure # 3) then 

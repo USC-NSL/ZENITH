@@ -15,7 +15,7 @@ VARIABLES swSeqChangedStatus, controller2Switch, switch2Controller
 VARIABLES installedIRs
 
 (* These are hidden variables of Zenith specification, which we will expose. *)
-VARIABLES dependencyGraph, IRStatus, FirstInstall, nextIRToSent
+VARIABLES dependencyGraph, IRStatus, FirstInstall, nextIRIDToSend
 
 (* PlusCal program counter, shared between the two modules *)
 VARIABLES pc
@@ -60,7 +60,7 @@ internal_switch_vars == <<
 
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
-    dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
+    dependencyGraph, IRStatus, FirstInstall, nextIRIDToSend,
     ContProcSet, OFCProcSet, RCProcSet, 
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
     IR2SW, idThreadWorkingOnIR, ofcInternalState, rcInternalState, 
@@ -83,7 +83,7 @@ vars == <<
     RecoveryStatus, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
-    dependencyGraph, IRStatus, FirstInstall, nextIRToSent,
+    dependencyGraph, IRStatus, FirstInstall, nextIRIDToSend,
     ContProcSet, OFCProcSet, RCProcSet,
     controllerSubmoduleFailNum, controllerSubmoduleFailStat, 
     IR2SW, idThreadWorkingOnIR, ofcInternalState, rcInternalState, 
@@ -118,7 +118,7 @@ Init == (* Locks *)
         /\ FirstInstall = [x \in 1..MaxNumIRs |-> 0]
         /\ dependencyGraph \in generateConnectedDAG(1..MaxNumIRs)
         /\ IRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
-        /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
+        /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         (* Hidden Zenith variables *)
         /\ RCProcSet = ({rc0} \X {CONT_SEQ})
         /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
@@ -331,7 +331,7 @@ IRCriticalSection ==
             \/ x = y
             \/ <<pc[x], pc[y]>> \notin IRCriticalSet \X IRCriticalSet
             \/ /\ <<pc[x], pc[y]>> \in IRCriticalSet \X IRCriticalSet
-               /\ nextIRToSent[x] # nextIRToSent[y]
+               /\ nextIRIDToSend[x] # nextIRIDToSend[y]
 
 RedundantInstallation == \A x \in 1..MaxNumIRs: \/ IRStatus[x] = IR_DONE
                                                 \/ FirstInstall[x] = 0

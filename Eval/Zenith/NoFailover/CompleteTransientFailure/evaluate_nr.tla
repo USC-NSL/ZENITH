@@ -16,7 +16,7 @@ VARIABLES swSeqChangedStatus, controller2Switch, switch2Controller
 VARIABLES installedIRs
 
 (* These are hidden variables of Zenith specification, which we will expose. *)
-VARIABLES NIBIRStatus, FirstInstall, nextIRToSent
+VARIABLES NIBIRStatus, FirstInstall, nextIRIDToSend
 
 (* PlusCal program counter, shared between the two modules *)
 VARIABLES pc
@@ -80,7 +80,7 @@ internal_zenith_vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
-    currDAG, IRSet, nextIRToSent, rowIndex, 
+    currDAG, IRSet, nextIRIDToSend, rowIndex, 
     rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
     resetIR, stepOfFailure, msg, irID, removedIR, 
     controllerFailedModules 
@@ -110,7 +110,7 @@ vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
-    currDAG, IRSet, nextIRToSent, rowIndex, 
+    currDAG, IRSet, nextIRIDToSend, rowIndex, 
     rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
     resetIR, stepOfFailure, msg, irID, removedIR, 
     controllerFailedModules 
@@ -140,7 +140,7 @@ Init == (* Locks *)
         (* Exposed Zenith variables *)
         /\ FirstInstall = [x \in 1..MaxNumIRs |-> 0]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
-        /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
+        /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         (* Hidden Zenith variables *)
         /\ TEEventQueue = <<>>
         /\ DAGEventQueue = <<>>
@@ -189,7 +189,7 @@ Init == (* Locks *)
         /\ stepOfFailure_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
         /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> [dag |-> 0]]
         /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
-        /\ nextIRToSent = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
+        /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ rowRemove = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ stepOfFailure_c = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
@@ -399,7 +399,7 @@ IRCriticalSection == LET
                         \A x, y \in {ofc0} \X CONTROLLER_THREAD_POOL: \/ x = y
                                                                       \/ <<pc[x], pc[y]>> \notin IRCriticalSet \X IRCriticalSet
                                                                       \/ /\ <<pc[x], pc[y]>> \in IRCriticalSet \X IRCriticalSet
-                                                                         /\ nextIRToSent[x] # nextIRToSent[y]
+                                                                         /\ nextIRIDToSend[x] # nextIRIDToSend[y]
 
 RedundantInstallation == \A x \in 1..MaxNumIRs: \/ NIBIRStatus[x] = IR_DONE
                                                 \/ FirstInstall[x] = 0

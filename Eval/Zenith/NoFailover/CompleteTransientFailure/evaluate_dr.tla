@@ -1,4 +1,4 @@
----------------------------- MODULE evaluate ----------------------------
+---------------------------- MODULE evaluate_dr ----------------------------
 EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, dag, nib_constants
 
 CONSTANTS ofc0, rc0
@@ -33,20 +33,21 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
 
 \* For zenith
 VARIABLES TEEventQueue, DAGEventQueue, DAGQueue, 
-          IRQueueNIB, RCNIBEventQueue, 
-          ContProcSet, RCProcSet, OFCProcSet, 
-          controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
-          RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-          rcInternalState, ofcInternalState,
-          SetScheduledIRs, 
-          irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
-          idThreadWorkingOnIR, workerThreadRanking,
-          monitoringEvent, rowIndex, toBeScheduledIRs, 
-          stepOfFailure, stepOfFailure_, stepOfFailure_c,
-          setRemovableIRs, currDAG, nextIR, currIR, init, worker, currSetDownSw,
-          event, msg, resetIR, currIRInDAG, prev_dag_id, topoChangeEvent,
-          setIRsToReset, nxtDAGVertices, irID, setIRsInDAG, 
-          seqEvent, nxtDAG, rowRemove, controllerFailedModules
+          IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
+          ContProcSet, controllerSubmoduleFailNum, 
+          controllerSubmoduleFailStat, DAGState, RCIRStatus, 
+          RCSwSuspensionStatus, SwSuspensionStatus, 
+          rcInternalState, ofcInternalState, SetScheduledIRs, irTypeMapping, 
+          ir2sw, idWorkerWorkingOnDAG, IRDoneSet, idThreadWorkingOnIR, 
+          workerThreadRanking, event, topoChangeEvent, currSetDownSw, 
+          prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
+          currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
+          seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
+          currDAG, IRSet, rowIndex, 
+          rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
+          resetIR, stepOfFailure, msg, irID, removedIR, 
+          controllerFailedModules,
+          flowStatReqStatus, switchIndexing, setIRs, reportedIR
 
 
 (* Each time either of the switches OR Zenith take a step, these CAN change *)
@@ -69,22 +70,22 @@ internal_switch_vars == <<
 
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
-    NIBIRStatus, FirstInstall, nextIRIDToSend,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, 
-    ContProcSet, RCProcSet, OFCProcSet, 
-    controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
-    RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-    rcInternalState, ofcInternalState,
-    SetScheduledIRs, 
-    irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
-    idThreadWorkingOnIR, workerThreadRanking,
-    monitoringEvent, rowIndex, toBeScheduledIRs, 
-    stepOfFailure, stepOfFailure_, stepOfFailure_c,
-    setRemovableIRs, currDAG, nextIR, currIR, init, worker, currSetDownSw,
-    event, msg, resetIR, currIRInDAG, prev_dag_id, topoChangeEvent,
-    setIRsToReset, nxtDAGVertices, irID, setIRsInDAG, 
-    seqEvent, nxtDAG, rowRemove, controllerFailedModules
+    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    ContProcSet, controllerSubmoduleFailNum, 
+    controllerSubmoduleFailStat, DAGState, RCIRStatus, 
+    RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
+    rcInternalState, ofcInternalState, SetScheduledIRs, irTypeMapping, 
+    ir2sw, idWorkerWorkingOnDAG, IRDoneSet, idThreadWorkingOnIR, 
+    workerThreadRanking, event, topoChangeEvent, currSetDownSw, 
+    prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
+    currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
+    seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
+    currDAG, IRSet, nextIRIDToSend, rowIndex, 
+    rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
+    resetIR, stepOfFailure, msg, irID, removedIR, 
+    controllerFailedModules ,
+    flowStatReqStatus, switchIndexing, setIRs, reportedIR
 >>
 
 (* Any one of these variables can stutter ... *)
@@ -100,22 +101,22 @@ vars == <<
     RecoveryStatus, ingressPkt, ingressIR, egressMsg, ofaInMsg, 
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
-    NIBIRStatus, FirstInstall, nextIRIDToSend,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, 
-    ContProcSet, RCProcSet, OFCProcSet, 
-    controllerSubmoduleFailNum, controllerSubmoduleFailStat, DAGState, 
-    RCIRStatus, RCSwSuspensionStatus, SwSuspensionStatus, 
-    rcInternalState, ofcInternalState,
-    SetScheduledIRs, 
-    irTypeMapping, ir2sw, DAGID, deleterID, idWorkerWorkingOnDAG, 
-    idThreadWorkingOnIR, workerThreadRanking,
-    monitoringEvent, rowIndex, toBeScheduledIRs, 
-    stepOfFailure, stepOfFailure_, stepOfFailure_c,
-    setRemovableIRs, currDAG, nextIR, currIR, init, worker, currSetDownSw,
-    event, msg, resetIR, currIRInDAG, prev_dag_id, topoChangeEvent,
-    setIRsToReset, nxtDAGVertices, irID, setIRsInDAG, 
-    seqEvent, nxtDAG, rowRemove, controllerFailedModules
+    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    ContProcSet, controllerSubmoduleFailNum, 
+    controllerSubmoduleFailStat, DAGState, RCIRStatus, 
+    RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
+    rcInternalState, ofcInternalState, SetScheduledIRs, irTypeMapping, 
+    ir2sw, idWorkerWorkingOnDAG, IRDoneSet, idThreadWorkingOnIR, 
+    workerThreadRanking, event, topoChangeEvent, currSetDownSw, 
+    prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
+    currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
+    seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
+    currDAG, IRSet, nextIRIDToSend, rowIndex, 
+    rowRemove, stepOfFailure_c, monitoringEvent, setIRsToReset, 
+    resetIR, stepOfFailure, msg, irID, removedIR, 
+    controllerFailedModules,
+    flowStatReqStatus, switchIndexing, setIRs, reportedIR
 >>
 
 (* All of our processes *)
@@ -163,9 +164,13 @@ Init == (* Locks *)
         /\ rcInternalState = [x \in RCProcSet |-> [type |-> NO_STATUS]]
         /\ ofcInternalState = [x \in OFCProcSet |-> [type |-> NO_STATUS]]
         /\ SetScheduledIRs = [y \in SW |-> {}]
-        /\ irTypeMapping = [x \in 1.. MaxNumIRs |-> [type |-> INSTALL_FLOW, flow |-> IR2FLOW[x]]]
-        /\ ir2sw = IR2SW
+        /\ irTypeMapping = [x \in 1.. MaxNumIRs |-> [type |-> INSTALL_FLOW, flow |-> IR2FLOW[x]]] @@
+                           [x \in (2*MaxNumIRs+1)..(2*MaxNumIRs + Cardinality(SW)) |-> [type |-> FLOW_STAT_REQ, flow |-> ALL_FLOW]]
+        /\ switchIndexing = (             CHOOSE x \in [1..Cardinality(SW) -> SW]:
+                             ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
+        /\ ir2sw = IR2SW @@ [x \in (2*MaxNumIRs+1)..(2*MaxNumIRs + Cardinality(SW)) |-> switchIndexing[x - 2*MaxNumIRs]]
         /\ idWorkerWorkingOnDAG = [x \in 1..MaxDAGID |-> DAG_UNLOCK]
+        /\ IRDoneSet = {}
         /\ idThreadWorkingOnIR = [x \in 1..MaxNumIRs |-> IR_UNLOCK] @@ [x \in (MaxNumIRs + 1)..(2*MaxNumIRs + 1) |-> IR_UNLOCK]
         /\ workerThreadRanking = (CHOOSE x \in [CONTROLLER_THREAD_POOL -> 1..Cardinality(CONTROLLER_THREAD_POOL)]:
                                   ~\E y, z \in DOMAIN x: y # z /\ x[y] = x[z])
@@ -182,12 +187,14 @@ Init == (* Locks *)
         /\ currIRInDAG = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setIRsInDAG = [self \in ({rc0} \X {CONT_TE}) |-> {}]
+        /\ prev_dag = [self \in ({rc0} \X {CONT_TE}) |-> [e |-> {}, v |-> {}]]
         /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> [type |-> 0]]
         /\ worker = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> 0]
         /\ toBeScheduledIRs = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
         /\ nextIR = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
         /\ stepOfFailure_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
         /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> [dag |-> 0]]
+        /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
         /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
         /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ rowRemove = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
@@ -198,7 +205,11 @@ Init == (* Locks *)
         /\ stepOfFailure = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
         /\ msg = [self \in ({ofc0} \X {CONT_MONITOR}) |-> [type |-> 0]]
         /\ irID = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
+        /\ removedIR = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
         /\ controllerFailedModules = [self \in ({ofc0, rc0} \X {WATCH_DOG}) |-> {}]
+        /\ flowStatReqStatus = [x \in (2*MaxNumIRs+1)..(2*MaxNumIRs + Cardinality(SW)) |-> IR_NONE]
+        /\ setIRs = [self \in ({ofc0} \X {CONT_MONITOR}) |-> {}]
+        /\ reportedIR = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
         (* Exposed switch variables *)
         /\ installedIRs = <<>>
         (* Hidden switch variables *)
@@ -259,7 +270,7 @@ Init == (* Locks *)
 
 (* Get instances of Zenith and the topology and create the `Next` predicate *)
 Switch == INSTANCE switch
-Zenith == INSTANCE zenith
+Zenith == INSTANCE zenith_dr
 
 SwitchStep == /\ Switch!Next
               /\ UNCHANGED internal_zenith_vars
@@ -387,6 +398,9 @@ CorrectDoneStatusController == (\A x \in 1..MaxNumIRs: \/ NIBIRStatus[x] = IR_DO
                                                        
 InstallationLivenessProp == <>[] (/\ CorrectDAGInstalled 
                                   /\ CorrectDoneStatusController)
+InstallationInvProp == \/ ENABLED Next
+                       \/ /\ CorrectDAGInstalled
+                          /\ CorrectDoneStatusController
 \* Safety Properties
 IRCriticalSection == LET 
                         IRCriticalSet == {"ControllerThreadSendIR", "ControllerThreadForwardIR", "ControllerThreadSaveToDB2", "WaitForIRToHaveCorrectStatus", "ReScheduleifIRNone"}
@@ -395,9 +409,8 @@ IRCriticalSection == LET
                                                                       \/ <<pc[x], pc[y]>> \notin IRCriticalSet \X IRCriticalSet
                                                                       \/ /\ <<pc[x], pc[y]>> \in IRCriticalSet \X IRCriticalSet
                                                                          /\ nextIRIDToSend[x] # nextIRIDToSend[y]
-
-RedundantInstallation == \A x \in 1..MaxNumIRs: \/ NIBIRStatus[x] = IR_DONE
-                                                \/ FirstInstall[x] = 0
+EachIRAtMostOnce == ~\E x, y \in DOMAIN installedIRs: /\ x # y
+                                                      /\ installedIRs[x] = installedIRs[y]
 firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
 whichDAG(ir) == CHOOSE x \in rangeSeq(TOPO_DAG_MAPPING): ir \in x.v
 
@@ -407,76 +420,65 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
                                                          /\ <<Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
                                                       \/ /\ firstHappening(installedIRs, x) > firstHappening(installedIRs, y)
                                                          /\ <<Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
-EachIRAtMostOnce == ~\E x, y \in DOMAIN installedIRs: /\ x # y
-                                                      /\ installedIRs[x] = installedIRs[y]
 
 ----
 (* EVALUATION *)
 ----
 
 CONSTANTS
-s0, s1, s2
+s0, s1
 ----
 
 CONSTANTS
 t0
 ----
 
-\* Consider a topology of 3 switches
-const_SW == {s0, s1, s2}
+\* Consider a topology of 2 switches
+const_SW == {s0, s1}
 ----
 
-\* Synchronization of the worker pool remains unchanged since `BothTransientFailure` spec,
-\* thus we can be sure that it is correct with regards to races between two threads in it.
-\* Since the state space is large, we simplify it into a single thread.
+\* Since we build on top of `CompletePermanentFailure`, we can just use 1 thread
 const_CONTROLLER_THREAD_POOL == {t0}
 ----
 
-\* Consider only complete failures (so no partial and transient)
-const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 0]}>>
+\* Consider only transient failures (so no partial and complete)
+const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}>>
 ----
 
-\* Consider 5 instructions to install
-const_MaxNumIRs == 5
+\* Consider 3 instructions to install
+const_MaxNumIRs == 3
 ----
 
-const_MaxNumFlows == 5
+const_MaxNumFlows == 3
 ----
 
 const_MaxDAGID == 15
 ----
 
-\* This spec has a pretty large state space, so let us put aside OFC module failures
-\* We have already verified that we are robust to them as part of `bothTransientFailure`
+\* Since we build on top of `CompletePermanentFailure`, we can just focus on switch failures
 const_MAX_NUM_CONTROLLER_SUB_FAILURE == [ofc0 |-> 0, rc0 |-> 0]
 ----
 
 \* Use the simple switch model
-\* Since this is a complete failure, there is no point in simulating internal behavior
-const_WHICH_SWITCH_MODEL == (s0 :> SW_SIMPLE_MODEL) @@ 
-                            (s1 :> SW_SIMPLE_MODEL) @@ 
-                            (s2 :> SW_SIMPLE_MODEL)
+const_WHICH_SWITCH_MODEL == (s0 :> SW_SIMPLE_MODEL) @@ (s1 :> SW_SIMPLE_MODEL)
 ----
 
-\* Because of a technicallity, we need to allow CPU failures, but ideally this would not have an effect
-const_SW_MODULE_CAN_FAIL_OR_NOT == [cpu |-> 1, nicAsic |-> 0, ofa |-> 0, installer |-> 0]
+const_SW_MODULE_CAN_FAIL_OR_NOT == [cpu |-> 0, nicAsic |-> 0, ofa |-> 0, installer |-> 0]
 ----
+
+\* Eventually, assuming fairness, we converge to the case where all switches are alive and the DAG is installed
+const_FINAL_DAG == [v |-> {1, 2}, e |-> {<<1, 2>>}]
 
 \* This just makes things convinient
 const_IR2FLOW == [x \in 1..MaxNumIRs |-> x]
 ----
 
 \* Where to install each IR?
-const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s2) @@ (4 :> s1) @@ (5 :> s2)
+const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
 
 \* Mapping between topology and DAG
 const_TOPO_DAG_MAPPING == 
-    \* Start with a single IR on each switch
-    ({} :> [v |-> {1, 2, 3}, e |-> {<<1, 2>>, <<1, 3>>}]) @@ 
-    \* Then, let `s0` go away and install 2 completely new IRs
-    ({s0} :> [v |-> {4, 5}, e |-> {<<5, 4>>}])
-
-\* The network should end up with the following DAG always
-const_FINAL_DAG == [v |-> {4, 5}, e |-> {<<5, 4>>}]
+    ({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ 
+    ({s0} :> [v |-> {3}, e |-> {}])
 
 =============================================================================
