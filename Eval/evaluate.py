@@ -10,8 +10,9 @@ THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # Here are the directory for all the modules that we'll need
 LIBS = [
-    "Include",    # Evaluation constants, DAG definition, constants for switch/controller
-    "Switch"      # The actual switch specification
+    "Include",       # Evaluation constants, DAG definition, constants for switch/controller
+    "Switch",        # The actual switch specification
+    "Nadir/Include"  # Nadir definitions
 ]
 
 # These are the commands we invoke ...
