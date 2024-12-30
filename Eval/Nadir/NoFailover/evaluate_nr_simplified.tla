@@ -16,7 +16,7 @@ VARIABLES swSeqChangedStatus, controller2Switch, switch2Controller
 VARIABLES installedIRs
 
 (* These are hidden variables of Zenith specification, which we will expose. *)
-VARIABLES NIBIRStatus, FirstInstall, nextIRIDToSend
+VARIABLES NIBIRStatus, nextIRIDToSend
 
 (* PlusCal program counter, shared between the two modules *)
 VARIABLES pc
@@ -43,14 +43,13 @@ VARIABLES TEEventQueue, DAGEventQueue, DAGQueue,
           prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
           currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
           seqEvent, worker, toBeScheduledIRs, nextIR,
-          currDAG, IRSet, rowIndex, 
-          rowRemove, monitoringEvent, setIRsToReset, 
+          currDAG, IRSet, index, 
+          monitoringEvent, setIRsToReset, 
           resetIR, msg, irID, removedIR
 
 
 (* Each time either of the switches OR Zenith take a step, these CAN change *)
 shared_vars == <<
-    switchLock, controllerLock,
     swSeqChangedStatus, controller2Switch, switch2Controller,
     pc
 >>
@@ -58,6 +57,7 @@ shared_vars == <<
 (* Each time Zenith takes a step, these remain unchanged *)
 internal_switch_vars == <<
     installedIRs,
+    switchLock, controllerLock,
     sw_fail_ordering_var, SwProcSet, 
     switchStatus, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
     Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
@@ -69,7 +69,7 @@ internal_switch_vars == <<
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
     ContProcSet, 
     DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
@@ -79,8 +79,8 @@ internal_zenith_vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR,
-    currDAG, IRSet, nextIRIDToSend, rowIndex, 
-    rowRemove, monitoringEvent, setIRsToReset, 
+    currDAG, IRSet, nextIRIDToSend, index, 
+    monitoringEvent, setIRsToReset, 
     resetIR, msg, irID, removedIR
 >>
 
@@ -98,7 +98,7 @@ vars == <<
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
     ContProcSet, 
     DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
@@ -108,8 +108,8 @@ vars == <<
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
     seqEvent, worker, toBeScheduledIRs, nextIR,
-    currDAG, IRSet, nextIRIDToSend, rowIndex, 
-    rowRemove, monitoringEvent, setIRsToReset, 
+    currDAG, IRSet, nextIRIDToSend, index, 
+    monitoringEvent, setIRsToReset, 
     resetIR, msg, irID, removedIR
 >>
 
@@ -139,7 +139,6 @@ Init == (* Locks *)
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
         (* Exposed Zenith variables *)
-        /\ FirstInstall = [x \in 1..MaxNumIRs |-> 0]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
         /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
         (* Hidden Zenith variables *)
@@ -162,7 +161,6 @@ Init == (* Locks *)
         /\ SetScheduledIRs = [y \in SW |-> {}]
         /\ ir2sw = IR2SW
         /\ seqWorkerIsBusy = FALSE
-        /\ IRDoneSet = {}
         /\ idThreadWorkingOnIR = [x \in 1..2*MaxNumIRs |-> NADIR_NULL]
         /\ event = [self \in ({rc0} \X {NIB_EVENT_HANDLER}) |-> NADIR_NULL]
         /\ topoChangeEvent = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
@@ -184,8 +182,8 @@ Init == (* Locks *)
         /\ nextIR = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> NADIR_NULL]
         /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> NADIR_NULL]
         /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
-        /\ rowIndex = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
-        /\ rowRemove = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
+        /\ IRDoneSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
+        /\ index = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
         /\ monitoringEvent = [self \in ({ofc0} \X {CONT_EVENT}) |-> NADIR_NULL]
         /\ setIRsToReset = [self \in ({ofc0} \X {CONT_EVENT}) |-> {}]
         /\ resetIR = [self \in ({ofc0} \X {CONT_EVENT}) |-> NADIR_NULL]
@@ -300,8 +298,6 @@ IRCriticalSection == LET
                                                                       \/ /\ <<pc[x], pc[y]>> \in IRCriticalSet \X IRCriticalSet
                                                                          /\ nextIRIDToSend[x] # nextIRIDToSend[y]
 
-RedundantInstallation == \A x \in 1..MaxNumIRs: \/ NIBIRStatus[x] = IR_DONE
-                                                \/ FirstInstall[x] = 0
 firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
 whichDAG(ir) == CHOOSE x \in rangeSeq(TOPO_DAG_MAPPING): ir \in x.v
 
