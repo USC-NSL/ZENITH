@@ -60,4 +60,14 @@ NadirNullable(x) == x \cup {NADIR_NULL}
 (******************************************************************************************)
 NadirLocalVariableTypeCheck(varType, var) == \A x \in DOMAIN var: var[x] \in varType
 
+(*******************************************************************************************)
+(* Nadir _expects_ processes to be identified with the product of two sets `M x SM`, where *)
+(* `M` is a singleton containing a model value that defined the _module_ of the process,   *)
+(* and `SM` is a non-empty set of model values, describing _sub-modules_ of the process.   *)
+(* A process belongs only to a single module, and its sub-modules can fail independently.  *)
+(* The following signals to Nadir what such identifiers are.                               *)
+(*******************************************************************************************)
+NadirProcessIdentifier(moduleMV, setOfSubModuleMVs) == {moduleMV} \X setOfSubModuleMVs
+NadirSetOfPIDs(PIDSet) == \A PID \in PIDSet: Len(PID) = 2
+
 ======================

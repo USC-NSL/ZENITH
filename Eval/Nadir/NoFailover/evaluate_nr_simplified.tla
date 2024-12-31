@@ -5,6 +5,7 @@ CONSTANTS ofc0, rc0
 CONSTANTS CONTROLLER_THREAD_POOL, CONT_WORKER_SEQ, CONT_BOSS_SEQ, CONT_MONITOR, CONT_EVENT, 
           WATCH_DOG, NIB_EVENT_HANDLER, CONT_TE
 CONSTANTS TOPO_DAG_MAPPING, IR2SW, IR2FLOW, FINAL_DAG
+CONSTANTS RCProcSet, OFCProcSet
 
 (* Lock for switch and controller for optimization, shared between the two *)
 VARIABLES switchLock, controllerLock
@@ -33,8 +34,7 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
 
 \* For zenith
 VARIABLES TEEventQueue, DAGEventQueue, DAGQueue, 
-          IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
-          ContProcSet, 
+          IRQueueNIB, RCNIBEventQueue,
           DAGState, RCIRStatus, 
           RCSwSuspensionStatus, SwSuspensionStatus, 
           rcInternalState, ofcInternalState, SetScheduledIRs, 
@@ -69,8 +69,7 @@ internal_switch_vars == <<
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
-    ContProcSet, 
+    IRQueueNIB, RCNIBEventQueue, 
     DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
     rcInternalState, ofcInternalState, SetScheduledIRs, 
@@ -98,8 +97,7 @@ vars == <<
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
-    ContProcSet, 
+    IRQueueNIB, RCNIBEventQueue, 
     DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
     rcInternalState, ofcInternalState, SetScheduledIRs, 
@@ -147,11 +145,6 @@ Init == (* Locks *)
         /\ DAGQueue = <<>>
         /\ IRQueueNIB = <<>>
         /\ RCNIBEventQueue = <<>>
-        /\ RCProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE})
-        /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
-                         (({ofc0} \X {CONT_EVENT})) \cup
-                         (({ofc0} \X {CONT_MONITOR})))
-        /\ ContProcSet = (RCProcSet \cup OFCProcSet)
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
         /\ RCIRStatus = [y \in 1..MaxNumIRs |-> IR_NONE]
         /\ RCSwSuspensionStatus = [y \in SW |-> SW_RUN]
@@ -312,6 +305,10 @@ TypeOK == Zenith!TypeOK
 ----
 (* EVALUATION *)
 ----
+
+\* Processes
+const_RCProcSet == NadirProcessIdentifier(rc0, {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE, CONT_MONITOR})
+const_OFCProcSet == NadirProcessIdentifier(ofc0, CONTROLLER_THREAD_POOL \cup {CONT_EVENT, CONT_MONITOR})
 
 CONSTANTS
 s0, s1
