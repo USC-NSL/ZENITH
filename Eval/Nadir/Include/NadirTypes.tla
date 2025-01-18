@@ -40,12 +40,25 @@ NadirFunctionTypeCheck(domainSet, rangeElemSet, f) == /\ DOMAIN f \subseteq doma
 NadirDoubleFunctionTypeCheck(domainSet1, domainSet2, rangeElemSet2, f) == /\ DOMAIN f \subseteq domainSet1
                                                                           /\ \A x \in DOMAIN f: NadirFunctionTypeCheck(domainSet2, rangeElemSet2, f[x])
 
-(***************************************************************************)
-(* A queue of messages, is a tuple that is only accessed on head and tail. *)
-(* The code generation specifically checks for this in the spec and the    *)
-(* implementation will make optimizations based on this fact.              *)
-(***************************************************************************)
-NadirQueueOfMessages(messageSet, queue) == queue \in Seq(messageSet)
+(********************************************************************************)
+(* A FIFO queue of messages, is a tuple that is only accessed on head and tail. *)
+(* The code generation specifically checks for this in the spec and the         *)
+(* implementation will make optimizations based on this fact.                   *)
+(********************************************************************************)
+NadirFIFO(messageSet, queue) == queue \in Seq(messageSet)
+
+(*****************************************************************************)
+(* A FIFO queue that can emit messages to multiple destinations when needed. *)
+(* Semantically, it is equivalent to a function mapping some domain to a set *)
+(* of FIFO queues like above.                                                *)
+(*****************************************************************************)
+NadirFanoutFIFO(destinationSet, messageSet, functionOfQueues) == NadirFunctionTypeCheck(destinationSet, Seq(messageSet), functionOfQueues)
+
+(******************************************************************************)
+(* The queue above is a FIFO, this one implies that it is an AckQueue instead *)
+(******************************************************************************)
+NadirAckQueue(messageSet, queue) == queue \in Seq(messageSet)
+                                    \* /\ \A x \in messageSet: "tag" \in DOMAIN x
 
 (**********************************************************************)
 (* This asserts that the set of given variables can be Null at times. *)

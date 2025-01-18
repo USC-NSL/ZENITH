@@ -1,11 +1,10 @@
----------------------------- MODULE evaluate_nr_simplified ----------------------------
-EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, dag, nib_constants, NadirTypes
+---------------------------- MODULE evaluate_optimized_nr ----------------------------
+EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, nib_constants, dag, NadirTypes, NadirAckQueue
 
 CONSTANTS ofc0, rc0
 CONSTANTS CONTROLLER_THREAD_POOL, CONT_WORKER_SEQ, CONT_BOSS_SEQ, CONT_MONITOR, CONT_EVENT, 
           WATCH_DOG, NIB_EVENT_HANDLER, CONT_TE
-CONSTANTS TOPO_DAG_MAPPING, IR2SW, IR2FLOW, FINAL_DAG
-CONSTANTS RCProcSet, OFCProcSet, ContProcSet
+CONSTANTS TOPO_DAG_MAPPING, IR2SW, FINAL_DAG
 
 (* Lock for switch and controller for optimization, shared between the two *)
 VARIABLES switchLock, controllerLock
@@ -17,7 +16,7 @@ VARIABLES swSeqChangedStatus, controller2Switch, switch2Controller
 VARIABLES installedIRs
 
 (* These are hidden variables of Zenith specification, which we will expose. *)
-VARIABLES NIBIRStatus, nextIRIDToSend
+VARIABLES NIBIRStatus, FirstInstall
 
 (* PlusCal program counter, shared between the two modules *)
 VARIABLES pc
@@ -34,24 +33,25 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
 
 \* For zenith
 VARIABLES TEEventQueue, DAGEventQueue, DAGQueue, 
-          IRQueueNIB, RCNIBEventQueue,
-          DAGState, RCIRStatus, 
+          IRQueueNIB, RCNIBEventQueue, RCProcSet, OFCProcSet, 
+          ContProcSet, controllerSubmoduleFailNum, 
+          controllerSubmoduleFailStat, DAGState, RCIRStatus, 
           RCSwSuspensionStatus, SwSuspensionStatus, 
           rcInternalState, ofcInternalState, SetScheduledIRs, 
-          ir2sw, seqWorkerIsBusy, IRDoneSet, 
+          IRDoneSet, seqWorkerIsBusy,
           event, topoChangeEvent, currSetDownSw, 
           prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
           currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
-          seqEvent, worker, toBeScheduledIRs, nextIR,
-          currDAG, IRSet, index, 
-          monitoringEvent, setIRsToReset, 
-          resetIR, msg, irID, removedIR,
-          stepOfFailure, stepOfFailure_, stepOfFailure_c,
-          controllerSubmoduleFailNum, controllerSubmoduleFailStat, controllerFailedModules
+          seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
+          currDAG, IRSet, index,
+          stepOfFailure_c, monitoringEvent, setIRsToReset, 
+          resetIR, stepOfFailure, msg, irID, removedIR, 
+          controllerFailedModules, nextIRIDToSend
 
 
 (* Each time either of the switches OR Zenith take a step, these CAN change *)
 shared_vars == <<
+    switchLock, controllerLock,
     swSeqChangedStatus, controller2Switch, switch2Controller,
     pc
 >>
@@ -59,7 +59,6 @@ shared_vars == <<
 (* Each time Zenith takes a step, these remain unchanged *)
 internal_switch_vars == <<
     installedIRs,
-    switchLock, controllerLock,
     sw_fail_ordering_var, SwProcSet, 
     switchStatus, NicAsic2OfaBuff, Ofa2NicAsicBuff, 
     Installer2OfaBuff, Ofa2InstallerBuff, TCAM, controlMsgCounter, 
@@ -71,20 +70,20 @@ internal_switch_vars == <<
 (* Each time a switch takes a step, these remain unchanged *)
 internal_zenith_vars == <<
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, 
-    DAGState, RCIRStatus, 
+    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    ContProcSet, controllerSubmoduleFailNum, 
+    controllerSubmoduleFailStat, DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
     rcInternalState, ofcInternalState, SetScheduledIRs, 
-    ir2sw, seqWorkerIsBusy, IRDoneSet, 
+    IRDoneSet, seqWorkerIsBusy,
     event, topoChangeEvent, currSetDownSw, 
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
-    seqEvent, worker, toBeScheduledIRs, nextIR,
-    currDAG, IRSet, nextIRIDToSend, index, 
-    monitoringEvent, setIRsToReset, 
-    resetIR, msg, irID, removedIR,
-    stepOfFailure, stepOfFailure_, stepOfFailure_c,
-    controllerSubmoduleFailNum, controllerSubmoduleFailStat, controllerFailedModules
+    seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
+    currDAG, IRSet, nextIRIDToSend, index,
+    stepOfFailure_c, monitoringEvent, setIRsToReset, 
+    resetIR, stepOfFailure, msg, irID, removedIR, 
+    controllerFailedModules, nextIRIDToSend
 >>
 
 (* Any one of these variables can stutter ... *)
@@ -101,20 +100,20 @@ vars == <<
     ofaOutConfirmation, installerInIR, statusMsg, notFailedSet, 
     failedElem, obj, failedSet, statusResolveMsg, recoveredElem,
     TEEventQueue, DAGEventQueue, DAGQueue, 
-    IRQueueNIB, RCNIBEventQueue, 
-    DAGState, RCIRStatus, 
+    IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
+    ContProcSet, controllerSubmoduleFailNum, 
+    controllerSubmoduleFailStat, DAGState, RCIRStatus, 
     RCSwSuspensionStatus, NIBIRStatus, SwSuspensionStatus, 
     rcInternalState, ofcInternalState, SetScheduledIRs, 
-    ir2sw, seqWorkerIsBusy, IRDoneSet, 
+    IRDoneSet, seqWorkerIsBusy,
     event, topoChangeEvent, currSetDownSw, 
     prev_dag_id, init, DAGID, nxtDAG, deleterID, setRemovableIRs, 
     currIR, currIRInDAG, nxtDAGVertices, setIRsInDAG, prev_dag, 
-    seqEvent, worker, toBeScheduledIRs, nextIR,
+    seqEvent, worker, toBeScheduledIRs, nextIR, stepOfFailure_, 
     currDAG, IRSet, nextIRIDToSend, index, 
-    monitoringEvent, setIRsToReset, 
-    resetIR, msg, irID, removedIR,
-    stepOfFailure, stepOfFailure_, stepOfFailure_c,
-    controllerSubmoduleFailNum, controllerSubmoduleFailStat, controllerFailedModules
+    stepOfFailure_c, monitoringEvent, setIRsToReset, 
+    resetIR, stepOfFailure, msg, irID, removedIR, 
+    controllerFailedModules 
 >>
 
 (* All of our processes *)
@@ -131,10 +130,6 @@ ProcSet ==
     (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup 
     (({ofc0} \X {CONT_MONITOR})) \cup (({ofc0, rc0} \X {WATCH_DOG}))
 
-(* Get instances of Zenith and the topology and create the `Next` predicate *)
-Switch == INSTANCE switch
-Zenith == INSTANCE zenith_nr_simplified
-
 Init == (* Locks *)
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
@@ -143,57 +138,70 @@ Init == (* Locks *)
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
         (* Exposed Zenith variables *)
+        /\ FirstInstall = [x \in 1..MaxNumIRs |-> 0]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> IR_NONE]
-        /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
         (* Hidden Zenith variables *)
-        /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
-        /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
-        /\ controllerFailedModules = [self \in ({ofc0, rc0} \X {WATCH_DOG}) |-> {}]
         /\ TEEventQueue = <<>>
         /\ DAGEventQueue = <<>>
         /\ DAGQueue = <<>>
         /\ IRQueueNIB = <<>>
         /\ RCNIBEventQueue = <<>>
+        /\ RCProcSet = ({rc0} \X {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE, CONT_MONITOR})
+        /\ OFCProcSet = ((({ofc0} \X CONTROLLER_THREAD_POOL)) \cup
+                         (({ofc0} \X {CONT_EVENT})) \cup
+                         (({ofc0} \X {CONT_MONITOR})))
+        /\ ContProcSet = (RCProcSet \cup OFCProcSet)
+        /\ controllerSubmoduleFailNum = [x \in {ofc0, rc0} |-> 0]
+        /\ controllerSubmoduleFailStat = [x \in ContProcSet |-> NotFailed]
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
         /\ RCIRStatus = [y \in 1..MaxNumIRs |-> IR_NONE]
         /\ RCSwSuspensionStatus = [y \in SW |-> SW_RUN]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
-        /\ rcInternalState = [x \in RCProcSet |-> [type |-> NADIR_NULL, next |-> NADIR_NULL]]
-        /\ ofcInternalState = [x \in OFCProcSet |-> [type |-> NADIR_NULL, next |-> NADIR_NULL]]
+        /\ rcInternalState = [x \in RCProcSet |-> [type |-> NO_STATUS]]
+        /\ ofcInternalState = [x \in OFCProcSet |-> [type |-> NO_STATUS]]
         /\ SetScheduledIRs = [y \in SW |-> {}]
-        /\ ir2sw = IR2SW
         /\ seqWorkerIsBusy = FALSE
-        /\ event = [self \in ({rc0} \X {NIB_EVENT_HANDLER}) |-> NADIR_NULL]
-        /\ topoChangeEvent = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
+        (* Process rcNibEventHandler *)
+        /\ event = [self \in ({rc0} \X {NIB_EVENT_HANDLER}) |-> [type |-> 0]]
+        (* Process controllerTrafficEngineering *)
+        /\ topoChangeEvent = [self \in ({rc0} \X {CONT_TE}) |-> [type |-> 0]]
         /\ currSetDownSw = [self \in ({rc0} \X {CONT_TE}) |-> {}]
-        /\ prev_dag_id = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
+        /\ prev_dag_id = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ init = [self \in ({rc0} \X {CONT_TE}) |-> 1]
-        /\ DAGID = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
-        /\ nxtDAG = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
-        /\ deleterID = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
+        /\ DAGID = [self \in ({rc0} \X {CONT_TE}) |-> 0]
+        /\ nxtDAG = [self \in ({rc0} \X {CONT_TE}) |-> [type |-> 0]]
+        /\ deleterID = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ setRemovableIRs = [self \in ({rc0} \X {CONT_TE}) |-> {}]
-        /\ currIR = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
-        /\ currIRInDAG = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
+        /\ currIR = [self \in ({rc0} \X {CONT_TE}) |-> 0]
+        /\ currIRInDAG = [self \in ({rc0} \X {CONT_TE}) |-> 0]
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setIRsInDAG = [self \in ({rc0} \X {CONT_TE}) |-> {}]
-        /\ prev_dag = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
-        /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> NADIR_NULL]
-        /\ worker = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> NADIR_NULL]
+        /\ prev_dag = [self \in ({rc0} \X {CONT_TE}) |-> [e |-> {}, v |-> {}]]
+        (* Process controllerBossSequencer *)
+        /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> [type |-> 0]]
+        /\ worker = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> 0]
+        (* Process controllerSequencer *)
         /\ toBeScheduledIRs = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
-        /\ nextIR = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> NADIR_NULL]
-        /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> NADIR_NULL]
+        /\ nextIR = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
+        /\ stepOfFailure_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
+        /\ currDAG = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> [dag |-> 0]]
         /\ IRSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
         /\ IRDoneSet = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> {}]
-        /\ index = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> NADIR_NULL]
-        /\ monitoringEvent = [self \in ({ofc0} \X {CONT_EVENT}) |-> NADIR_NULL]
-        /\ setIRsToReset = [self \in ({ofc0} \X {CONT_EVENT}) |-> {}]
-        /\ resetIR = [self \in ({ofc0} \X {CONT_EVENT}) |-> NADIR_NULL]
-        /\ msg = [self \in ({ofc0} \X {CONT_MONITOR}) |-> NADIR_NULL]
-        /\ irID = [self \in ({ofc0} \X {CONT_MONITOR}) |-> NADIR_NULL]
-        /\ removedIR = [self \in ({ofc0} \X {CONT_MONITOR}) |-> NADIR_NULL]
-        /\ stepOfFailure = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
-        /\ stepOfFailure_ = [self \in ({rc0} \X {CONT_WORKER_SEQ}) |-> 0]
+        (* Process controllerWorkerThreads *)
+        /\ nextIRIDToSend = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
+        /\ index = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> -1]
         /\ stepOfFailure_c = [self \in ({ofc0} \X CONTROLLER_THREAD_POOL) |-> 0]
+        (* Process controllerEventHandler *)
+        /\ monitoringEvent = [self \in ({ofc0} \X {CONT_EVENT}) |-> [type |-> 0]]
+        /\ setIRsToReset = [self \in ({ofc0} \X {CONT_EVENT}) |-> {}]
+        /\ resetIR = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
+        /\ stepOfFailure = [self \in ({ofc0} \X {CONT_EVENT}) |-> 0]
+        (* Process controllerMonitoringServer *)
+        /\ msg = [self \in ({ofc0} \X {CONT_MONITOR}) |-> [type |-> 0]]
+        /\ irID = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
+        /\ removedIR = [self \in ({ofc0} \X {CONT_MONITOR}) |-> 0]
+        (* Process watchDog *)
+        /\ controllerFailedModules = [self \in ({ofc0, rc0} \X {WATCH_DOG}) |-> {}]
         (* Exposed switch variables *)
         /\ installedIRs = <<>>
         (* Hidden switch variables *)
@@ -252,13 +260,44 @@ Init == (* Locks *)
                                         [] self \in ({ofc0} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"
                                         [] self \in ({ofc0, rc0} \X {WATCH_DOG}) -> "ControllerWatchDogProc"]
 
+(* Get instances of Zenith and the topology and create the `Next` predicate *)
+Switch == INSTANCE switch
+Zenith == INSTANCE optimized_nr
+
 SwitchStep == /\ Switch!Next
               /\ UNCHANGED internal_zenith_vars
-ZenithStep == /\ Zenith!Next
-              /\ UNCHANGED internal_switch_vars
+\* ZenithStep == /\ Zenith!Next
+\*               /\ UNCHANGED internal_switch_vars
+
+\* Next == \/ SwitchStep
+\*         \/ ZenithStep
+
+rcNibEventHandlerStep == /\ (\E self \in ({rc0} \X {NIB_EVENT_HANDLER}): Zenith!rcNibEventHandler(self))
+                         /\ UNCHANGED internal_switch_vars
+controllerTrafficEngineeringStep == /\ (\E self \in ({rc0} \X {CONT_TE}): Zenith!controllerTrafficEngineering(self))
+                                    /\ UNCHANGED internal_switch_vars
+controllerBossSequencerStep == /\ (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): Zenith!controllerBossSequencer(self))
+                               /\ UNCHANGED internal_switch_vars
+controllerSequencerStep == /\ (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): Zenith!controllerSequencer(self))
+                           /\ UNCHANGED internal_switch_vars
+controllerWorkerThreadsStep == /\ (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): Zenith!controllerWorkerThreads(self))
+                               /\ UNCHANGED internal_switch_vars
+controllerEventHandlerStep == /\ (\E self \in ({ofc0} \X {CONT_EVENT}): Zenith!controllerEventHandler(self))
+                              /\ UNCHANGED internal_switch_vars
+controllerMonitoringServerStep == /\ (\E self \in ({ofc0} \X {CONT_MONITOR}): Zenith!controllerMonitoringServer(self))
+                                  /\ UNCHANGED internal_switch_vars
+watchdogStep == /\ (\E self \in ({ofc0, rc0} \X {WATCH_DOG}): Zenith!watchDog(self))
+                /\ UNCHANGED internal_switch_vars
 
 Next == \/ SwitchStep
-        \/ ZenithStep
+        \/ rcNibEventHandlerStep
+        \/ controllerTrafficEngineeringStep
+        \/ controllerBossSequencerStep
+        \/ controllerSequencerStep
+        \/ controllerWorkerThreadsStep
+        \/ controllerEventHandlerStep
+        \/ controllerMonitoringServerStep
+        \/ watchdogStep
 
 (* Evaluation specification *)
 Spec == /\ Init /\ [][Next]_vars
@@ -281,11 +320,97 @@ Spec == /\ Init /\ [][Next]_vars
         /\ \A self \in ({ofc0} \X {CONT_MONITOR}) : WF_internal_zenith_vars(Zenith!controllerMonitoringServer(self))
         /\ \A self \in ({ofc0, rc0} \X {WATCH_DOG}) : WF_internal_zenith_vars(Zenith!watchDog(self))
 
+OperationsRanking == <<"ControllerSeqProc",
+                      "SchedulerMechanism",
+                      "SeqUpdateDBState1",
+                      "AddToScheduleIRSet",
+                      "ScheduleTheIR",
+                      "SeqClearDBState",
+                      "ControllerSeqStateReconciliation",
+                      "ControllerThread",
+                      "ControllerThreadSaveToDB1",
+                      "ControllerThreadLockTheIRUsingSemaphore",
+                      "ControllerThreadRemoveQueue1",
+                      "ControllerThreadSendIR",
+                      "ControllerThreadForwardIR",
+                      "ControllerThreadSaveToDB2",
+                      "WaitForIRToHaveCorrectStatus",
+                      "ReScheduleifIRNone",
+                      "ControllerThreadUnlockSemaphore",
+                      "RemoveFromScheduledIRSet",
+                      "ControllerThreadClearDB",
+                      "ControllerThreadRemoveQueue2",
+                      "ControllerThreadStateReconciliation",
+                      "ControllerEventHandlerProc",
+                      "ControllerSuspendSW",
+                      "ControllerEventHandlerSaveToDB1",
+                      "ControllerFreeSuspendedSW",
+                      "ControllerCheckIfThisIsLastEvent",
+                      "getIRsToBeChecked",
+                      "ResetAllIRs",
+                      "ControllerResetIRStatAfterRecovery",
+                      "ControllerEventHandlerClearDB",
+                      "ControllerEvenHanlderRemoveEventFromQueue",
+                      "ControllerEventHandlerStateReconciliation",
+                      "ControllerMonitorCheckIfMastr",
+                      "ControllerUpdateIR2",
+                      "MonitoringServerRemoveFromQueue",
+                      "ControllerWatchDogProc">>
+OperationIndex(name) == CHOOSE x \in 1..Len(OperationsRanking): OperationsRanking[x] = name
+                      
+OperationsVariableSet == [ControllerSeqProc |-> {"IRStatus", 
+                                                 "SwSuspensionStatus", 
+                                                 "SetScheduledIRs", 
+                                                 "idThreadWorkingOnIR"}, 
+                           SchedulerMechanism |-> {},
+                           SeqUpdateDBState1 |-> {},
+                           AddToScheduleIRSet |-> {"SetScheduledIRs"},
+                           ScheduleTheIR |-> {"controllerThreadPoolIRQueue"},
+                           SeqClearDBState |-> {},
+                           ControllerSeqStateReconciliation |-> {"SetScheduledIRs"},
+                           \*************************************************************************
+                           ControllerThread |-> {"controllerThreadPoolIRQueue"},
+                           ControllerThreadSaveToDB1 |-> {},
+                           ControllerThreadLockTheIRUsingSemaphore |-> {"idThreadWorkingOnIR"},
+                           ControllerThreadRemoveQueue1 |-> {"controllerThreadPoolIRQueue"},
+                           ControllerThreadSendIR |-> {"SwSuspensionStatus",
+                                                      "IRStatus"},
+                           ControllerThreadForwardIR |-> {"controller2Switch"},
+                           ControllerThreadSaveToDB2 |-> {},
+                           WaitForIRToHaveCorrectStatus |-> {"SwSuspensionStatus"},
+                           ReScheduleifIRNone |-> {"IRStatus"},
+                           ControllerThreadUnlockSemaphore |-> {"idThreadWorkingOnIR"},
+                           RemoveFromScheduledIRSet |-> {"SetScheduledIRs"},
+                           ControllerThreadClearDB |-> {},
+                           ControllerThreadRemoveQueue2 |-> {"controllerThreadPoolIRQueue"},
+                           ControllerThreadStateReconciliation |-> {"IRStatus",
+                                                                    "idThreadWorkingOnIR",
+                                                                    "SetScheduledIRs"},
+                           \*************************************************************************
+                           ControllerEventHandlerProc |-> {"SwSuspensionStatus",
+                                                           "swSeqChangedStatus"},
+                           ControllerSuspendSW |-> {"SwSuspensionStatus"},
+                           ControllerEventHandlerSaveToDB1 |-> {},
+                           ControllerFreeSuspendedSW |-> {"SwSuspensionStatus"},
+                           ControllerCheckIfThisIsLastEvent |-> {"swSeqChangedStatus"},
+                           getIRsToBeChecked |-> {"IRStatus"},
+                           ResetAllIRs |-> {},
+                           ControllerResetIRStatAfterRecovery |-> {"IRStatus"},
+                           ControllerEventHandlerClearDB |-> {},
+                           ControllerEvenHanlderRemoveEventFromQueue |-> {"swSeqChangedStatus"},
+                           ControllerEventHandlerStateReconciliation |-> {"SwSuspensionStatus"},
+                           \*************************************************************************
+                           ControllerMonitorCheckIfMastr |-> {"switch2Controller"},
+                           ControllerUpdateIR2 |-> {"IRStatus"},
+                           MonitoringServerRemoveFromQueue |-> {"switch2Controller"},
+                           ControllerWatchDogProc |-> {"controllerStatus",
+                                                       "controllerLock"}]
+
 \* Liveness Properties
 CorrectDAGInstalled == (\A x \in 1..MaxNumIRs: \/ /\ x \in FINAL_DAG.v
-                                                  /\ \E y \in DOMAIN TCAM[ir2sw[x]]: TCAM[ir2sw[x]][y] = IR2FLOW[x]
+                                                  /\ \E y \in DOMAIN TCAM[Zenith!getSwitchForIR(x)]: TCAM[Zenith!getSwitchForIR(x)][y] = x
                                                \/ /\ x \notin FINAL_DAG.v
-                                                  /\ ~\E y \in DOMAIN TCAM[ir2sw[x]]: TCAM[ir2sw[x]][y] = IR2FLOW[x])
+                                                  /\ ~\E y \in DOMAIN TCAM[Zenith!getSwitchForIR(x)]: TCAM[Zenith!getSwitchForIR(x)][y] = x)
                                                   
 CorrectDoneStatusController == (\A x \in 1..MaxNumIRs: \/ NIBIRStatus[x] = IR_DONE
                                                        \/ x \notin FINAL_DAG.v)
@@ -296,14 +421,6 @@ InstallationInvProp == \/ ENABLED Next
                        \/ /\ CorrectDAGInstalled
                           /\ CorrectDoneStatusController
 \* Safety Properties
-IRCriticalSection == LET 
-                        IRCriticalSet == {"ControllerThreadSendIR", "ControllerThreadForwardIR", "ControllerThreadSaveToDB2", "WaitForIRToHaveCorrectStatus", "ReScheduleifIRNone"}
-                     IN   
-                        \A x, y \in {ofc0} \X CONTROLLER_THREAD_POOL: \/ x = y
-                                                                      \/ <<pc[x], pc[y]>> \notin IRCriticalSet \X IRCriticalSet
-                                                                      \/ /\ <<pc[x], pc[y]>> \in IRCriticalSet \X IRCriticalSet
-                                                                         /\ nextIRIDToSend[x] # nextIRIDToSend[y]
-
 firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
 whichDAG(ir) == CHOOSE x \in rangeSeq(TOPO_DAG_MAPPING): ir \in x.v
 
@@ -314,15 +431,9 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
                                                       \/ /\ firstHappening(installedIRs, x) > firstHappening(installedIRs, y)
                                                          /\ <<Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
 
-TypeOK == Zenith!TypeOK
 ----
 (* EVALUATION *)
 ----
-
-\* Processes
-const_RCProcSet == NadirProcessIdentifier(rc0, {CONT_WORKER_SEQ, CONT_BOSS_SEQ, NIB_EVENT_HANDLER, CONT_TE, CONT_MONITOR})
-const_OFCProcSet == NadirProcessIdentifier(ofc0, CONTROLLER_THREAD_POOL \cup {CONT_EVENT, CONT_MONITOR})
-const_ContProcSet == RCProcSet \cup OFCProcSet 
 
 CONSTANTS
 s0, s1
@@ -341,7 +452,7 @@ const_CONTROLLER_THREAD_POOL == {t0}
 ----
 
 \* Consider only transient failures (so no partial and complete)
-const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}>>
+const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1], [sw |-> s0, partial |-> 0, transient |-> 1]}>>
 ----
 
 \* Consider 3 instructions to install
@@ -364,8 +475,6 @@ const_SW_MODULE_CAN_FAIL_OR_NOT == [cpu |-> 0, nicAsic |-> 0, ofa |-> 0, install
 
 \* Eventually, assuming fairness, we converge to the case where all switches are alive and the DAG is installed
 const_FINAL_DAG == [v |-> {1, 2}, e |-> {<<1, 2>>}]
-
-const_IR2FLOW == [x \in 1..MaxNumIRs |-> x]
 
 \* Where to install each IR?
 const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
