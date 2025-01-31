@@ -13,12 +13,14 @@ GRAMMAR = r"""
 trace       : (step ("\n")+)+
 step        : "State " INTEGER ": " action_name "\n" (conjunct)+
 action_name : INITIAL_PREDICATE_NAME -> init
-            | "<" CONNECTED_STRING " line " DONT_CARE_UNTIL_MORE_THAN_THEN_LINE_BREAK ">" -> transition
+            | "<" CONNECTED_STRING " line " DONT_CARE_UNTIL_MORE_THAN_THEN_LINE_BREAK ">" -> transition1
+            | "<" CONNECTED_STRING "(" DONT_CARE_UNTIL_CLOSE_PARENTHESES ")" " line " DONT_CARE_UNTIL_MORE_THAN_THEN_LINE_BREAK ">" -> transition2
 conjunct    : CONJUNCT_LIST_ELEM var_name " = " var_value
 var_name    : CONNECTED_STRING
 var_value   : DONT_CARE_UNTIL_CONJUNCT_OR_DOUBLE_LINE_BREAK
 
 CONNECTED_STRING: /[a-zA-Z0-9_]+/
+DONT_CARE_UNTIL_CLOSE_PARENTHESES: /.+?(?=\))/
 DONT_CARE_UNTIL_MORE_THAN_THEN_LINE_BREAK: /.+?(?=(\>\n))/
 DONT_CARE_UNTIL_CONJUNCT_OR_DOUBLE_LINE_BREAK: /(.|\s)+?(?=(\/\\|(\n\n)))/
 INITIAL_PREDICATE_NAME: "<Initial predicate>"
@@ -116,7 +118,11 @@ class TreeToTrace(Transformer):
         return int(n)
     
     @v_args(inline=True)
-    def transition(self, action_name, description):
+    def transition1(self, action_name, description):
+        return action_name
+    
+    @v_args(inline=True)
+    def transition2(self, action_name, pid, description):
         return action_name
     
     def conjunct(self, s):

@@ -83,4 +83,8 @@ NadirLocalVariableTypeCheck(varType, var) == \A x \in DOMAIN var: var[x] \in var
 NadirProcessIdentifier(moduleMV, setOfSubModuleMVs) == {moduleMV} \X setOfSubModuleMVs
 NadirSetOfPIDs(PIDSet) == \A PID \in PIDSet: Len(PID) = 2
 
+NadirIDAsInteger(x) == x
+IntegerAsNadirID(x) == x
+IntegerSetAsNadirIDSet(x) == x
+
 ======================

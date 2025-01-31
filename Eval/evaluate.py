@@ -3,6 +3,7 @@ import sys
 import shutil
 import argparse
 import platform
+import subprocess
 from typing import List
 
 # We'll address everything relative to the directory of this script
@@ -77,6 +78,22 @@ def delete_states(module_path):
         shutil.rmtree(states_dir)
 
 
+def execute_cmds(cmds: List[str], out_file: str):
+    import time
+    with open(out_file, 'w') as f:
+        for cmd in cmds:
+            print(f"CMD = {cmd}")
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
+            # for line in iter(proc.stdout.readline, ""):
+            #     print(line)
+            #     f.write(line)
+            #     yield line
+            # proc.stdout.close()
+            # rt = proc.wait()
+            # if rt:
+            #     raise subprocess.CalledProcessError(rt, cmd=cmd)
+
+
 class ACTIONS:
     TRANSLATE = 'translate'  # Convert PlusCal to TLA+
     PARSE = 'parse'          # Run SANY and check the form of the spec
@@ -98,6 +115,7 @@ if __name__ == '__main__':
                         help="Delete the `states` directory if it exists in the directory of the module")
     parser.add_argument('--diff', action='store_true',
                         help="Show only the DIFF between states when printing the trace")
+    parser.add_argument('--out', type=str, help="Output log file name")
     args = parser.parse_args()
 
     if not os.getenv('TLA_HOME'):
@@ -110,5 +128,10 @@ if __name__ == '__main__':
     if args.cleanup:
         delete_states(args.module)
 
-    for cmd in cmds:
-        os.system(cmd)
+    output_file = args.out
+    if output_file:
+        print(f"Logging output in {output_file}")
+        execute_cmds(cmds, output_file)
+    else:
+        for cmd in cmds:
+            os.system(cmd)
