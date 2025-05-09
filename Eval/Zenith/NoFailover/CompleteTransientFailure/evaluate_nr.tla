@@ -265,11 +265,38 @@ Zenith == INSTANCE zenith_nr
 
 SwitchStep == /\ Switch!Next
               /\ UNCHANGED internal_zenith_vars
-ZenithStep == /\ Zenith!Next
-              /\ UNCHANGED internal_switch_vars
+\* ZenithStep == /\ Zenith!Next
+\*               /\ UNCHANGED internal_switch_vars
+
+\* Next == \/ SwitchStep
+\*         \/ ZenithStep
+
+NIBEHStep == /\ (\E self \in ({rc0} \X {NIB_EVENT_HANDLER}): Zenith!rcNibEventHandler(self))
+             /\ UNCHANGED internal_switch_vars
+TEStep == /\ (\E self \in ({rc0} \X {CONT_TE}): Zenith!controllerTrafficEngineering(self))
+          /\ UNCHANGED internal_switch_vars
+BossSeqStep == /\ (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): Zenith!controllerBossSequencer(self))
+               /\ UNCHANGED internal_switch_vars
+SeqStep == /\ (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): Zenith!controllerSequencer(self))
+           /\ UNCHANGED internal_switch_vars
+WPStep == /\ (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): Zenith!controllerWorkerThreads(self))
+          /\ UNCHANGED internal_switch_vars
+EHStep == /\ (\E self \in ({ofc0} \X {CONT_EVENT}): Zenith!controllerEventHandler(self))
+          /\ UNCHANGED internal_switch_vars
+MSStep == /\ (\E self \in ({ofc0} \X {CONT_MONITOR}): Zenith!controllerMonitoringServer(self))
+          /\ UNCHANGED internal_switch_vars
+WatchdogStep == /\ (\E self \in ({ofc0, rc0} \X {WATCH_DOG}): Zenith!watchDog(self))
+                /\ UNCHANGED internal_switch_vars
 
 Next == \/ SwitchStep
-        \/ ZenithStep
+        \/ NIBEHStep
+        \/ TEStep
+        \/ BossSeqStep
+        \/ SeqStep
+        \/ WPStep
+        \/ EHStep
+        \/ MSStep
+        \/ WatchdogStep
 
 (* Evaluation specification *)
 Spec == /\ Init /\ [][Next]_vars
@@ -434,14 +461,17 @@ const_CONTROLLER_THREAD_POOL == {t0}
 ----
 
 \* Consider only transient failures (so no partial and complete)
-const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}>>
+\* const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}>>
+const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}, {[sw |-> s1, partial |-> 0, transient |-> 1]}>>
 ----
 
 \* Consider 3 instructions to install
-const_MaxNumIRs == 3
+\* const_MaxNumIRs == 3
+const_MaxNumIRs == 4
 ----
 
-const_MaxNumFlows == 3
+\* const_MaxNumFlows == 3
+const_MaxNumFlows == 4
 ----
 
 const_MaxDAGID == 15
@@ -466,11 +496,17 @@ const_IR2FLOW == [x \in 1..MaxNumIRs |-> x]
 ----
 
 \* Where to install each IR?
-const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
+\* const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
+const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1) @@ (4 :> s0)
 
 \* Mapping between topology and DAG
+\* const_TOPO_DAG_MAPPING == 
+\*     ({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ 
+\*     ({s0} :> [v |-> {3}, e |-> {}])
 const_TOPO_DAG_MAPPING == 
     ({} :> [v |-> {1, 2}, e |-> {<<1, 2>>}]) @@ 
-    ({s0} :> [v |-> {3}, e |-> {}])
+    ({s0} :> [v |-> {3}, e |-> {}]) @@
+    ({s1} :> [v |-> {4}, e |-> {}]) @@
+    ({s0, s1} :> [v |-> {}, e |-> {}])
 
 =============================================================================
