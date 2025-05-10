@@ -1156,22 +1156,16 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                  THEN /\ DAGID' = [DAGID EXCEPT ![self] = 1]
                                                  ELSE /\ DAGID' = [DAGID EXCEPT ![self] = (DAGID[self] % MaxDAGID) + 1]
                                            /\ nxtDAG' = [nxtDAG EXCEPT ![self] = [id |-> DAGID'[self], dag |-> TOPO_DAG_MAPPING[currSetDownSw[self]]]]
-                                           /\ IF prev_dag[self] = nxtDAG'[self].dag /\ Cardinality(nxtDAG'[self].dag.v) # 0
-                                                 THEN /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
-                                                      /\ UNCHANGED << DAGState, 
-                                                                      prev_dag_id, 
-                                                                      init, 
-                                                                      nxtDAGVertices >>
-                                                 ELSE /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
-                                                      /\ IF init[self] = 0
-                                                            THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
-                                                                 /\ UNCHANGED << prev_dag_id, 
-                                                                                 init >>
-                                                            ELSE /\ init' = [init EXCEPT ![self] = 0]
-                                                                 /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID'[self]]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
-                                                                 /\ UNCHANGED DAGState
+                                           /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
+                                           /\ IF init[self] = 0
+                                                 THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
+                                                      /\ UNCHANGED << prev_dag_id, 
+                                                                      init >>
+                                                 ELSE /\ init' = [init EXCEPT ![self] = 0]
+                                                      /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID'[self]]
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+                                                      /\ UNCHANGED DAGState
                                            /\ UNCHANGED << switchLock, 
                                                            controllerLock, 
                                                            swSeqChangedStatus, 
