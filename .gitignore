@@ -4,3 +4,14 @@ drain
 *.trace
 *.trace_out
 *.pyc
+
+
+# VENV
+*.env
+pyvenv.cfg
+lib/
+lib64/
+bin/
+include/
+share/
+lib64
