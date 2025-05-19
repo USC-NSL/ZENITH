@@ -23,13 +23,12 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
         ],  
         installedIRs = <<>>,
 
-        TCAM = [x \in SW |-> <<>>], 
+        TCAM = [x \in SW |-> {}], 
 
         controlMsgCounter = [x \in SW |-> 0],
         RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
     
     define
-        indexInSeq(seq, val) == CHOOSE i \in DOMAIN seq: seq[i] = val
         removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
                                                                     ELSE inSeq[j+1]]
         
@@ -37,7 +36,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
         swOFACanProcessIRs(sw) == /\ switchStatus[sw].cpu = NotFailed
                                   /\ switchStatus[sw].ofa = NotFailed
         
-        existMatchingEntryTCAM(swID, flowID) == \E x \in rangeSeq(TCAM[swID]): x = flowID
+        existMatchingEntryTCAM(swID, flowID) == flowID \in TCAM[swID]
         swCanInstallIRs(sw) == /\ switchStatus[sw].installer = NotFailed
                                /\ switchStatus[sw].cpu = NotFailed
         
@@ -87,7 +86,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
         
         switchStatus[self[2]] := [cpu |-> Failed, nicAsic |-> Failed, 
                                     ofa |-> Failed, installer |-> Failed];
-        TCAM[self[2]] := <<>>;
+        TCAM[self[2]] := {};
         controller2Switch[self[2]] := <<>>;    
     end macro;
 
@@ -100,7 +99,7 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
         
         switchStatus[self[2]] := [cpu |-> NotFailed, nicAsic |-> NotFailed, 
                                     ofa |-> NotFailed, installer |-> NotFailed];
-        TCAM[self[2]] := <<>>;
+        TCAM[self[2]] := {};
         controller2Switch[self[2]] := <<>>;
         
         controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;  
@@ -117,18 +116,18 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
     macro installToTCAM(newFlow)
     begin
         installedIRs := Append(installedIRs, newFlow);
-        TCAM[self[2]] := Append(TCAM[self[2]], newFlow);
+        TCAM[self[2]] := TCAM[self[2]] \cup {newFlow};
     end macro
 
     macro removeFromTCAM(flowID)
     begin
-        if flowID \in rangeSeq(TCAM[self[2]]) then
-            TCAM[self[2]] := removeFromSeq(TCAM[self[2]], indexInSeq(TCAM[self[2]], flowID));
+        if existMatchingEntryTCAM(self[2], flowID) then
+            TCAM[self[2]] := TCAM[self[2]] \ {flowID};
         end if;
     end macro
 
     macro clearTCAM() begin
-        TCAM[self[2]] := <<>>;
+        TCAM[self[2]] := {};
     end macro;
 
     macro switchSend(msg)
@@ -328,13 +327,12 @@ EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants
     end while
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "598be4df" /\ chksum(tla) = "12734517")
+\* BEGIN TRANSLATION (chksum(pcal) = "31b78c5d" /\ chksum(tla) = "ee0ad0ba")
 VARIABLES switchLock, controllerLock, sw_fail_ordering_var, SwProcSet, 
           controller2Switch, switch2Controller, switchStatus, installedIRs, 
           TCAM, controlMsgCounter, RecoveryStatus
 
 (* define statement *)
-indexInSeq(seq, val) == CHOOSE i \in DOMAIN seq: seq[i] = val
 removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
                                                             ELSE inSeq[j+1]]
 
@@ -342,7 +340,7 @@ swCanReceivePackets(sw) == switchStatus[sw].nicAsic = NotFailed
 swOFACanProcessIRs(sw) == /\ switchStatus[sw].cpu = NotFailed
                           /\ switchStatus[sw].ofa = NotFailed
 
-existMatchingEntryTCAM(swID, flowID) == \E x \in rangeSeq(TCAM[swID]): x = flowID
+existMatchingEntryTCAM(swID, flowID) == flowID \in TCAM[swID]
 swCanInstallIRs(sw) == /\ switchStatus[sw].installer = NotFailed
                        /\ switchStatus[sw].cpu = NotFailed
 
@@ -389,7 +387,7 @@ Init == (* Global variables *)
                               ]
                           ]
         /\ installedIRs = <<>>
-        /\ TCAM = [x \in SW |-> <<>>]
+        /\ TCAM = [x \in SW |-> {}]
         /\ controlMsgCounter = [x \in SW |-> 0]
         /\ RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
         (* Process swProcess *)
@@ -401,20 +399,20 @@ Init == (* Global variables *)
         /\ statusResolveMsg = [self \in ({SW_RESOLVE_PROC} \X SW) |-> <<>>]
 
 swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL, 
-                             "Failure of assertion at line 254, column 9.")
+                             "Failure of assertion at line 253, column 9.")
                    /\ swCanReceivePackets(self[2])
                    /\ Len(controller2Switch[self[2]]) > 0
                    /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                    /\ switchLock \in {<<NO_LOCK, NO_LOCK>>, self}
                    /\ ingressPkt' = [ingressPkt EXCEPT ![self] = Head(controller2Switch[self[2]])]
                    /\ Assert(ingressPkt'[self].type \in {INSTALL_FLOW, DELETE_FLOW, FLOW_STAT_REQ, CLEAR_TCAM}, 
-                             "Failure of assertion at line 259, column 9.")
+                             "Failure of assertion at line 258, column 9.")
                    /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
                    /\ IF ingressPkt'[self].type = INSTALL_FLOW
                          THEN /\ installedIRs' = Append(installedIRs, (ingressPkt'[self].flow))
-                              /\ TCAM' = [TCAM EXCEPT ![self[2]] = Append(TCAM[self[2]], (ingressPkt'[self].flow))]
+                              /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \cup {(ingressPkt'[self].flow)}]
                               /\ Assert(WHICH_SWITCH_MODEL[self[2]] = SW_SIMPLE_MODEL, 
-                                        "Failure of assertion at line 136, column 9 of macro called at line 263, column 13.")
+                                        "Failure of assertion at line 135, column 9 of macro called at line 262, column 13.")
                               /\ switch2Controller' = Append(switch2Controller, (           [
                                                           type |-> INSTALLED_SUCCESSFULLY,
                                                           from |-> self[2],
@@ -423,12 +421,12 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                                                       ]))
                               /\ UNCHANGED controlMsgCounter
                          ELSE /\ IF ingressPkt'[self].type = DELETE_FLOW
-                                    THEN /\ IF (ingressPkt'[self].flow) \in rangeSeq(TCAM[self[2]])
-                                               THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = removeFromSeq(TCAM[self[2]], indexInSeq(TCAM[self[2]], (ingressPkt'[self].flow)))]
+                                    THEN /\ IF existMatchingEntryTCAM(self[2], (ingressPkt'[self].flow))
+                                               THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \ {(ingressPkt'[self].flow)}]
                                                ELSE /\ TRUE
                                                     /\ TCAM' = TCAM
                                          /\ Assert(WHICH_SWITCH_MODEL[self[2]] = SW_SIMPLE_MODEL, 
-                                                   "Failure of assertion at line 136, column 9 of macro called at line 267, column 13.")
+                                                   "Failure of assertion at line 135, column 9 of macro called at line 266, column 13.")
                                          /\ switch2Controller' = Append(switch2Controller, (           [
                                                                      type |-> DELETED_SUCCESSFULLY,
                                                                      from |-> self[2],
@@ -437,7 +435,7 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                                                                  ]))
                                          /\ UNCHANGED controlMsgCounter
                                     ELSE /\ IF ingressPkt'[self].type = CLEAR_TCAM
-                                               THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = <<>>]
+                                               THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = {}]
                                                     /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                     /\ switch2Controller' =                      Append(
                                                                                 switch2Controller,
@@ -451,7 +449,7 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                                                ELSE /\ IF ingressPkt'[self].type = FLOW_STAT_REQ
                                                           THEN /\ IF ingressPkt'[self].flow = ALL_FLOW
                                                                      THEN /\ Assert(WHICH_SWITCH_MODEL[self[2]] = SW_SIMPLE_MODEL, 
-                                                                                    "Failure of assertion at line 136, column 9 of macro called at line 274, column 17.")
+                                                                                    "Failure of assertion at line 135, column 9 of macro called at line 273, column 17.")
                                                                           /\ switch2Controller' = Append(switch2Controller, (           [
                                                                                                       type |-> FLOW_STAT_REPLY,
                                                                                                       from |-> self[2],
@@ -460,7 +458,7 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                                                                                                   ]))
                                                                      ELSE /\ IF existMatchingEntryTCAM(self[2], ingressPkt'[self].flow)
                                                                                 THEN /\ Assert(WHICH_SWITCH_MODEL[self[2]] = SW_SIMPLE_MODEL, 
-                                                                                               "Failure of assertion at line 136, column 9 of macro called at line 276, column 17.")
+                                                                                               "Failure of assertion at line 135, column 9 of macro called at line 275, column 17.")
                                                                                      /\ switch2Controller' = Append(switch2Controller, (           [
                                                                                                                  type |-> FLOW_STAT_REPLY,
                                                                                                                  from |-> self[2],
@@ -468,7 +466,7 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                                                                                                                  status |-> ENTRY_FOUND
                                                                                                              ]))
                                                                                 ELSE /\ Assert(WHICH_SWITCH_MODEL[self[2]] = SW_SIMPLE_MODEL, 
-                                                                                               "Failure of assertion at line 136, column 9 of macro called at line 278, column 17.")
+                                                                                               "Failure of assertion at line 135, column 9 of macro called at line 277, column 17.")
                                                                                      /\ switch2Controller' = Append(switch2Controller, (           [
                                                                                                                  type |-> FLOW_STAT_REPLY,
                                                                                                                  from |-> self[2],
@@ -482,7 +480,7 @@ swProcess(self) == /\ Assert(whichSwitchModel(self[2]) = SW_SIMPLE_MODEL,
                               /\ UNCHANGED installedIRs
                    /\ Assert(\/ switchLock[2] = self[2]
                              \/ switchLock[2] = NO_LOCK, 
-                             "Failure of assertion at line 240, column 9 of macro called at line 281, column 9.")
+                             "Failure of assertion at line 239, column 9 of macro called at line 280, column 9.")
                    /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                    /\ UNCHANGED << controllerLock, sw_fail_ordering_var, 
                                    SwProcSet, switchStatus, RecoveryStatus, 
@@ -497,12 +495,12 @@ swFailureProc(self) == /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                        /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = obj'[self].transient,
                                                                    ![self[2]].partial = obj'[self].partial]
                        /\ Assert(obj'[self] \in Head(sw_fail_ordering_var), 
-                                 "Failure of assertion at line 66, column 9 of macro called at line 297, column 9.")
+                                 "Failure of assertion at line 65, column 9 of macro called at line 296, column 9.")
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
                              ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{obj'[self]})>> \o Tail(sw_fail_ordering_var)
                        /\ Assert(obj'[self].partial = 0, 
-                                 "Failure of assertion at line 299, column 9.")
+                                 "Failure of assertion at line 298, column 9.")
                        /\ IF switchStatus[self[2]].nicAsic = NotFailed
                              THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                   /\ statusMsg' = [statusMsg EXCEPT ![self] = [type |-> NIC_ASIC_DOWN,
@@ -514,7 +512,7 @@ swFailureProc(self) == /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                                                   controlMsgCounter, statusMsg >>
                        /\ switchStatus' = [switchStatus EXCEPT ![self[2]] = [cpu |-> Failed, nicAsic |-> Failed,
                                                                                ofa |-> Failed, installer |-> Failed]]
-                       /\ TCAM' = [TCAM EXCEPT ![self[2]] = <<>>]
+                       /\ TCAM' = [TCAM EXCEPT ![self[2]] = {}]
                        /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                        /\ UNCHANGED << switchLock, controllerLock, SwProcSet, 
                                        installedIRs, ingressPkt, 
@@ -524,18 +522,18 @@ swResolveFailure(self) == /\ RecoveryStatus[self[2]].transient = 1
                           /\ /\ controllerLock = <<NO_LOCK, NO_LOCK>>
                              /\ switchLock = <<NO_LOCK, NO_LOCK>>
                           /\ Assert(RecoveryStatus[self[2]].partial = 0, 
-                                    "Failure of assertion at line 313, column 9.")
+                                    "Failure of assertion at line 312, column 9.")
                           /\ Assert(switchStatus[self[2]].cpu = Failed, 
-                                    "Failure of assertion at line 96, column 9 of macro called at line 314, column 9.")
+                                    "Failure of assertion at line 95, column 9 of macro called at line 313, column 9.")
                           /\ Assert(switchStatus[self[2]].nicAsic = Failed, 
-                                    "Failure of assertion at line 97, column 9 of macro called at line 314, column 9.")
+                                    "Failure of assertion at line 96, column 9 of macro called at line 313, column 9.")
                           /\ Assert(switchStatus[self[2]].ofa = Failed, 
-                                    "Failure of assertion at line 98, column 9 of macro called at line 314, column 9.")
+                                    "Failure of assertion at line 97, column 9 of macro called at line 313, column 9.")
                           /\ Assert(switchStatus[self[2]].installer = Failed, 
-                                    "Failure of assertion at line 99, column 9 of macro called at line 314, column 9.")
+                                    "Failure of assertion at line 98, column 9 of macro called at line 313, column 9.")
                           /\ switchStatus' = [switchStatus EXCEPT ![self[2]] = [cpu |-> NotFailed, nicAsic |-> NotFailed,
                                                                                   ofa |-> NotFailed, installer |-> NotFailed]]
-                          /\ TCAM' = [TCAM EXCEPT ![self[2]] = <<>>]
+                          /\ TCAM' = [TCAM EXCEPT ![self[2]] = {}]
                           /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                           /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                           /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self] =                     [
@@ -557,7 +555,7 @@ ghostUnlockProcess(self) == /\ /\ switchLock # <<NO_LOCK, NO_LOCK>>
                             /\ switchStatus[switchLock[2]].nicAsic = Failed
                             /\ Assert(\/ switchLock[2] = switchLock[2]
                                       \/ switchLock[2] = NO_LOCK, 
-                                      "Failure of assertion at line 240, column 9 of macro called at line 327, column 9.")
+                                      "Failure of assertion at line 239, column 9 of macro called at line 326, column 9.")
                             /\ switchLock' = <<NO_LOCK, NO_LOCK>>
                             /\ UNCHANGED << controllerLock, 
                                             sw_fail_ordering_var, SwProcSet, 
