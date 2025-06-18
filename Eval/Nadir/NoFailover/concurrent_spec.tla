@@ -39,7 +39,7 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         RCIRStatus = [y \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]],
         NIBIRStatus = [x \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]],
         SwSuspensionStatus = [x \in SW |-> SW_RUN],
-        SetScheduledIRs = [y \in SW |-> {}],
+        ScheduledIRs = [x \in 1..2*MaxNumIRs |-> FALSE],
         seqWorkerIsBusy = FALSE,
 
         eventHandlerCheckpoint = FALSE,
@@ -68,7 +68,7 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         
         getSetUnschedulableIRs(nxtDAGV) == {x \in nxtDAGV: getRCIRState(x) # IR_NONE}
         getSetRemovableIRs(swSet, nxtDAGV) == {x \in 1..MaxNumIRs: /\ \/ getRCIRState(x) # IR_NONE
-                                                                      \/ x \in SetScheduledIRs[getSwitchForIR(x)]
+                                                                      \/ ScheduledIRs[x]
                                                                    /\ x \notin nxtDAGV
                                                                    /\ getSwitchForIR(x) \in swSet}
         getSetIRsForSwitchInDAG(swID, nxtDAGV) == {x \in nxtDAGV: getSwitchForIR(x) = swID}
@@ -77,7 +77,7 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         getSetIRsCanBeScheduledNext(DAG)  == {x \in DAG.v: /\ getRCIRState(x) = IR_NONE
                                                            /\ isDependencySatisfied(DAG, x)
                                                            /\ RCSwSuspensionStatus[getSwitchForIR(x)] = SW_RUN
-                                                           /\ x \notin SetScheduledIRs[getSwitchForIR(x)]}
+                                                           /\ ~ScheduledIRs[x]}
         allIRsInDAGInstalled(DAG) == ~\E y \in DAG.v: getRCIRState(y) # IR_DONE
         isDAGStale(id) == DAGState[id] # DAG_SUBMIT
         isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
@@ -107,7 +107,7 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         isFinished == \A x \in 1..MaxNumIRs: getNIBIRState(x) = IR_DONE
         allIRsInDAGAreStable(DAG) == ~\E y \in DAG.v: /\ getRCIRState(y) = IR_DONE
                                                       /\ \/ getRCIRState(getDualOfIR(y)) # IR_NONE
-                                                         \/ getDualOfIR(y) \in SetScheduledIRs[getSwitchForIR(y)]
+                                                         \/ ScheduledIRs[getDualOfIR(y)]
         dagObjectShouldBeProcessed(dagObject) == \/ /\ ~allIRsInDAGInstalled(dagObject.dag)
                                                     /\ ~isDAGStale(dagObject.id)
                                                  \/ ~allIRsInDAGAreStable(dagObject.dag)
@@ -295,10 +295,10 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         end if;
     end macro;
 
-    macro unscheduleDagIRs(dagIRSet)
-    begin
-        SetScheduledIRs := [x \in SW |-> (SetScheduledIRs[x] \ getSetUnschedulableIRs(dagIRSet))];
-    end macro;
+    \* macro unscheduleDagIRs(dagIRSet)
+    \* begin
+    \*     ScheduledIRs := [x \in 1..2*MaxNumIRs |-> IF x \in dagIRSet THEN FALSE ELSE ScheduledIRs[x]];
+    \* end macro;
 
     macro setNIBIRState(irID, state) begin
         if (isPrimary(irID)) then
@@ -351,14 +351,10 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
         elsif (event.type = IR_MOD) then
             if getRCIRState(event.IR) # event.state then
                 setRCIRState(event.IR, event.state);
-                with destination = getSwitchForIR(event.IR) do
-                    SetScheduledIRs[destination] := SetScheduledIRs[destination] \ {event.IR};    
-                end with;
+                ScheduledIRs[event.IR] := FALSE;
             end if;
         elsif (event.type = IR_FAILED) then
-            with destination = getSwitchForIR(event.IR) do
-                SetScheduledIRs[destination] := SetScheduledIRs[destination] \ {event.IR};    
-            end with;
+            ScheduledIRs[event.IR] := FALSE;
         end if;
         NadirFIFOPop(RCNIBEventQueue);
     end while;
@@ -366,7 +362,8 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
 
     fair process controllerTrafficEngineering \in ({rc0} \X {CONT_TE})
     variables topoChangeEvent = NADIR_NULL, currSetDownSw = {}, prev_dag_id = NADIR_NULL, init = TRUE,
-        DAGID = NADIR_NULL, nxtDAG = NADIR_NULL, nxtDAGVertices = {}, setRemovableIRs = {};
+        DAGID = NADIR_NULL, nxtDAG = NADIR_NULL, nxtDAGVertices = {}, setRemovableIRs = {}, 
+        irsToUnschedule = {}, unschedule = NADIR_NULL;
     begin
     ControllerTEProc:
     while TRUE do
@@ -422,8 +419,17 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
             
         ControllerTERemoveUnnecessaryIRs:
             nxtDAG.dag := CreateTEDAG(setRemovableIRs, nxtDAG.dag);
-            controllerReleaseLock();
-            unscheduleDagIRs(nxtDAG.dag.v);
+            irsToUnschedule := nxtDAG.dag.v;
+            ControllerUnscheduleIRsInDAG:
+                while Cardinality(irsToUnschedule) > 0 do
+                    controllerWaitForLockFree();
+                    unschedule := CHOOSE x \in irsToUnschedule: TRUE;
+                    if (getRCIRState(unschedule) # IR_NONE) then
+                        ScheduledIRs[unschedule] := FALSE;
+                    end if;
+                    irsToUnschedule := irsToUnschedule \ {unschedule};
+                end while;
+                controllerReleaseLock();
             
         ControllerTESubmitNewDAG:
             controllerWaitForLockFree();
@@ -476,7 +482,7 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
                     else
                         nextIR := CHOOSE x \in toBeScheduledIRs: TRUE;
                         with destination = getSwitchForIR(nextIR) do
-                            SetScheduledIRs[destination] := SetScheduledIRs[destination] \cup {nextIR};
+                            ScheduledIRs[nextIR] := TRUE;
                             
                             if getIRType(nextIR) = INSTALL_FLOW then
                                 IRDoneSet := IRDoneSet \cup {nextIR};
@@ -769,11 +775,11 @@ CONSTANTS MAX_OFC_SUBMODULE_FAILS
     end while
 end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "27ecb249" /\ chksum(tla) = "4463ff7b")
+\* BEGIN TRANSLATION (chksum(pcal) = "bd240024" /\ chksum(tla) = "7addffd1")
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
           switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, 
           IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, 
-          RCIRStatus, NIBIRStatus, SwSuspensionStatus, SetScheduledIRs, 
+          RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, 
           seqWorkerIsBusy, eventHandlerCheckpoint, eventHandlerTCAMCleared, 
           eventHandlerLastIRToReset, ofcSubmoduleFailNum, FirstInstall, pc
 
@@ -797,7 +803,7 @@ getRCIRState(irID) == IF isPrimary(irID) THEN RCIRStatus[irID].primary
 
 getSetUnschedulableIRs(nxtDAGV) == {x \in nxtDAGV: getRCIRState(x) # IR_NONE}
 getSetRemovableIRs(swSet, nxtDAGV) == {x \in 1..MaxNumIRs: /\ \/ getRCIRState(x) # IR_NONE
-                                                              \/ x \in SetScheduledIRs[getSwitchForIR(x)]
+                                                              \/ ScheduledIRs[x]
                                                            /\ x \notin nxtDAGV
                                                            /\ getSwitchForIR(x) \in swSet}
 getSetIRsForSwitchInDAG(swID, nxtDAGV) == {x \in nxtDAGV: getSwitchForIR(x) = swID}
@@ -806,7 +812,7 @@ isDependencySatisfied(DAG, ir) == ~\E y \in DAG.v: /\ <<y, ir>> \in DAG.e
 getSetIRsCanBeScheduledNext(DAG)  == {x \in DAG.v: /\ getRCIRState(x) = IR_NONE
                                                    /\ isDependencySatisfied(DAG, x)
                                                    /\ RCSwSuspensionStatus[getSwitchForIR(x)] = SW_RUN
-                                                   /\ x \notin SetScheduledIRs[getSwitchForIR(x)]}
+                                                   /\ ~ScheduledIRs[x]}
 allIRsInDAGInstalled(DAG) == ~\E y \in DAG.v: getRCIRState(y) # IR_DONE
 isDAGStale(id) == DAGState[id] # DAG_SUBMIT
 isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
@@ -836,7 +842,7 @@ getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ getSwitchForIR(x) = SID
 isFinished == \A x \in 1..MaxNumIRs: getNIBIRState(x) = IR_DONE
 allIRsInDAGAreStable(DAG) == ~\E y \in DAG.v: /\ getRCIRState(y) = IR_DONE
                                               /\ \/ getRCIRState(getDualOfIR(y)) # IR_NONE
-                                                 \/ getDualOfIR(y) \in SetScheduledIRs[getSwitchForIR(y)]
+                                                 \/ ScheduledIRs[getDualOfIR(y)]
 dagObjectShouldBeProcessed(dagObject) == \/ /\ ~allIRsInDAGInstalled(dagObject.dag)
                                             /\ ~isDAGStale(dagObject.id)
                                          \/ ~allIRsInDAGAreStable(dagObject.dag)
@@ -878,22 +884,23 @@ CreateTEDAG(irsToRemove, dag) ==
 maxFailure(threadID) == MAX_OFC_SUBMODULE_FAILS
 
 VARIABLES event, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, 
-          nxtDAG, nxtDAGVertices, setRemovableIRs, seqEvent, toBeScheduledIRs, 
-          nextIR, currDAG, IRDoneSet, nextIRObjectToSend, index, 
-          stepOfFailureWP, monitoringEvent, setIRsToReset, resetIR, 
-          stepOfFailureEH, msg, irID, stepOfFailureMS
+          nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, 
+          unschedule, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, 
+          nextIRObjectToSend, index, stepOfFailureWP, monitoringEvent, 
+          setIRsToReset, resetIR, stepOfFailureEH, msg, irID, stepOfFailureMS
 
 vars == << switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
            switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, 
            IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, 
-           RCIRStatus, NIBIRStatus, SwSuspensionStatus, SetScheduledIRs, 
+           RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, 
            seqWorkerIsBusy, eventHandlerCheckpoint, eventHandlerTCAMCleared, 
            eventHandlerLastIRToReset, ofcSubmoduleFailNum, FirstInstall, pc, 
            event, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, 
-           nxtDAG, nxtDAGVertices, setRemovableIRs, seqEvent, 
-           toBeScheduledIRs, nextIR, currDAG, IRDoneSet, nextIRObjectToSend, 
-           index, stepOfFailureWP, monitoringEvent, setIRsToReset, resetIR, 
-           stepOfFailureEH, msg, irID, stepOfFailureMS >>
+           nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, 
+           unschedule, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, 
+           nextIRObjectToSend, index, stepOfFailureWP, monitoringEvent, 
+           setIRsToReset, resetIR, stepOfFailureEH, msg, irID, 
+           stepOfFailureMS >>
 
 ProcSet == (({rc0} \X {NIB_EVENT_HANDLER})) \cup (({rc0} \X {CONT_TE})) \cup (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
 
@@ -913,7 +920,7 @@ Init == (* Global variables *)
         /\ RCIRStatus = [y \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
-        /\ SetScheduledIRs = [y \in SW |-> {}]
+        /\ ScheduledIRs = [x \in 1..2*MaxNumIRs |-> FALSE]
         /\ seqWorkerIsBusy = FALSE
         /\ eventHandlerCheckpoint = FALSE
         /\ eventHandlerTCAMCleared = FALSE
@@ -931,6 +938,8 @@ Init == (* Global variables *)
         /\ nxtDAG = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setRemovableIRs = [self \in ({rc0} \X {CONT_TE}) |-> {}]
+        /\ irsToUnschedule = [self \in ({rc0} \X {CONT_TE}) |-> {}]
+        /\ unschedule = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
         (* Process controllerBossSequencer *)
         /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> NADIR_NULL]
         (* Process controllerSequencer *)
@@ -972,7 +981,7 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                                      /\ UNCHANGED << TEEventQueue, 
                                                                      RCSwSuspensionStatus >>
                                           /\ UNCHANGED << RCIRStatus, 
-                                                          SetScheduledIRs >>
+                                                          ScheduledIRs >>
                                      ELSE /\ IF (event'[self].type = IR_MOD)
                                                 THEN /\ IF getRCIRState(event'[self].IR) # event'[self].state
                                                            THEN /\ IF (isPrimary((event'[self].IR)))
@@ -983,16 +992,14 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                                                                 IF (event'[self].state) = IR_DONE /\ RCIRStatus[primary].primary = IR_DONE
                                                                                    THEN /\ RCIRStatus' = [RCIRStatus EXCEPT ![primary] = [primary |-> IR_NONE, dual |-> IR_DONE]]
                                                                                    ELSE /\ RCIRStatus' = [RCIRStatus EXCEPT ![primary].dual = event'[self].state]
-                                                                /\ LET destination == getSwitchForIR(event'[self].IR) IN
-                                                                     SetScheduledIRs' = [SetScheduledIRs EXCEPT ![destination] = SetScheduledIRs[destination] \ {event'[self].IR}]
+                                                                /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![event'[self].IR] = FALSE]
                                                            ELSE /\ TRUE
                                                                 /\ UNCHANGED << RCIRStatus, 
-                                                                                SetScheduledIRs >>
+                                                                                ScheduledIRs >>
                                                 ELSE /\ IF (event'[self].type = IR_FAILED)
-                                                           THEN /\ LET destination == getSwitchForIR(event'[self].IR) IN
-                                                                     SetScheduledIRs' = [SetScheduledIRs EXCEPT ![destination] = SetScheduledIRs[destination] \ {event'[self].IR}]
+                                                           THEN /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![event'[self].IR] = FALSE]
                                                            ELSE /\ TRUE
-                                                                /\ UNCHANGED SetScheduledIRs
+                                                                /\ UNCHANGED ScheduledIRs
                                                      /\ UNCHANGED RCIRStatus
                                           /\ UNCHANGED << TEEventQueue, 
                                                           RCSwSuspensionStatus >>
@@ -1014,6 +1021,7 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                                currSetDownSw, prev_dag_id, 
                                                init, DAGID, nxtDAG, 
                                                nxtDAGVertices, setRemovableIRs, 
+                                               irsToUnschedule, unschedule, 
                                                seqEvent, toBeScheduledIRs, 
                                                nextIR, currDAG, IRDoneSet, 
                                                nextIRObjectToSend, index, 
@@ -1041,14 +1049,15 @@ ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                                           RCNIBEventQueue, DAGState, 
                                           RCSwSuspensionStatus, RCIRStatus, 
                                           NIBIRStatus, SwSuspensionStatus, 
-                                          SetScheduledIRs, seqWorkerIsBusy, 
+                                          ScheduledIRs, seqWorkerIsBusy, 
                                           eventHandlerCheckpoint, 
                                           eventHandlerTCAMCleared, 
                                           eventHandlerLastIRToReset, 
                                           ofcSubmoduleFailNum, FirstInstall, 
                                           event, currSetDownSw, prev_dag_id, 
                                           init, DAGID, nxtDAG, nxtDAGVertices, 
-                                          setRemovableIRs, seqEvent, 
+                                          setRemovableIRs, irsToUnschedule, 
+                                          unschedule, seqEvent, 
                                           toBeScheduledIRs, nextIR, currDAG, 
                                           IRDoneSet, nextIRObjectToSend, index, 
                                           stepOfFailureWP, monitoringEvent, 
@@ -1097,7 +1106,7 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      RCSwSuspensionStatus, 
                                                      RCIRStatus, NIBIRStatus, 
                                                      SwSuspensionStatus, 
-                                                     SetScheduledIRs, 
+                                                     ScheduledIRs, 
                                                      seqWorkerIsBusy, 
                                                      eventHandlerCheckpoint, 
                                                      eventHandlerTCAMCleared, 
@@ -1106,7 +1115,9 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      FirstInstall, event, 
                                                      prev_dag_id, init, DAGID, 
                                                      nxtDAG, nxtDAGVertices, 
-                                                     setRemovableIRs, seqEvent, 
+                                                     setRemovableIRs, 
+                                                     irsToUnschedule, 
+                                                     unschedule, seqEvent, 
                                                      toBeScheduledIRs, nextIR, 
                                                      currDAG, IRDoneSet, 
                                                      nextIRObjectToSend, index, 
@@ -1147,7 +1158,7 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            RCIRStatus, 
                                                            NIBIRStatus, 
                                                            SwSuspensionStatus, 
-                                                           SetScheduledIRs, 
+                                                           ScheduledIRs, 
                                                            seqWorkerIsBusy, 
                                                            eventHandlerCheckpoint, 
                                                            eventHandlerTCAMCleared, 
@@ -1157,6 +1168,8 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            topoChangeEvent, 
                                                            currSetDownSw, 
                                                            setRemovableIRs, 
+                                                           irsToUnschedule, 
+                                                           unschedule, 
                                                            seqEvent, 
                                                            toBeScheduledIRs, 
                                                            nextIR, currDAG, 
@@ -1188,7 +1201,7 @@ ControllerTESendDagStaleNotif(self) == /\ pc[self] = "ControllerTESendDagStaleNo
                                                        RCSwSuspensionStatus, 
                                                        RCIRStatus, NIBIRStatus, 
                                                        SwSuspensionStatus, 
-                                                       SetScheduledIRs, 
+                                                       ScheduledIRs, 
                                                        seqWorkerIsBusy, 
                                                        eventHandlerCheckpoint, 
                                                        eventHandlerTCAMCleared, 
@@ -1201,7 +1214,8 @@ ControllerTESendDagStaleNotif(self) == /\ pc[self] = "ControllerTESendDagStaleNo
                                                        DAGID, nxtDAG, 
                                                        nxtDAGVertices, 
                                                        setRemovableIRs, 
-                                                       seqEvent, 
+                                                       irsToUnschedule, 
+                                                       unschedule, seqEvent, 
                                                        toBeScheduledIRs, 
                                                        nextIR, currDAG, 
                                                        IRDoneSet, 
@@ -1234,7 +1248,7 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 RCIRStatus, 
                                                                 NIBIRStatus, 
                                                                 SwSuspensionStatus, 
-                                                                SetScheduledIRs, 
+                                                                ScheduledIRs, 
                                                                 seqWorkerIsBusy, 
                                                                 eventHandlerCheckpoint, 
                                                                 eventHandlerTCAMCleared, 
@@ -1247,6 +1261,8 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 init, DAGID, 
                                                                 nxtDAG, 
                                                                 nxtDAGVertices, 
+                                                                irsToUnschedule, 
+                                                                unschedule, 
                                                                 seqEvent, 
                                                                 toBeScheduledIRs, 
                                                                 nextIR, 
@@ -1264,12 +1280,10 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
 
 ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnecessaryIRs"
                                           /\ nxtDAG' = [nxtDAG EXCEPT ![self].dag = CreateTEDAG(setRemovableIRs[self], nxtDAG[self].dag)]
-                                          /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
-                                          /\ switchLock = <<NO_LOCK, NO_LOCK>>
-                                          /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
-                                          /\ SetScheduledIRs' = [x \in SW |-> (SetScheduledIRs[x] \ getSetUnschedulableIRs((nxtDAG'[self].dag.v)))]
-                                          /\ pc' = [pc EXCEPT ![self] = "ControllerTESubmitNewDAG"]
+                                          /\ irsToUnschedule' = [irsToUnschedule EXCEPT ![self] = nxtDAG'[self].dag.v]
+                                          /\ pc' = [pc EXCEPT ![self] = "ControllerUnscheduleIRsInDAG"]
                                           /\ UNCHANGED << switchLock, 
+                                                          controllerLock, 
                                                           swSeqChangedStatus, 
                                                           controller2Switch, 
                                                           switch2Controller, 
@@ -1282,6 +1296,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           RCIRStatus, 
                                                           NIBIRStatus, 
                                                           SwSuspensionStatus, 
+                                                          ScheduledIRs, 
                                                           seqWorkerIsBusy, 
                                                           eventHandlerCheckpoint, 
                                                           eventHandlerTCAMCleared, 
@@ -1294,7 +1309,7 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           DAGID, 
                                                           nxtDAGVertices, 
                                                           setRemovableIRs, 
-                                                          seqEvent, 
+                                                          unschedule, seqEvent, 
                                                           toBeScheduledIRs, 
                                                           nextIR, currDAG, 
                                                           IRDoneSet, 
@@ -1307,6 +1322,58 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           stepOfFailureEH, msg, 
                                                           irID, 
                                                           stepOfFailureMS >>
+
+ControllerUnscheduleIRsInDAG(self) == /\ pc[self] = "ControllerUnscheduleIRsInDAG"
+                                      /\ IF Cardinality(irsToUnschedule[self]) > 0
+                                            THEN /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                 /\ unschedule' = [unschedule EXCEPT ![self] = CHOOSE x \in irsToUnschedule[self]: TRUE]
+                                                 /\ IF (getRCIRState(unschedule'[self]) # IR_NONE)
+                                                       THEN /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![unschedule'[self]] = FALSE]
+                                                       ELSE /\ TRUE
+                                                            /\ UNCHANGED ScheduledIRs
+                                                 /\ irsToUnschedule' = [irsToUnschedule EXCEPT ![self] = irsToUnschedule[self] \ {unschedule'[self]}]
+                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerUnscheduleIRsInDAG"]
+                                                 /\ UNCHANGED controllerLock
+                                            ELSE /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
+                                                 /\ switchLock = <<NO_LOCK, NO_LOCK>>
+                                                 /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
+                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTESubmitNewDAG"]
+                                                 /\ UNCHANGED << ScheduledIRs, 
+                                                                 irsToUnschedule, 
+                                                                 unschedule >>
+                                      /\ UNCHANGED << switchLock, 
+                                                      swSeqChangedStatus, 
+                                                      controller2Switch, 
+                                                      switch2Controller, 
+                                                      TEEventQueue, 
+                                                      DAGEventQueue, DAGQueue, 
+                                                      IRQueueNIB, 
+                                                      RCNIBEventQueue, 
+                                                      DAGState, 
+                                                      RCSwSuspensionStatus, 
+                                                      RCIRStatus, NIBIRStatus, 
+                                                      SwSuspensionStatus, 
+                                                      seqWorkerIsBusy, 
+                                                      eventHandlerCheckpoint, 
+                                                      eventHandlerTCAMCleared, 
+                                                      eventHandlerLastIRToReset, 
+                                                      ofcSubmoduleFailNum, 
+                                                      FirstInstall, event, 
+                                                      topoChangeEvent, 
+                                                      currSetDownSw, 
+                                                      prev_dag_id, init, DAGID, 
+                                                      nxtDAG, nxtDAGVertices, 
+                                                      setRemovableIRs, 
+                                                      seqEvent, 
+                                                      toBeScheduledIRs, nextIR, 
+                                                      currDAG, IRDoneSet, 
+                                                      nextIRObjectToSend, 
+                                                      index, stepOfFailureWP, 
+                                                      monitoringEvent, 
+                                                      setIRsToReset, resetIR, 
+                                                      stepOfFailureEH, msg, 
+                                                      irID, stepOfFailureMS >>
 
 ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                   /\ controllerLock \in {self, <<NO_LOCK, NO_LOCK>>}
@@ -1323,7 +1390,7 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                                   RCSwSuspensionStatus, 
                                                   RCIRStatus, NIBIRStatus, 
                                                   SwSuspensionStatus, 
-                                                  SetScheduledIRs, 
+                                                  ScheduledIRs, 
                                                   seqWorkerIsBusy, 
                                                   eventHandlerCheckpoint, 
                                                   eventHandlerTCAMCleared, 
@@ -1334,9 +1401,10 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                                   currSetDownSw, prev_dag_id, 
                                                   init, DAGID, nxtDAG, 
                                                   nxtDAGVertices, 
-                                                  setRemovableIRs, seqEvent, 
-                                                  toBeScheduledIRs, nextIR, 
-                                                  currDAG, IRDoneSet, 
+                                                  setRemovableIRs, 
+                                                  irsToUnschedule, unschedule, 
+                                                  seqEvent, toBeScheduledIRs, 
+                                                  nextIR, currDAG, IRDoneSet, 
                                                   nextIRObjectToSend, index, 
                                                   stepOfFailureWP, 
                                                   monitoringEvent, 
@@ -1350,6 +1418,7 @@ controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTESendDagStaleNotif(self)
                                          \/ ControllerTEWaitForStaleDAGToBeRemoved(self)
                                          \/ ControllerTERemoveUnnecessaryIRs(self)
+                                         \/ ControllerUnscheduleIRsInDAG(self)
                                          \/ ControllerTESubmitNewDAG(self)
 
 ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
@@ -1376,8 +1445,7 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                                RCSwSuspensionStatus, 
                                                RCIRStatus, NIBIRStatus, 
                                                SwSuspensionStatus, 
-                                               SetScheduledIRs, 
-                                               seqWorkerIsBusy, 
+                                               ScheduledIRs, seqWorkerIsBusy, 
                                                eventHandlerCheckpoint, 
                                                eventHandlerTCAMCleared, 
                                                eventHandlerLastIRToReset, 
@@ -1387,6 +1455,7 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                                prev_dag_id, init, DAGID, 
                                                nxtDAG, nxtDAGVertices, 
                                                setRemovableIRs, 
+                                               irsToUnschedule, unschedule, 
                                                toBeScheduledIRs, nextIR, 
                                                currDAG, IRDoneSet, 
                                                nextIRObjectToSend, index, 
@@ -1411,7 +1480,7 @@ WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
                                                      RCSwSuspensionStatus, 
                                                      RCIRStatus, NIBIRStatus, 
                                                      SwSuspensionStatus, 
-                                                     SetScheduledIRs, 
+                                                     ScheduledIRs, 
                                                      seqWorkerIsBusy, 
                                                      eventHandlerCheckpoint, 
                                                      eventHandlerTCAMCleared, 
@@ -1422,7 +1491,9 @@ WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
                                                      currSetDownSw, 
                                                      prev_dag_id, init, DAGID, 
                                                      nxtDAG, nxtDAGVertices, 
-                                                     setRemovableIRs, seqEvent, 
+                                                     setRemovableIRs, 
+                                                     irsToUnschedule, 
+                                                     unschedule, seqEvent, 
                                                      toBeScheduledIRs, nextIR, 
                                                      currDAG, IRDoneSet, 
                                                      nextIRObjectToSend, index, 
@@ -1452,7 +1523,7 @@ ControllerWorkerSeqProc(self) == /\ pc[self] = "ControllerWorkerSeqProc"
                                                  RCSwSuspensionStatus, 
                                                  RCIRStatus, NIBIRStatus, 
                                                  SwSuspensionStatus, 
-                                                 SetScheduledIRs, 
+                                                 ScheduledIRs, 
                                                  eventHandlerCheckpoint, 
                                                  eventHandlerTCAMCleared, 
                                                  eventHandlerLastIRToReset, 
@@ -1462,10 +1533,12 @@ ControllerWorkerSeqProc(self) == /\ pc[self] = "ControllerWorkerSeqProc"
                                                  currSetDownSw, prev_dag_id, 
                                                  init, DAGID, nxtDAG, 
                                                  nxtDAGVertices, 
-                                                 setRemovableIRs, seqEvent, 
-                                                 toBeScheduledIRs, nextIR, 
-                                                 IRDoneSet, nextIRObjectToSend, 
-                                                 index, stepOfFailureWP, 
+                                                 setRemovableIRs, 
+                                                 irsToUnschedule, unschedule, 
+                                                 seqEvent, toBeScheduledIRs, 
+                                                 nextIR, IRDoneSet, 
+                                                 nextIRObjectToSend, index, 
+                                                 stepOfFailureWP, 
                                                  monitoringEvent, 
                                                  setIRsToReset, resetIR, 
                                                  stepOfFailureEH, msg, irID, 
@@ -1504,7 +1577,7 @@ ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqSchedu
                                                         RCIRStatus, 
                                                         NIBIRStatus, 
                                                         SwSuspensionStatus, 
-                                                        SetScheduledIRs, 
+                                                        ScheduledIRs, 
                                                         eventHandlerCheckpoint, 
                                                         eventHandlerTCAMCleared, 
                                                         eventHandlerLastIRToReset, 
@@ -1516,8 +1589,9 @@ ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqSchedu
                                                         DAGID, nxtDAG, 
                                                         nxtDAGVertices, 
                                                         setRemovableIRs, 
-                                                        seqEvent, nextIR, 
-                                                        currDAG, 
+                                                        irsToUnschedule, 
+                                                        unschedule, seqEvent, 
+                                                        nextIR, currDAG, 
                                                         nextIRObjectToSend, 
                                                         index, stepOfFailureWP, 
                                                         monitoringEvent, 
@@ -1531,12 +1605,12 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                             /\ IF toBeScheduledIRs[self] = {} \/ isDAGStale(currDAG[self].id)
                                   THEN /\ pc' = [pc EXCEPT ![self] = "ControllerWorkerSeqScheduleDAG"]
                                        /\ UNCHANGED << IRQueueNIB, 
-                                                       SetScheduledIRs, 
+                                                       ScheduledIRs, 
                                                        toBeScheduledIRs, 
                                                        nextIR, IRDoneSet >>
                                   ELSE /\ nextIR' = [nextIR EXCEPT ![self] = CHOOSE x \in toBeScheduledIRs[self]: TRUE]
                                        /\ LET destination == getSwitchForIR(nextIR'[self]) IN
-                                            /\ SetScheduledIRs' = [SetScheduledIRs EXCEPT ![destination] = SetScheduledIRs[destination] \cup {nextIR'[self]}]
+                                            /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![nextIR'[self]] = TRUE]
                                             /\ IF getIRType(nextIR'[self]) = INSTALL_FLOW
                                                   THEN /\ IRDoneSet' = [IRDoneSet EXCEPT ![self] = IRDoneSet[self] \cup {nextIR'[self]}]
                                                   ELSE /\ IRDoneSet' = [IRDoneSet EXCEPT ![self] = IRDoneSet[self] \ {getDualOfIR(nextIR'[self])}]
@@ -1559,7 +1633,8 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             event, topoChangeEvent, 
                                             currSetDownSw, prev_dag_id, init, 
                                             DAGID, nxtDAG, nxtDAGVertices, 
-                                            setRemovableIRs, seqEvent, currDAG, 
+                                            setRemovableIRs, irsToUnschedule, 
+                                            unschedule, seqEvent, currDAG, 
                                             nextIRObjectToSend, index, 
                                             stepOfFailureWP, monitoringEvent, 
                                             setIRsToReset, resetIR, 
@@ -1579,7 +1654,7 @@ RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
                                             RCNIBEventQueue, DAGState, 
                                             RCSwSuspensionStatus, RCIRStatus, 
                                             NIBIRStatus, SwSuspensionStatus, 
-                                            SetScheduledIRs, seqWorkerIsBusy, 
+                                            ScheduledIRs, seqWorkerIsBusy, 
                                             eventHandlerCheckpoint, 
                                             eventHandlerTCAMCleared, 
                                             eventHandlerLastIRToReset, 
@@ -1587,7 +1662,8 @@ RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
                                             event, topoChangeEvent, 
                                             currSetDownSw, prev_dag_id, init, 
                                             DAGID, nxtDAG, nxtDAGVertices, 
-                                            setRemovableIRs, seqEvent, 
+                                            setRemovableIRs, irsToUnschedule, 
+                                            unschedule, seqEvent, 
                                             toBeScheduledIRs, nextIR, currDAG, 
                                             IRDoneSet, nextIRObjectToSend, 
                                             index, stepOfFailureWP, 
@@ -1615,7 +1691,7 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           DAGQueue, RCNIBEventQueue, DAGState, 
                                           RCSwSuspensionStatus, RCIRStatus, 
                                           NIBIRStatus, SwSuspensionStatus, 
-                                          SetScheduledIRs, seqWorkerIsBusy, 
+                                          ScheduledIRs, seqWorkerIsBusy, 
                                           eventHandlerCheckpoint, 
                                           eventHandlerTCAMCleared, 
                                           eventHandlerLastIRToReset, 
@@ -1623,7 +1699,8 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           event, topoChangeEvent, 
                                           currSetDownSw, prev_dag_id, init, 
                                           DAGID, nxtDAG, nxtDAGVertices, 
-                                          setRemovableIRs, seqEvent, 
+                                          setRemovableIRs, irsToUnschedule, 
+                                          unschedule, seqEvent, 
                                           toBeScheduledIRs, nextIR, currDAG, 
                                           IRDoneSet, stepOfFailureWP, 
                                           monitoringEvent, setIRsToReset, 
@@ -1729,8 +1806,7 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 DAGQueue, IRQueueNIB, DAGState, 
                                                 RCSwSuspensionStatus, 
                                                 RCIRStatus, SwSuspensionStatus, 
-                                                SetScheduledIRs, 
-                                                seqWorkerIsBusy, 
+                                                ScheduledIRs, seqWorkerIsBusy, 
                                                 eventHandlerCheckpoint, 
                                                 eventHandlerTCAMCleared, 
                                                 eventHandlerLastIRToReset, 
@@ -1738,9 +1814,10 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 topoChangeEvent, currSetDownSw, 
                                                 prev_dag_id, init, DAGID, 
                                                 nxtDAG, nxtDAGVertices, 
-                                                setRemovableIRs, seqEvent, 
-                                                toBeScheduledIRs, nextIR, 
-                                                currDAG, IRDoneSet, 
+                                                setRemovableIRs, 
+                                                irsToUnschedule, unschedule, 
+                                                seqEvent, toBeScheduledIRs, 
+                                                nextIR, currDAG, IRDoneSet, 
                                                 stepOfFailureWP, 
                                                 monitoringEvent, setIRsToReset, 
                                                 resetIR, stepOfFailureEH, msg, 
@@ -1783,7 +1860,7 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    RCSwSuspensionStatus, 
                                                    RCIRStatus, NIBIRStatus, 
                                                    SwSuspensionStatus, 
-                                                   SetScheduledIRs, 
+                                                   ScheduledIRs, 
                                                    seqWorkerIsBusy, 
                                                    eventHandlerCheckpoint, 
                                                    eventHandlerTCAMCleared, 
@@ -1793,9 +1870,10 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    currSetDownSw, prev_dag_id, 
                                                    init, DAGID, nxtDAG, 
                                                    nxtDAGVertices, 
-                                                   setRemovableIRs, seqEvent, 
-                                                   toBeScheduledIRs, nextIR, 
-                                                   currDAG, IRDoneSet, 
+                                                   setRemovableIRs, 
+                                                   irsToUnschedule, unschedule, 
+                                                   seqEvent, toBeScheduledIRs, 
+                                                   nextIR, currDAG, IRDoneSet, 
                                                    stepOfFailureWP, 
                                                    monitoringEvent, 
                                                    setIRsToReset, resetIR, 
@@ -1830,7 +1908,7 @@ ControllerThreadRemoveIRFromQueue(self) == /\ pc[self] = "ControllerThreadRemove
                                                            RCIRStatus, 
                                                            NIBIRStatus, 
                                                            SwSuspensionStatus, 
-                                                           SetScheduledIRs, 
+                                                           ScheduledIRs, 
                                                            seqWorkerIsBusy, 
                                                            eventHandlerCheckpoint, 
                                                            eventHandlerTCAMCleared, 
@@ -1842,6 +1920,8 @@ ControllerThreadRemoveIRFromQueue(self) == /\ pc[self] = "ControllerThreadRemove
                                                            DAGID, nxtDAG, 
                                                            nxtDAGVertices, 
                                                            setRemovableIRs, 
+                                                           irsToUnschedule, 
+                                                           unschedule, 
                                                            seqEvent, 
                                                            toBeScheduledIRs, 
                                                            nextIR, currDAG, 
@@ -1883,7 +1963,7 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     RCSwSuspensionStatus, 
                                                     RCIRStatus, NIBIRStatus, 
                                                     SwSuspensionStatus, 
-                                                    SetScheduledIRs, 
+                                                    ScheduledIRs, 
                                                     seqWorkerIsBusy, 
                                                     eventHandlerCheckpoint, 
                                                     eventHandlerTCAMCleared, 
@@ -1894,7 +1974,9 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     currSetDownSw, prev_dag_id, 
                                                     init, DAGID, nxtDAG, 
                                                     nxtDAGVertices, 
-                                                    setRemovableIRs, seqEvent, 
+                                                    setRemovableIRs, 
+                                                    irsToUnschedule, 
+                                                    unschedule, seqEvent, 
                                                     toBeScheduledIRs, nextIR, 
                                                     currDAG, IRDoneSet, 
                                                     nextIRObjectToSend, index, 
@@ -1944,7 +2026,7 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    RCIRStatus, 
                                                                    NIBIRStatus, 
                                                                    SwSuspensionStatus, 
-                                                                   SetScheduledIRs, 
+                                                                   ScheduledIRs, 
                                                                    seqWorkerIsBusy, 
                                                                    FirstInstall, 
                                                                    event, 
@@ -1955,6 +2037,8 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    nxtDAG, 
                                                                    nxtDAGVertices, 
                                                                    setRemovableIRs, 
+                                                                   irsToUnschedule, 
+                                                                   unschedule, 
                                                                    seqEvent, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
@@ -1999,7 +2083,7 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              DAGEventQueue, DAGQueue, 
                                              IRQueueNIB, DAGState, 
                                              RCSwSuspensionStatus, RCIRStatus, 
-                                             NIBIRStatus, SetScheduledIRs, 
+                                             NIBIRStatus, ScheduledIRs, 
                                              seqWorkerIsBusy, 
                                              eventHandlerTCAMCleared, 
                                              eventHandlerLastIRToReset, 
@@ -2007,6 +2091,7 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              topoChangeEvent, currSetDownSw, 
                                              prev_dag_id, init, DAGID, nxtDAG, 
                                              nxtDAGVertices, setRemovableIRs, 
+                                             irsToUnschedule, unschedule, 
                                              seqEvent, toBeScheduledIRs, 
                                              nextIR, currDAG, IRDoneSet, 
                                              nextIRObjectToSend, index, 
@@ -2041,7 +2126,7 @@ ControllerRequestTCAMClear(self) == /\ pc[self] = "ControllerRequestTCAMClear"
                                                     RCSwSuspensionStatus, 
                                                     RCIRStatus, NIBIRStatus, 
                                                     SwSuspensionStatus, 
-                                                    SetScheduledIRs, 
+                                                    ScheduledIRs, 
                                                     seqWorkerIsBusy, 
                                                     eventHandlerCheckpoint, 
                                                     eventHandlerTCAMCleared, 
@@ -2051,7 +2136,9 @@ ControllerRequestTCAMClear(self) == /\ pc[self] = "ControllerRequestTCAMClear"
                                                     currSetDownSw, prev_dag_id, 
                                                     init, DAGID, nxtDAG, 
                                                     nxtDAGVertices, 
-                                                    setRemovableIRs, seqEvent, 
+                                                    setRemovableIRs, 
+                                                    irsToUnschedule, 
+                                                    unschedule, seqEvent, 
                                                     toBeScheduledIRs, nextIR, 
                                                     currDAG, IRDoneSet, 
                                                     nextIRObjectToSend, index, 
@@ -2079,7 +2166,7 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           RCIRStatus, 
                                                           NIBIRStatus, 
                                                           SwSuspensionStatus, 
-                                                          SetScheduledIRs, 
+                                                          ScheduledIRs, 
                                                           seqWorkerIsBusy, 
                                                           eventHandlerCheckpoint, 
                                                           eventHandlerTCAMCleared, 
@@ -2092,7 +2179,8 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           DAGID, nxtDAG, 
                                                           nxtDAGVertices, 
                                                           setRemovableIRs, 
-                                                          seqEvent, 
+                                                          irsToUnschedule, 
+                                                          unschedule, seqEvent, 
                                                           toBeScheduledIRs, 
                                                           nextIR, currDAG, 
                                                           IRDoneSet, 
@@ -2121,7 +2209,7 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            RCNIBEventQueue, DAGState, 
                                            RCSwSuspensionStatus, RCIRStatus, 
                                            NIBIRStatus, SwSuspensionStatus, 
-                                           SetScheduledIRs, seqWorkerIsBusy, 
+                                           ScheduledIRs, seqWorkerIsBusy, 
                                            eventHandlerCheckpoint, 
                                            eventHandlerTCAMCleared, 
                                            eventHandlerLastIRToReset, 
@@ -2129,7 +2217,8 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            event, topoChangeEvent, 
                                            currSetDownSw, prev_dag_id, init, 
                                            DAGID, nxtDAG, nxtDAGVertices, 
-                                           setRemovableIRs, seqEvent, 
+                                           setRemovableIRs, irsToUnschedule, 
+                                           unschedule, seqEvent, 
                                            toBeScheduledIRs, nextIR, currDAG, 
                                            IRDoneSet, nextIRObjectToSend, 
                                            index, stepOfFailureWP, 
@@ -2178,12 +2267,13 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      DAGEventQueue, DAGQueue, IRQueueNIB, 
                                      DAGState, RCSwSuspensionStatus, 
                                      RCIRStatus, SwSuspensionStatus, 
-                                     SetScheduledIRs, seqWorkerIsBusy, 
+                                     ScheduledIRs, seqWorkerIsBusy, 
                                      eventHandlerCheckpoint, 
                                      eventHandlerTCAMCleared, FirstInstall, 
                                      event, topoChangeEvent, currSetDownSw, 
                                      prev_dag_id, init, DAGID, nxtDAG, 
-                                     nxtDAGVertices, setRemovableIRs, seqEvent, 
+                                     nxtDAGVertices, setRemovableIRs, 
+                                     irsToUnschedule, unschedule, seqEvent, 
                                      toBeScheduledIRs, nextIR, currDAG, 
                                      IRDoneSet, nextIRObjectToSend, index, 
                                      stepOfFailureWP, msg, irID, 
@@ -2232,16 +2322,17 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    DAGState, 
                                                    RCSwSuspensionStatus, 
                                                    RCIRStatus, NIBIRStatus, 
-                                                   SetScheduledIRs, 
+                                                   ScheduledIRs, 
                                                    seqWorkerIsBusy, 
                                                    FirstInstall, event, 
                                                    topoChangeEvent, 
                                                    currSetDownSw, prev_dag_id, 
                                                    init, DAGID, nxtDAG, 
                                                    nxtDAGVertices, 
-                                                   setRemovableIRs, seqEvent, 
-                                                   toBeScheduledIRs, nextIR, 
-                                                   currDAG, IRDoneSet, 
+                                                   setRemovableIRs, 
+                                                   irsToUnschedule, unschedule, 
+                                                   seqEvent, toBeScheduledIRs, 
+                                                   nextIR, currDAG, IRDoneSet, 
                                                    nextIRObjectToSend, index, 
                                                    stepOfFailureWP, 
                                                    setIRsToReset, resetIR, msg, 
@@ -2276,7 +2367,7 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    RCSwSuspensionStatus, 
                                                                    RCIRStatus, 
                                                                    SwSuspensionStatus, 
-                                                                   SetScheduledIRs, 
+                                                                   ScheduledIRs, 
                                                                    seqWorkerIsBusy, 
                                                                    eventHandlerCheckpoint, 
                                                                    eventHandlerTCAMCleared, 
@@ -2291,6 +2382,8 @@ ControllerEventHandlerStateReconciliation(self) == /\ pc[self] = "ControllerEven
                                                                    nxtDAG, 
                                                                    nxtDAGVertices, 
                                                                    setRemovableIRs, 
+                                                                   irsToUnschedule, 
+                                                                   unschedule, 
                                                                    seqEvent, 
                                                                    toBeScheduledIRs, 
                                                                    nextIR, 
@@ -2337,7 +2430,7 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        RCSwSuspensionStatus, 
                                                        RCIRStatus, NIBIRStatus, 
                                                        SwSuspensionStatus, 
-                                                       SetScheduledIRs, 
+                                                       ScheduledIRs, 
                                                        seqWorkerIsBusy, 
                                                        eventHandlerCheckpoint, 
                                                        eventHandlerTCAMCleared, 
@@ -2350,7 +2443,8 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        DAGID, nxtDAG, 
                                                        nxtDAGVertices, 
                                                        setRemovableIRs, 
-                                                       seqEvent, 
+                                                       irsToUnschedule, 
+                                                       unschedule, seqEvent, 
                                                        toBeScheduledIRs, 
                                                        nextIR, currDAG, 
                                                        IRDoneSet, 
@@ -2386,7 +2480,7 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          RCIRStatus, 
                                                          NIBIRStatus, 
                                                          SwSuspensionStatus, 
-                                                         SetScheduledIRs, 
+                                                         ScheduledIRs, 
                                                          seqWorkerIsBusy, 
                                                          eventHandlerCheckpoint, 
                                                          eventHandlerTCAMCleared, 
@@ -2398,7 +2492,8 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          DAGID, nxtDAG, 
                                                          nxtDAGVertices, 
                                                          setRemovableIRs, 
-                                                         seqEvent, 
+                                                         irsToUnschedule, 
+                                                         unschedule, seqEvent, 
                                                          toBeScheduledIRs, 
                                                          nextIR, currDAG, 
                                                          IRDoneSet, 
@@ -2447,8 +2542,7 @@ ControllerProcessIRMod(self) == /\ pc[self] = "ControllerProcessIRMod"
                                                 DAGQueue, IRQueueNIB, DAGState, 
                                                 RCSwSuspensionStatus, 
                                                 RCIRStatus, SwSuspensionStatus, 
-                                                SetScheduledIRs, 
-                                                seqWorkerIsBusy, 
+                                                ScheduledIRs, seqWorkerIsBusy, 
                                                 eventHandlerCheckpoint, 
                                                 eventHandlerTCAMCleared, 
                                                 eventHandlerLastIRToReset, 
@@ -2456,9 +2550,10 @@ ControllerProcessIRMod(self) == /\ pc[self] = "ControllerProcessIRMod"
                                                 currSetDownSw, prev_dag_id, 
                                                 init, DAGID, nxtDAG, 
                                                 nxtDAGVertices, 
-                                                setRemovableIRs, seqEvent, 
-                                                toBeScheduledIRs, nextIR, 
-                                                currDAG, IRDoneSet, 
+                                                setRemovableIRs, 
+                                                irsToUnschedule, unschedule, 
+                                                seqEvent, toBeScheduledIRs, 
+                                                nextIR, currDAG, IRDoneSet, 
                                                 nextIRObjectToSend, index, 
                                                 stepOfFailureWP, 
                                                 monitoringEvent, setIRsToReset, 
@@ -2482,13 +2577,14 @@ ForwardToEH(self) == /\ pc[self] = "ForwardToEH"
                                      IRQueueNIB, RCNIBEventQueue, DAGState, 
                                      RCSwSuspensionStatus, RCIRStatus, 
                                      NIBIRStatus, SwSuspensionStatus, 
-                                     SetScheduledIRs, seqWorkerIsBusy, 
+                                     ScheduledIRs, seqWorkerIsBusy, 
                                      eventHandlerCheckpoint, 
                                      eventHandlerTCAMCleared, 
                                      eventHandlerLastIRToReset, FirstInstall, 
                                      event, topoChangeEvent, currSetDownSw, 
                                      prev_dag_id, init, DAGID, nxtDAG, 
-                                     nxtDAGVertices, setRemovableIRs, seqEvent, 
+                                     nxtDAGVertices, setRemovableIRs, 
+                                     irsToUnschedule, unschedule, seqEvent, 
                                      toBeScheduledIRs, nextIR, currDAG, 
                                      IRDoneSet, nextIRObjectToSend, index, 
                                      stepOfFailureWP, monitoringEvent, 
@@ -2586,7 +2682,7 @@ TypeOK ==  /\ NadirFIFO(MSG_SET_TIMEOUT \cup MSG_SET_KEEPALIVE, swSeqChangedStat
            /\ eventHandlerTCAMCleared \in BOOLEAN
            /\ eventHandlerLastIRToReset \in NadirNullable(NADIR_INT_ID_SET)
            /\ NadirFunctionTypeCheck(SW, ENUM_SET_SW_STATE, SwSuspensionStatus)
-           /\ NadirFunctionTypeCheck(SW, SUBSET NADIR_INT_ID_SET, SetScheduledIRs)
+           /\ NadirFunctionTypeCheck(NADIR_INT_ID_SET, BOOLEAN , ScheduledIRs)
            /\ NadirLocalVariableTypeCheck(NadirNullable(MSG_SET_TE_EVENT), event)
            /\ NadirLocalVariableTypeCheck(NadirNullable(MSG_SET_TE_EVENT), topoChangeEvent)
            /\ NadirLocalVariableTypeCheck(SUBSET SW, currSetDownSw)

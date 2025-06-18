@@ -38,7 +38,7 @@ VARIABLES TEEventQueue, DAGEventQueue, DAGQueue,
           IRQueueNIB, RCNIBEventQueue, 
           DAGState, RCIRStatus, 
           RCSwSuspensionStatus, SwSuspensionStatus, 
-          SetScheduledIRs, 
+          ScheduledIRs, 
           IRDoneSet, seqWorkerIsBusy,
           event, topoChangeEvent, currSetDownSw, 
           prev_dag_id, init, DAGID, nxtDAG, setRemovableIRs, 
@@ -55,7 +55,9 @@ VARIABLES TEEventQueue, DAGEventQueue, DAGQueue,
           eventHandlerTCAMCleared,
 
           ofcSubmoduleFailNum,
-          stepOfFailureWP, stepOfFailureEH, stepOfFailureMS
+          stepOfFailureWP, stepOfFailureEH, stepOfFailureMS,
+
+          irsToUnschedule, unschedule
 
 
 (* Each time either of the switches OR Zenith take a step, these CAN change *)
@@ -77,7 +79,7 @@ internal_zenith_vars == <<
     IRQueueNIB, RCNIBEventQueue, 
     DAGState, RCIRStatus, NIBIRStatus, FirstInstall,
     RCSwSuspensionStatus, SwSuspensionStatus, 
-    SetScheduledIRs, 
+    ScheduledIRs, 
     IRDoneSet, seqWorkerIsBusy,
     event, topoChangeEvent, currSetDownSw, 
     prev_dag_id, init, DAGID, nxtDAG, setRemovableIRs, 
@@ -96,7 +98,9 @@ internal_zenith_vars == <<
     pc,
 
     ofcSubmoduleFailNum,
-    stepOfFailureWP, stepOfFailureEH, stepOfFailureMS
+    stepOfFailureWP, stepOfFailureEH, stepOfFailureMS,
+
+    irsToUnschedule, unschedule
 >>
 
 (* Any one of these variables can stutter ... *)
@@ -112,7 +116,7 @@ vars == <<
     IRQueueNIB, RCNIBEventQueue, 
     DAGState, RCIRStatus, NIBIRStatus, FirstInstall,
     RCSwSuspensionStatus, SwSuspensionStatus, 
-    SetScheduledIRs, 
+    ScheduledIRs, 
     IRDoneSet, seqWorkerIsBusy,
     event, topoChangeEvent, currSetDownSw, 
     prev_dag_id, init, DAGID, nxtDAG, setRemovableIRs, 
@@ -131,7 +135,9 @@ vars == <<
     pc,
 
     ofcSubmoduleFailNum, 
-    stepOfFailureWP, stepOfFailureEH, stepOfFailureMS
+    stepOfFailureWP, stepOfFailureEH, stepOfFailureMS,
+
+    irsToUnschedule, unschedule
 >>
 
 (* All of our processes *)
@@ -168,7 +174,7 @@ Init == (* Locks *)
         /\ RCIRStatus = [y \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
         /\ RCSwSuspensionStatus = [y \in SW |-> SW_RUN]
         /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
-        /\ SetScheduledIRs = [y \in SW |-> {}]
+        /\ ScheduledIRs = [x \in 1..2*MaxNumIRs |-> FALSE]
         /\ ofcSubmoduleFailNum = [x \in OFCProcSet |-> 0]
         /\ seqWorkerIsBusy = FALSE
         /\ eventHandlerCheckpoint = FALSE
@@ -185,6 +191,8 @@ Init == (* Locks *)
         /\ nxtDAG = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
         /\ nxtDAGVertices = [self \in ({rc0} \X {CONT_TE}) |-> {}]
         /\ setRemovableIRs = [self \in ({rc0} \X {CONT_TE}) |-> {}]
+        /\ irsToUnschedule = [self \in ({rc0} \X {CONT_TE}) |-> {}]
+        /\ unschedule = [self \in ({rc0} \X {CONT_TE}) |-> NADIR_NULL]
         (* Process controllerBossSequencer *)
         /\ seqEvent = [self \in ({rc0} \X {CONT_BOSS_SEQ}) |-> NADIR_NULL]
         (* Process controllerSequencer *)

@@ -17,7 +17,7 @@ LIBS = [
 ]
 
 # These are the commands we invoke ...
-TLC_CMD = "java {java_opts} -XX:+UseParallelGC -cp {jar} tlc2.TLC {module} -workers 64 -cleanup -config {config}"
+TLC_CMD = "java {java_opts} -Xss4m -XX:+UseParallelGC -cp {jar} tlc2.TLC {module} -workers 64 -cleanup -config {config}"
 SANY_CMD = "java {java_opts} -cp {jar} tla2sany.SANY {module}"
 PCAL_TRANS_CMD = "java {java_opts} -cp {jar} pcal.trans -nocfg -unixEOL {module}"
 
