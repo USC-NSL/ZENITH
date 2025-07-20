@@ -1,5 +1,5 @@
 ---- MODULE graph ----
-EXTENDS TLC, Integers, FiniteSets, Sequences
+EXTENDS TLC, Integers, FiniteSets, Sequences, dag
 
 
 \* `TRUE` if `edgeSet` is a set of pairs, each element in `nodeSet`
@@ -168,9 +168,10 @@ GenerateDrainApplicationData(NodeSet, EdgeSet, NodeToDrain, Endpoints) ==
             TotalNumberOfIRs |-> (Cardinality(originalIRs.nodes) + Cardinality(drainedIRs.nodes))
         ]
 
-\* Get children of a node
+\* Get children/parents of a node
 NodeChildren(nodeSet, edgeSet, node) == {n \in (nodeSet \ {node}): <<node, n>> \in edgeSet}
-\* Get children of a set of nodes
+NodeParents(nodeSet, edgeSet, node) == {n \in (nodeSet \ {node}): <<n, node>> \in edgeSet}
+\* Get children/parents of a set of nodes
 RECURSIVE _NodeSetChildren(_, _, _, _)
 _NodeSetChildren(nodeSet, edgeSet, parentSet, childrenSet) ==
     IF Cardinality(parentSet) = 0
@@ -181,6 +182,16 @@ _NodeSetChildren(nodeSet, edgeSet, parentSet, childrenSet) ==
                 newParentSet == parentSet \ {parent}
              IN _NodeSetChildren(nodeSet, edgeSet, newParentSet, childrenSet \cup newChildren)
 NodeSetChildren(nodeSet, edgeSet, parentSet) == _NodeSetChildren(nodeSet, edgeSet, parentSet, {})
+RECURSIVE _NodeSetParents(_, _, _, _)
+_NodeSetParents(nodeSet, edgeSet, childrenSet, parentSet) ==
+    IF Cardinality(childrenSet) = 0
+        THEN parentSet
+        ELSE LET 
+                child == CHOOSE child \in childrenSet: TRUE
+                newParents == NodeParents(nodeSet, edgeSet, child)
+                newChildrenSet == childrenSet \ {child}
+             IN _NodeSetParents(nodeSet, edgeSet, newChildrenSet, parentSet \cup newParents)
+NodeSetParents(nodeSet, edgeSet, childrenSet) == _NodeSetParents(nodeSet, edgeSet, childrenSet, {})
 
 \* Get the root(s) of a DAG, the set of all nodes with no parents
 GetDAGRoot(nodeSet, edgeSet) == {node \in nodeSet: \A x \in (nodeSet \ {node}): <<x, node>> \notin edgeSet}
@@ -188,17 +199,17 @@ GetDAGRoot(nodeSet, edgeSet) == {node \in nodeSet: \A x \in (nodeSet \ {node}): 
 GetDAGLeaves(nodeSet, edgeSet) == {node \in nodeSet: \A x \in (nodeSet \ {node}): <<node, x>> \notin edgeSet}
 
 \* Do BFS on a DAG (useful for abstract core)
-RECURSIVE _GetDAGLevels(_, _, _, _)
-_GetDAGLevels(nodeSet, edgeSet, currentLevel, levels) ==
-    LET nextLevel == NodeSetChildren(nodeSet, edgeSet, currentLevel)
+RECURSIVE _GetDAGLevels(_, _, _, _, _)
+_GetDAGLevels(nodeSet, edgeSet, currentLevel, visited, levels) ==
+    LET nextLevel == (NodeSetChildren(nodeSet, edgeSet, currentLevel) \ visited)
     IN IF Cardinality(nextLevel) = 0
         THEN levels
-        ELSE _GetDAGLevels(nodeSet, edgeSet, nextLevel, levels \o <<nextLevel>>)
+        ELSE _GetDAGLevels(nodeSet, edgeSet, nextLevel, (visited \cup nextLevel), levels \o <<nextLevel>>)
 GetDAGLevels(nodeSet, edgeSet) ==
     LET 
         roots == GetDAGRoot(nodeSet, edgeSet)
         levels == <<roots>>
-    IN _GetDAGLevels(nodeSet, edgeSet, roots, levels)
+    IN _GetDAGLevels(nodeSet, edgeSet, roots, roots, levels)
 
 \* A utility that adds a whole level to a DAG (i.e. the new nodes will have the whole previous DAG
 \* as their dependency)
@@ -240,6 +251,44 @@ DAGBFS(nodeSet, edgeSet) ==
     LET levels == GetDAGLevels(nodeSet, edgeSet)
     IN _BFS(levels, <<>>)
 
+\* Creates a mapping from nodeSet to the set of parents for each node
+RECURSIVE _GetParents(_, _, _, _)
+_GetParents(nodeSet, edgeSet, nodesLeft, mapping) ==
+    IF Cardinality(nodesLeft) = 0
+        THEN mapping
+        ELSE LET 
+                currentNode == CHOOSE node \in nodesLeft: TRUE
+                currentParents == NodeParents(nodeSet, edgeSet, currentNode)
+             IN _GetParents(nodeSet, edgeSet, nodesLeft \ {currentNode}, mapping @@ (currentNode :> currentParents))
+RECURSIVE _InitialParentMap(_, _)
+_InitialParentMap(roots, mapping) ==
+    IF Cardinality(roots) = 0
+        THEN mapping
+        ELSE LET currentRoot == CHOOSE root \in roots: TRUE
+             IN _InitialParentMap(roots \ {currentRoot}, mapping @@ (currentRoot :> {}))
+InitialParentMap(roots) ==
+    LET firstRoot == CHOOSE root \in roots: TRUE
+    IN _InitialParentMap(roots \ {firstRoot}, (firstRoot :> {}))
+GetParents(nodeSet, edgeSet) ==
+    LET roots == GetDAGRoot(nodeSet, edgeSet)
+    IN _GetParents(nodeSet, edgeSet, nodeSet \ roots, InitialParentMap(roots))
+
+GetSetOfScheduleableNodes(satisfiedNodes, parentMap) ==
+    {node \in DOMAIN parentMap: parentMap[node] \subseteq satisfiedNodes}
+
+RECURSIVE _GetDAGScheduleLevels(_, _, _, _, _)
+_GetDAGScheduleLevels(nodeSet, edgeSet, parentMap, satisfiedSet, levels) ==
+    IF satisfiedSet = nodeSet
+        THEN levels
+        ELSE LET nextLevel == GetSetOfScheduleableNodes(satisfiedSet, parentMap) \ satisfiedSet
+             IN _GetDAGScheduleLevels(nodeSet, edgeSet, parentMap, satisfiedSet \cup nextLevel, levels \o <<SetToSeq(nextLevel)>>)
+GetDAGScheduleLevels(nodeSet, edgeSet) ==
+    LET 
+        roots == GetDAGRoot(nodeSet, edgeSet)
+        parentMap == GetParents(nodeSet, edgeSet)
+    IN _GetDAGScheduleLevels(nodeSet, edgeSet, parentMap, roots, <<SetToSeq(roots)>>)
+
+
 \* VARIABLES NodeSet, EdgeSet, NodeToDrain
 
 \* Init == /\ NodeSet = 1..45
@@ -276,14 +325,33 @@ DAGBFS(nodeSet, edgeSet) ==
 \*             }
 \*         /\ NodeToDrain = 4
 
+\* Init == /\ NodeSet = 1..5
+\*         /\ EdgeSet = {
+\*                 <<1, 2>>, <<2, 5>>, <<4, 5>>, <<2, 3>>
+\*             }
+\*         /\ NodeToDrain = 4
+
 \* Next == /\ NodeSet' = (NodeSet \ {NodeToDrain})
 \*         /\ EdgeSet' = RemoveNodeFromEdgeSet(NodeToDrain, EdgeSet)
 \*         /\ UNCHANGED <<NodeToDrain>>
+
+
+\* Init == /\ NodeSet = 1..9
+\*         /\ EdgeSet = {
+\*                 <<1, 2>>, <<1, 3>>, <<2, 4>>, <<3, 4>>, <<4, 5>>, <<5, 6>>,
+\*                 <<3, 7>>, <<7, 8>>, <<8, 9>>, <<9, 6>>,
+\*                 <<2, 1>>, <<3, 1>>, <<4, 2>>, <<4, 3>>, <<5, 4>>, <<6, 5>>,
+\*                 <<7, 3>>, <<8, 7>>, <<9, 8>>, <<6, 9>>
+\*             }
+\*         /\ NodeToDrain = 4
 \* Next == UNCHANGED <<NodeToDrain, NodeSet, EdgeSet>>
         
 \* vars == <<NodeSet, EdgeSet, NodeToDrain>>
 
 \* Spec == Init /\ [][Next]_vars
+\* Inv == PrintT(SimpleDAG(5, 5))
+\* Inv == PrintT(GetDAGScheduleLevels(NodeSet, EdgeSet))
+\* Inv == PrintT(GetDAGLevels(NodeSet, EdgeSet))
 \* Inv == PrintT(DAGBFS(NodeSet, EdgeSet))
 \* Inv == PrintT(GenerateDrainApplicationData(
 \*         NodeSet, EdgeSet, NodeToDrain, 

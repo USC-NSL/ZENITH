@@ -1,9 +1,9 @@
 ---- MODULE evaluate_AbstractCore ----
-EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, nib_constants, NadirTypes
+EXTENDS Integers, Sequences, FiniteSets, TLC, eval_constants, switch_constants, nib_constants, dag, NadirTypes
 
 CONSTANTS core0
 CONSTANTS CORE_SERVICER, CORE_HANDLER
-CONSTANTS IR2SW, DAG, DAGID
+CONSTANTS IR2SW, DAGID, NUM_SW, DAG_DEPTH, DAG_WIDTH
 
 
 VARIABLES switchLock, controllerLock
@@ -25,7 +25,7 @@ VARIABLES sw_fail_ordering_var, SwProcSet,
 \* For zenith
 VARIABLES DAGEventQueue, NIBEventQueue, DAGState, 
           SwSuspensionStatus, currentDAGObject, levels, 
-          irListToSend, msg, irSetToReset
+          irListToSend, msg, irSetToReset, dependencies, DAG
 
 
 ----
@@ -36,34 +36,57 @@ CONSTANTS
 s0, s1
 ----
 
+const_DAG_WIDTH == 10
+const_DAG_DEPTH == 1
+
 \* Consider a topology of 2 switches
-const_SW == {s0, s1}
+const_NUM_SW == 5
+const_SW == 1..NUM_SW
 ----
 
-const_MaxNumIRs == 3
+const_MaxNumIRs == DAG_WIDTH * DAG_DEPTH + 1
 ----
 
 const_MaxDAGID == 15
 ----
 
 \* Use the simple switch model
-const_WHICH_SWITCH_MODEL == (s0 :> SW_SIMPLE_MODEL) @@ (s1 :> SW_SIMPLE_MODEL)
+\* const_WHICH_SWITCH_MODEL == (s0 :> SW_SIMPLE_MODEL) @@ (s1 :> SW_SIMPLE_MODEL)
+RECURSIVE _AllSimple(_, _)
+_AllSimple(counter, mapping) ==
+    IF counter > NUM_SW
+        THEN mapping
+        ELSE _AllSimple(counter+1, mapping @@ (counter :> SW_SIMPLE_MODEL))
+AllSimple == _AllSimple(1, (1 :> SW_SIMPLE_MODEL))
+
+const_WHICH_SWITCH_MODEL == AllSimple
 ----
 
 const_SW_MODULE_CAN_FAIL_OR_NOT == [cpu |-> 0, nicAsic |-> 0, ofa |-> 0, installer |-> 0]
 ----
 
-const_DAG == [v |-> {1, 2}, e |-> {<<1, 2>>}]
+\* const_DAG == [v |-> {1, 2}, e |-> {<<1, 2>>}]
 ----
 
 const_DAGID == 1
 ----
 
+RECURSIVE _RoundRobinIRAssignment(_, _)
+_RoundRobinIRAssignment(currentIR, assignment) ==
+    IF currentIR = (MaxNumIRs+1)
+        THEN assignment
+        ELSE _RoundRobinIRAssignment(currentIR+1, assignment @@ (currentIR :> ((currentIR % NUM_SW) + 1)))
+RoundRobinIRAssignment == _RoundRobinIRAssignment(2, (1 :> 1))
+
 \* Where to install each IR?
-const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
+\* const_IR2SW == (1 :> s0) @@ (2 :> s1) @@ (3 :> s1)
+\* const_IR2SW == (1 :> 1) @@ (2 :> 2) @@ (3 :> 2)
+const_IR2SW == RoundRobinIRAssignment
 ----
 
 const_SW_FAIL_ORDERING == <<>>
+\* const_SW_FAIL_ORDERING == <<{[sw |-> s0, partial |-> 0, transient |-> 1]}>>
+\* const_SW_FAIL_ORDERING == <<{[sw |-> 1, partial |-> 0, transient |-> 1]}>>
 ----
 
 
@@ -78,7 +101,7 @@ internal_switch_vars == <<
 internal_zenith_vars == <<
     DAGEventQueue, NIBEventQueue, DAGState, NIBIRStatus, FirstInstall,
     SwSuspensionStatus, currentDAGObject, levels, irListToSend, msg, 
-    irSetToReset, pc
+    irSetToReset, pc, dependencies, DAG
 >>
 
 vars == <<
@@ -88,7 +111,7 @@ vars == <<
     ingressPkt, statusMsg, obj, statusResolveMsg,
     DAGEventQueue, NIBEventQueue, DAGState, NIBIRStatus, FirstInstall,
     SwSuspensionStatus, currentDAGObject, levels, irListToSend, msg, 
-    irSetToReset, pc
+    irSetToReset, pc, dependencies, DAG
 >>
 
 ProcSet == 
@@ -104,9 +127,11 @@ Init == (* Global variables *)
         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
         /\ FirstInstall = [x \in 1..2*MaxNumIRs |-> 0]
+        /\ dependencies = SimpleDAG(DAG_DEPTH, DAG_WIDTH)
+        /\ DAG = [v |-> 1..MaxNumIRs, e |-> dependencies]
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
-        /\ DAGEventQueue = <<[id |-> DAGID, dag |-> DAG]>>
+        /\ DAGEventQueue = <<[dag |-> DAG, id |-> 1]>>
         /\ NIBEventQueue = <<>>
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
@@ -190,7 +215,6 @@ InstallationInvProp == \/ ENABLED Next
                        \/ /\ CorrectDAGInstalled
                           /\ CorrectDoneStatusController
 \* Safety Properties
-min(someSet) == CHOOSE x \in someSet: (\A y \in (someSet \ {x}): x \leq y)
 firstHappening(seq, in) == min({x \in DOMAIN seq: seq[x] = in})
 
 ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
@@ -198,5 +222,7 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
                                                          /\ <<Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY)>> \notin DAG.e
                                                       \/ /\ firstHappening(installedIRs, x) > firstHappening(installedIRs, y)
                                                          /\ <<Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY)>> \notin DAG.e
+
+\* Test == PrintT(levels)
 
 ====

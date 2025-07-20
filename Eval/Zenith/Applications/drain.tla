@@ -44,7 +44,7 @@ CONSTANTS app0, DRAIN_APP
             IF Cardinality(setOfIRs) = 0
                 THEN deleterSet
                 ELSE LET currentIR == CHOOSE x \in setOfIRs: TRUE
-                     IN _GetDeletionIRs(setOfIRs \ {currentIR}, deleterSet \cup {currentIR + MaxNumIRs})
+                     IN _GetDeletionIRs(setOfIRs \ {currentIR}, deleterSet \cup {currentIR.ir + MaxNumIRs})
         
         GetDeletionIRs(setOfIRs) == _GetDeletionIRs(setOfIRs, {})
     end define;
@@ -70,16 +70,96 @@ CONSTANTS app0, DRAIN_APP
         irs := request.irs;
     end macro;
 
-    macro ComputeDrainedPathIRs(newPaths, previousIRs, newIRs, newDAG) begin
+    \* macro ComputeDrainedPathIRs(newPaths, previousIRs, newIRs, newDAG) begin
+    \*     \* The new IRs MUST be installed with a higher priority than 
+    \*     \* previous paths (otherwise, there is no way to guarantee the
+    \*     \* drain is hitless). To do this, sift through previous IRs and
+    \*     \* get the highest priority in it.
+    \*     with res = GeneratePathSetIRs(newPaths, Cardinality(previousIRs), HighestPriorityInIRSet(previousIRs) + 1)  do
+    \*         newIRs := res.irs;
+    \*         newDAG := ExpandDAG([v |-> res.nodes, e |-> res.edges], res.OriginalIRs.nodes);
+    \*     end with;
+    \* end macro;
+
+    \* \* Generate IRs for the current path (or set of paths) at a given priority
+    \* \* while also creating a reversed chain for the DAG.
+    \* \* It traverses the paths in _reverse_ order to build the DAG concurrently.
+    \* RECURSIVE _GeneratePathIRs(_, _, _, _, _, _, _) 
+    \* _GeneratePathIRs(path, startingIR, index, priority, irSet, edgeSet, nodeSet) ==
+    \*     IF index = Cardinality(DOMAIN path)
+    \*         THEN [irs |-> irSet, edges |-> edgeSet, nodes |-> nodeSet]
+    \*         ELSE LET 
+    \*                 newIRIndex == startingIR + index
+    \*                 pathIndex == Len(path) - index + 1
+    \*                 newIRObject == [sw |-> path[pathIndex], ir |-> newIRIndex, priority |-> priority]
+    \*                 newDagEdge == IF index = 1
+    \*                                 THEN <<>>
+    \*                                 ELSE <<newIRIndex-1, newIRIndex>>
+    \*             IN IF Len(newDagEdge) = 0
+    \*                     THEN
+    \*                         _GeneratePathIRs(
+    \*                                 path, startingIR, index+1, priority, 
+    \*                                 irSet \cup {newIRObject}, 
+    \*                                 edgeSet, 
+    \*                                 nodeSet \cup {newIRIndex})
+    \*                     ELSE
+    \*                         _GeneratePathIRs(
+    \*                                 path, startingIR, index+1, priority, 
+    \*                                 irSet \cup {newIRObject}, 
+    \*                                 edgeSet \cup {newDagEdge},
+    \*                                 nodeSet \cup {newIRIndex})
+    \* GeneratePathIRs(path, startingIR, priority) == _GeneratePathIRs(path, startingIR, 1, priority, {}, {}, {})
+
+    \* RECURSIVE _GeneratePathSetIRs(_, _, _, _, _, _)
+    \* _GeneratePathSetIRs(pathSet, startingIR, priority, irSet, edgeSet, nodeSet) ==
+    \*     IF Cardinality(pathSet) = 0
+    \*         THEN [irs |-> irSet, edges |-> edgeSet, nodes |-> nodeSet]
+    \*         ELSE LET 
+    \*                 nextPath == CHOOSE x \in pathSet: TRUE
+    \*                 nextPathIRsAndDAG == GeneratePathIRs(nextPath, startingIR, priority)
+    \*             IN _GeneratePathSetIRs(
+    \*                     pathSet \ {nextPath}, 
+    \*                     startingIR + Cardinality(nextPathIRsAndDAG.irs), 
+    \*                     priority, 
+    \*                     irSet \cup nextPathIRsAndDAG.irs, 
+    \*                     edgeSet \cup nextPathIRsAndDAG.edges,
+    \*                     nodeSet \cup nextPathIRsAndDAG.nodes)
+    \* GeneratePathSetIRs(pathSet, startingIR, priority) == _GeneratePathSetIRs(pathSet, startingIR, priority, {}, {}, {})
+
+    procedure ComputeDrainedPathIRs(newPaths, previousIRs, newIRs, newDAG)
+    variables nextPriority = NADIR_NULL, newIRsStartingIndex = NADIR_NULL, 
+              newIRSet = {}, newDAGEdgeSet = {}, newDAGNodeSet = {}, 
+              currentPath = NADIR_NULL, currentPathResult = {};
+    begin
+    ComputePriority:
         \* The new IRs MUST be installed with a higher priority than 
         \* previous paths (otherwise, there is no way to guarantee the
         \* drain is hitless). To do this, sift through previous IRs and
         \* get the highest priority in it.
-        with res = GeneratePathSetIRs(newPaths, Cardinality(previousIRs), HighestPriorityInIRSet(previousIRs) + 1)  do
-            newIRs := res.irs;
-            newDAG := ExpandDAG([v |-> res.nodes, e |-> res.edges], res.OriginalIRs.nodes);
-        end with;
-    end macro;
+        nextPriority := HighestPriorityInIRSet(previousIRs) + 1;
+        \* Each hop in a new path will have a new IR associated with. Each
+        \* IR needs an index, and so will start at the end of current IR list
+        \* for indexing.
+        newIRsStartingIndex := Cardinality(previousIRs);
+    
+    ComputeNewPathsDAG:
+    while Cardinality(newPaths) > 0 do
+        \* Pick one of the new paths
+        currentPath := (CHOOSE p \in newPaths: TRUE);
+        \* Compute the IRs and the ordering that implements the new path
+        currentPathResult := GeneratePathIRs(currentPath, newIRsStartingIndex, nextPriority);
+        \* Accumulate the result and remove the processed path from the set
+        newIRSet := newIRSet \cup currentPathResult.irs;
+        newDAGEdgeSet := newDAGEdgeSet \cup currentPathResult.edges;
+        newDAGNodeSet := newDAGNodeSet \cup currentPathResult.nodes;
+        newPaths := newPaths \ {currentPath};
+    end while;
+    
+    CleanupPreviousIRs:
+        \* To cleanup the previous IRs, add the deletion instruction for all the previous
+        \* IRs at the end of the DAG (i.e. attach them to all the leaves of the DAG)
+        newDAG := ExpandDAG([v |-> newDAGNodeSet, e |-> newDAGEdgeSet], GetDeletionIRs(previousIRs));
+    end procedure;
 
     process drainer \in ({app0} \X {DRAIN_APP})
     variables 
@@ -95,15 +175,13 @@ CONSTANTS app0, DRAIN_APP
         ComputeDrain:
             \* First, get the set of endpoints that we need to keep connected during/after drain
             endpoints := getPathSetEndpoints(currentPaths) \ {nodeToDrain};
-            with nodesAfterDrain = (currentTopology.Nodes \ {nodeToDrain}) do
-                \* Get all paths assuming the given node was removed from the topology
-                pathsAfterDrain := ShortestPaths(
-                    endpoints, 
-                    nodesAfterDrain, 
-                    RemoveNodeFromEdgeSet(nodeToDrain, currentTopology.Edges));
-                \* (MACRO CALL) Compute the new DAG and IRs that implement the paths
-                ComputeDrainedPathIRs(pathsAfterDrain, currentIRs, drainPathSetIRs, drainedDAG);
-            end with;
+            \* Get all paths assuming the given node was removed from the topology
+            pathsAfterDrain := ShortestPaths(
+                endpoints, 
+                (currentTopology.Nodes \ {nodeToDrain}), 
+                RemoveNodeFromEdgeSet(nodeToDrain, currentTopology.Edges));
+            \* (PROCEDURE CALL) Compute the new DAG and IRs that implement the paths
+            call ComputeDrainedPathIRs(pathsAfterDrain, currentIRs, drainPathSetIRs, drainedDAG);
         SubmitDAG:
             \* (MACRO CALL) Generate an ID for this DAG and send it to the core
             NadirFIFOPut(DAGEventQueue, [id |-> nextDAGID, dag |-> drainedDAG]);
@@ -111,8 +189,9 @@ CONSTANTS app0, DRAIN_APP
     end while;
     end process;
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "a61310aa" /\ chksum(tla) = "57a326cd")
-VARIABLES DAGEventQueue, DrainRequestQueue, pc
+\* BEGIN TRANSLATION (chksum(pcal) = "d092d3c2" /\ chksum(tla) = "276483c")
+CONSTANT defaultInitValue
+VARIABLES DAGEventQueue, DrainRequestQueue, pc, stack
 
 (* define statement *)
 RECURSIVE _getPathSetEndpoints(_, _)
@@ -137,23 +216,40 @@ _GetDeletionIRs(setOfIRs, deleterSet) ==
     IF Cardinality(setOfIRs) = 0
         THEN deleterSet
         ELSE LET currentIR == CHOOSE x \in setOfIRs: TRUE
-             IN _GetDeletionIRs(setOfIRs \ {currentIR}, deleterSet \cup {currentIR + MaxNumIRs})
+             IN _GetDeletionIRs(setOfIRs \ {currentIR}, deleterSet \cup {currentIR.ir + MaxNumIRs})
 
 GetDeletionIRs(setOfIRs) == _GetDeletionIRs(setOfIRs, {})
 
-VARIABLES currentRequest, currentTopology, currentPaths, nodeToDrain, 
-          currentIRs, endpoints, pathsAfterDrain, drainPathSetIRs, drainedDAG, 
-          nextDAGID
+VARIABLES newPaths, previousIRs, newIRs, newDAG, nextPriority, 
+          newIRsStartingIndex, newIRSet, newDAGEdgeSet, newDAGNodeSet, 
+          currentPath, currentPathResult, currentRequest, currentTopology, 
+          currentPaths, nodeToDrain, currentIRs, endpoints, pathsAfterDrain, 
+          drainPathSetIRs, drainedDAG, nextDAGID
 
-vars == << DAGEventQueue, DrainRequestQueue, pc, currentRequest, 
-           currentTopology, currentPaths, nodeToDrain, currentIRs, endpoints, 
-           pathsAfterDrain, drainPathSetIRs, drainedDAG, nextDAGID >>
+vars == << DAGEventQueue, DrainRequestQueue, pc, stack, newPaths, previousIRs, 
+           newIRs, newDAG, nextPriority, newIRsStartingIndex, newIRSet, 
+           newDAGEdgeSet, newDAGNodeSet, currentPath, currentPathResult, 
+           currentRequest, currentTopology, currentPaths, nodeToDrain, 
+           currentIRs, endpoints, pathsAfterDrain, drainPathSetIRs, 
+           drainedDAG, nextDAGID >>
 
 ProcSet == (({app0} \X {DRAIN_APP}))
 
 Init == (* Global variables *)
         /\ DAGEventQueue = <<>>
         /\ DrainRequestQueue = <<>>
+        (* Procedure ComputeDrainedPathIRs *)
+        /\ newPaths = [ self \in ProcSet |-> defaultInitValue]
+        /\ previousIRs = [ self \in ProcSet |-> defaultInitValue]
+        /\ newIRs = [ self \in ProcSet |-> defaultInitValue]
+        /\ newDAG = [ self \in ProcSet |-> defaultInitValue]
+        /\ nextPriority = [ self \in ProcSet |-> NADIR_NULL]
+        /\ newIRsStartingIndex = [ self \in ProcSet |-> NADIR_NULL]
+        /\ newIRSet = [ self \in ProcSet |-> {}]
+        /\ newDAGEdgeSet = [ self \in ProcSet |-> {}]
+        /\ newDAGNodeSet = [ self \in ProcSet |-> {}]
+        /\ currentPath = [ self \in ProcSet |-> NADIR_NULL]
+        /\ currentPathResult = [ self \in ProcSet |-> {}]
         (* Process drainer *)
         /\ currentRequest = [self \in ({app0} \X {DRAIN_APP}) |-> NADIR_NULL]
         /\ currentTopology = [self \in ({app0} \X {DRAIN_APP}) |-> NADIR_NULL]
@@ -165,7 +261,65 @@ Init == (* Global variables *)
         /\ drainPathSetIRs = [self \in ({app0} \X {DRAIN_APP}) |-> {}]
         /\ drainedDAG = [self \in ({app0} \X {DRAIN_APP}) |-> {}]
         /\ nextDAGID = [self \in ({app0} \X {DRAIN_APP}) |-> 1]
+        /\ stack = [self \in ProcSet |-> << >>]
         /\ pc = [self \in ProcSet |-> "DrainLoop"]
+
+ComputePriority(self) == /\ pc[self] = "ComputePriority"
+                         /\ nextPriority' = [nextPriority EXCEPT ![self] = HighestPriorityInIRSet(previousIRs[self]) + 1]
+                         /\ newIRsStartingIndex' = [newIRsStartingIndex EXCEPT ![self] = Cardinality(previousIRs[self])]
+                         /\ pc' = [pc EXCEPT ![self] = "ComputeNewPathsDAG"]
+                         /\ UNCHANGED << DAGEventQueue, DrainRequestQueue, 
+                                         stack, newPaths, previousIRs, newIRs, 
+                                         newDAG, newIRSet, newDAGEdgeSet, 
+                                         newDAGNodeSet, currentPath, 
+                                         currentPathResult, currentRequest, 
+                                         currentTopology, currentPaths, 
+                                         nodeToDrain, currentIRs, endpoints, 
+                                         pathsAfterDrain, drainPathSetIRs, 
+                                         drainedDAG, nextDAGID >>
+
+ComputeNewPathsDAG(self) == /\ pc[self] = "ComputeNewPathsDAG"
+                            /\ IF Cardinality(newPaths[self]) > 0
+                                  THEN /\ currentPath' = [currentPath EXCEPT ![self] = (CHOOSE p \in newPaths[self]: TRUE)]
+                                       /\ currentPathResult' = [currentPathResult EXCEPT ![self] = GeneratePathIRs(currentPath'[self], newIRsStartingIndex[self], nextPriority[self])]
+                                       /\ newIRSet' = [newIRSet EXCEPT ![self] = newIRSet[self] \cup currentPathResult'[self].irs]
+                                       /\ newDAGEdgeSet' = [newDAGEdgeSet EXCEPT ![self] = newDAGEdgeSet[self] \cup currentPathResult'[self].edges]
+                                       /\ newDAGNodeSet' = [newDAGNodeSet EXCEPT ![self] = newDAGNodeSet[self] \cup currentPathResult'[self].nodes]
+                                       /\ newPaths' = [newPaths EXCEPT ![self] = newPaths[self] \ {currentPath'[self]}]
+                                       /\ pc' = [pc EXCEPT ![self] = "ComputeNewPathsDAG"]
+                                  ELSE /\ pc' = [pc EXCEPT ![self] = "CleanupPreviousIRs"]
+                                       /\ UNCHANGED << newPaths, newIRSet, 
+                                                       newDAGEdgeSet, 
+                                                       newDAGNodeSet, 
+                                                       currentPath, 
+                                                       currentPathResult >>
+                            /\ UNCHANGED << DAGEventQueue, DrainRequestQueue, 
+                                            stack, previousIRs, newIRs, newDAG, 
+                                            nextPriority, newIRsStartingIndex, 
+                                            currentRequest, currentTopology, 
+                                            currentPaths, nodeToDrain, 
+                                            currentIRs, endpoints, 
+                                            pathsAfterDrain, drainPathSetIRs, 
+                                            drainedDAG, nextDAGID >>
+
+CleanupPreviousIRs(self) == /\ pc[self] = "CleanupPreviousIRs"
+                            /\ newDAG' = [newDAG EXCEPT ![self] = ExpandDAG([v |-> newDAGNodeSet[self], e |-> newDAGEdgeSet[self]], GetDeletionIRs(previousIRs[self]))]
+                            /\ pc' = [pc EXCEPT ![self] = "Error"]
+                            /\ UNCHANGED << DAGEventQueue, DrainRequestQueue, 
+                                            stack, newPaths, previousIRs, 
+                                            newIRs, nextPriority, 
+                                            newIRsStartingIndex, newIRSet, 
+                                            newDAGEdgeSet, newDAGNodeSet, 
+                                            currentPath, currentPathResult, 
+                                            currentRequest, currentTopology, 
+                                            currentPaths, nodeToDrain, 
+                                            currentIRs, endpoints, 
+                                            pathsAfterDrain, drainPathSetIRs, 
+                                            drainedDAG, nextDAGID >>
+
+ComputeDrainedPathIRs(self) == ComputePriority(self)
+                                  \/ ComputeNewPathsDAG(self)
+                                  \/ CleanupPreviousIRs(self)
 
 DrainLoop(self) == /\ pc[self] = "DrainLoop"
                    /\ Len(DrainRequestQueue) > 0
@@ -176,37 +330,68 @@ DrainLoop(self) == /\ pc[self] = "DrainLoop"
                    /\ nodeToDrain' = [nodeToDrain EXCEPT ![self] = currentRequest'[self].node]
                    /\ currentIRs' = [currentIRs EXCEPT ![self] = currentRequest'[self].irs]
                    /\ pc' = [pc EXCEPT ![self] = "ComputeDrain"]
-                   /\ UNCHANGED << DAGEventQueue, endpoints, pathsAfterDrain, 
-                                   drainPathSetIRs, drainedDAG, nextDAGID >>
+                   /\ UNCHANGED << DAGEventQueue, stack, newPaths, previousIRs, 
+                                   newIRs, newDAG, nextPriority, 
+                                   newIRsStartingIndex, newIRSet, 
+                                   newDAGEdgeSet, newDAGNodeSet, currentPath, 
+                                   currentPathResult, endpoints, 
+                                   pathsAfterDrain, drainPathSetIRs, 
+                                   drainedDAG, nextDAGID >>
 
 ComputeDrain(self) == /\ pc[self] = "ComputeDrain"
                       /\ endpoints' = [endpoints EXCEPT ![self] = getPathSetEndpoints(currentPaths[self]) \ {nodeToDrain[self]}]
-                      /\ LET nodesAfterDrain == (currentTopology[self].Nodes \ {nodeToDrain[self]}) IN
-                           /\ pathsAfterDrain' = [pathsAfterDrain EXCEPT ![self] =                ShortestPaths(
-                                                                                   endpoints'[self],
-                                                                                   nodesAfterDrain,
-                                                                                   RemoveNodeFromEdgeSet(nodeToDrain[self], currentTopology[self].Edges))]
-                           /\ LET res == GeneratePathSetIRs(pathsAfterDrain'[self], Cardinality(currentIRs[self]), HighestPriorityInIRSet(currentIRs[self]) + 1) IN
-                                /\ drainPathSetIRs' = [drainPathSetIRs EXCEPT ![self] = res.irs]
-                                /\ drainedDAG' = [drainedDAG EXCEPT ![self] = ExpandDAG([v |-> res.nodes, e |-> res.edges], res.OriginalIRs.nodes)]
-                      /\ pc' = [pc EXCEPT ![self] = "SubmitDAG"]
+                      /\ pathsAfterDrain' = [pathsAfterDrain EXCEPT ![self] =                ShortestPaths(
+                                                                              endpoints'[self],
+                                                                              (currentTopology[self].Nodes \ {nodeToDrain[self]}),
+                                                                              RemoveNodeFromEdgeSet(nodeToDrain[self], currentTopology[self].Edges))]
+                      /\ /\ newDAG' = [newDAG EXCEPT ![self] = drainedDAG[self]]
+                         /\ newIRs' = [newIRs EXCEPT ![self] = drainPathSetIRs[self]]
+                         /\ newPaths' = [newPaths EXCEPT ![self] = pathsAfterDrain'[self]]
+                         /\ previousIRs' = [previousIRs EXCEPT ![self] = currentIRs[self]]
+                         /\ stack' = [stack EXCEPT ![self] = << [ procedure |->  "ComputeDrainedPathIRs",
+                                                                  pc        |->  "SubmitDAG",
+                                                                  nextPriority |->  nextPriority[self],
+                                                                  newIRsStartingIndex |->  newIRsStartingIndex[self],
+                                                                  newIRSet  |->  newIRSet[self],
+                                                                  newDAGEdgeSet |->  newDAGEdgeSet[self],
+                                                                  newDAGNodeSet |->  newDAGNodeSet[self],
+                                                                  currentPath |->  currentPath[self],
+                                                                  currentPathResult |->  currentPathResult[self],
+                                                                  newPaths  |->  newPaths[self],
+                                                                  previousIRs |->  previousIRs[self],
+                                                                  newIRs    |->  newIRs[self],
+                                                                  newDAG    |->  newDAG[self] ] >>
+                                                              \o stack[self]]
+                      /\ nextPriority' = [nextPriority EXCEPT ![self] = NADIR_NULL]
+                      /\ newIRsStartingIndex' = [newIRsStartingIndex EXCEPT ![self] = NADIR_NULL]
+                      /\ newIRSet' = [newIRSet EXCEPT ![self] = {}]
+                      /\ newDAGEdgeSet' = [newDAGEdgeSet EXCEPT ![self] = {}]
+                      /\ newDAGNodeSet' = [newDAGNodeSet EXCEPT ![self] = {}]
+                      /\ currentPath' = [currentPath EXCEPT ![self] = NADIR_NULL]
+                      /\ currentPathResult' = [currentPathResult EXCEPT ![self] = {}]
+                      /\ pc' = [pc EXCEPT ![self] = "ComputePriority"]
                       /\ UNCHANGED << DAGEventQueue, DrainRequestQueue, 
                                       currentRequest, currentTopology, 
                                       currentPaths, nodeToDrain, currentIRs, 
-                                      nextDAGID >>
+                                      drainPathSetIRs, drainedDAG, nextDAGID >>
 
 SubmitDAG(self) == /\ pc[self] = "SubmitDAG"
                    /\ DAGEventQueue' = Append(DAGEventQueue, ([id |-> nextDAGID[self], dag |-> drainedDAG[self]]))
                    /\ nextDAGID' = [nextDAGID EXCEPT ![self] = nextDAGID[self] + 1]
                    /\ pc' = [pc EXCEPT ![self] = "DrainLoop"]
-                   /\ UNCHANGED << DrainRequestQueue, currentRequest, 
+                   /\ UNCHANGED << DrainRequestQueue, stack, newPaths, 
+                                   previousIRs, newIRs, newDAG, nextPriority, 
+                                   newIRsStartingIndex, newIRSet, 
+                                   newDAGEdgeSet, newDAGNodeSet, currentPath, 
+                                   currentPathResult, currentRequest, 
                                    currentTopology, currentPaths, nodeToDrain, 
                                    currentIRs, endpoints, pathsAfterDrain, 
                                    drainPathSetIRs, drainedDAG >>
 
 drainer(self) == DrainLoop(self) \/ ComputeDrain(self) \/ SubmitDAG(self)
 
-Next == (\E self \in ({app0} \X {DRAIN_APP}): drainer(self))
+Next == (\E self \in ProcSet: ComputeDrainedPathIRs(self))
+           \/ (\E self \in ({app0} \X {DRAIN_APP}): drainer(self))
 
 Spec == /\ Init /\ [][Next]_vars
         /\ WF_vars(Next)

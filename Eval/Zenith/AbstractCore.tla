@@ -1,5 +1,5 @@
 ---- MODULE AbstractCore ----
-EXTENDS Integers, Sequences, FiniteSets, TLC, NadirTypes, graph
+EXTENDS Integers, Sequences, FiniteSets, TLC, NadirTypes, graph, dag
 
 CONSTANTS SW
 CONSTANTS core0
@@ -22,13 +22,17 @@ CONSTANTS NO_LOCK, SW_SIMPLE_ID
         switchLock = <<NO_LOCK, NO_LOCK>>,
 
         FirstInstall = [x \in 1..2*MaxNumIRs |-> 0],
+
+        \* The edges of the DAG to push into the network
+        dependencies \in generateConnectedDAG(1..MaxNumIRs),
+        DAG = [v |-> 1..MaxNumIRs, e |-> dependencies],
         
         \* Fanout queue from the controller to the switches
         controller2Switch = [x \in SW |-> <<>>],
         \* Queue of switch messages to the controller
         switch2Controller = <<>>,
         \* Queue of DAGs from applications to the controller
-        DAGEventQueue = <<>>,
+        DAGEventQueue = <<[dag |-> DAG, id |-> 1]>>,
         \* Queue of network updates from the controller
         NIBEventQueue = <<>>,
         
@@ -163,7 +167,7 @@ CONSTANTS NO_LOCK, SW_SIMPLE_ID
     while TRUE do
         NadirFIFOGet(DAGEventQueue, currentDAGObject);
         DAGState[currentDAGObject.id] := DAG_SUBMIT;
-        levels := DAGBFS(currentDAGObject.dag.v, currentDAGObject.dag.e);
+        levels := GetDAGScheduleLevels(currentDAGObject.dag.v, currentDAGObject.dag.e);
         CoreSendLevels:
         while DAGState[currentDAGObject.id] # DAG_STALE /\ Len(levels) > 0 do
             irListToSend := Head(levels);
@@ -242,10 +246,10 @@ CONSTANTS NO_LOCK, SW_SIMPLE_ID
     end while;
     end process;
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "cdf04714" /\ chksum(tla) = "3c74057a")
-VARIABLES controllerLock, switchLock, FirstInstall, controller2Switch, 
-          switch2Controller, DAGEventQueue, NIBEventQueue, DAGState, 
-          NIBIRStatus, SwSuspensionStatus, pc
+\* BEGIN TRANSLATION (chksum(pcal) = "5496985c" /\ chksum(tla) = "de49a5b4")
+VARIABLES controllerLock, switchLock, FirstInstall, dependencies, DAG, 
+          controller2Switch, switch2Controller, DAGEventQueue, NIBEventQueue, 
+          DAGState, NIBIRStatus, SwSuspensionStatus, pc
 
 (* define statement *)
 isPrimary(ir) == IF ir \leq MaxNumIRs THEN TRUE ELSE FALSE
@@ -280,14 +284,14 @@ getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ getSwitchForIR(x) = SID
 
 existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN switch2Controller: /\ switch2Controller[x].type \notin {CLEARED_TCAM_SUCCESSFULLY, INSTALL_FLOW, DELETED_SUCCESSFULLY}
                                                                                /\ switch2Controller[x].swID = monEvent.swID
-                                                                               /\ switch2Controller[x].num > monEvent.num
+                                                                               /\ switch2Controller[x].num > monEvent.numd
 
 VARIABLES currentDAGObject, levels, irListToSend, msg, irSetToReset
 
-vars == << controllerLock, switchLock, FirstInstall, controller2Switch, 
-           switch2Controller, DAGEventQueue, NIBEventQueue, DAGState, 
-           NIBIRStatus, SwSuspensionStatus, pc, currentDAGObject, levels, 
-           irListToSend, msg, irSetToReset >>
+vars == << controllerLock, switchLock, FirstInstall, dependencies, DAG, 
+           controller2Switch, switch2Controller, DAGEventQueue, NIBEventQueue, 
+           DAGState, NIBIRStatus, SwSuspensionStatus, pc, currentDAGObject, 
+           levels, irListToSend, msg, irSetToReset >>
 
 ProcSet == (({core0} \X {CORE_SERVICER})) \cup (({core0} \X {CORE_HANDLER}))
 
@@ -295,9 +299,11 @@ Init == (* Global variables *)
         /\ controllerLock = <<NO_LOCK, NO_LOCK>>
         /\ switchLock = <<NO_LOCK, NO_LOCK>>
         /\ FirstInstall = [x \in 1..2*MaxNumIRs |-> 0]
+        /\ dependencies \in generateConnectedDAG(1..MaxNumIRs)
+        /\ DAG = [v |-> 1..MaxNumIRs, e |-> dependencies]
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
-        /\ DAGEventQueue = <<>>
+        /\ DAGEventQueue = <<[dag |-> DAG, id |-> 1]>>
         /\ NIBEventQueue = <<>>
         /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
         /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
@@ -317,13 +323,13 @@ CoreService(self) == /\ pc[self] = "CoreService"
                      /\ currentDAGObject' = [currentDAGObject EXCEPT ![self] = Head(DAGEventQueue)]
                      /\ DAGEventQueue' = Tail(DAGEventQueue)
                      /\ DAGState' = [DAGState EXCEPT ![currentDAGObject'[self].id] = DAG_SUBMIT]
-                     /\ levels' = [levels EXCEPT ![self] = DAGBFS(currentDAGObject'[self].dag.v, currentDAGObject'[self].dag.e)]
+                     /\ levels' = [levels EXCEPT ![self] = GetDAGScheduleLevels(currentDAGObject'[self].dag.v, currentDAGObject'[self].dag.e)]
                      /\ pc' = [pc EXCEPT ![self] = "CoreSendLevels"]
                      /\ UNCHANGED << controllerLock, switchLock, FirstInstall, 
-                                     controller2Switch, switch2Controller, 
-                                     NIBEventQueue, NIBIRStatus, 
-                                     SwSuspensionStatus, irListToSend, msg, 
-                                     irSetToReset >>
+                                     dependencies, DAG, controller2Switch, 
+                                     switch2Controller, NIBEventQueue, 
+                                     NIBIRStatus, SwSuspensionStatus, 
+                                     irListToSend, msg, irSetToReset >>
 
 CoreSendLevels(self) == /\ pc[self] = "CoreSendLevels"
                         /\ IF DAGState[currentDAGObject[self].id] # DAG_STALE /\ Len(levels[self]) > 0
@@ -332,11 +338,12 @@ CoreSendLevels(self) == /\ pc[self] = "CoreSendLevels"
                               ELSE /\ pc' = [pc EXCEPT ![self] = "CoreService"]
                                    /\ UNCHANGED irListToSend
                         /\ UNCHANGED << controllerLock, switchLock, 
-                                        FirstInstall, controller2Switch, 
-                                        switch2Controller, DAGEventQueue, 
-                                        NIBEventQueue, DAGState, NIBIRStatus, 
-                                        SwSuspensionStatus, currentDAGObject, 
-                                        levels, msg, irSetToReset >>
+                                        FirstInstall, dependencies, DAG, 
+                                        controller2Switch, switch2Controller, 
+                                        DAGEventQueue, NIBEventQueue, DAGState, 
+                                        NIBIRStatus, SwSuspensionStatus, 
+                                        currentDAGObject, levels, msg, 
+                                        irSetToReset >>
 
 CoreSendIRs(self) == /\ pc[self] = "CoreSendIRs"
                      /\ IF Len(irListToSend[self]) > 0
@@ -375,8 +382,8 @@ CoreSendIRs(self) == /\ pc[self] = "CoreSendIRs"
                                 /\ UNCHANGED << switchLock, controller2Switch, 
                                                 NIBIRStatus, irListToSend >>
                      /\ UNCHANGED << controllerLock, FirstInstall, 
-                                     switch2Controller, DAGEventQueue, 
-                                     NIBEventQueue, DAGState, 
+                                     dependencies, DAG, switch2Controller, 
+                                     DAGEventQueue, NIBEventQueue, DAGState, 
                                      SwSuspensionStatus, currentDAGObject, msg, 
                                      irSetToReset >>
 
@@ -442,8 +449,9 @@ CoreHandler(self) == /\ pc[self] = "CoreHandler"
                                            /\ UNCHANGED << NIBEventQueue, 
                                                            SwSuspensionStatus >>
                                 /\ UNCHANGED << FirstInstall, NIBIRStatus >>
-                     /\ UNCHANGED << DAGEventQueue, DAGState, currentDAGObject, 
-                                     levels, irListToSend >>
+                     /\ UNCHANGED << dependencies, DAG, DAGEventQueue, 
+                                     DAGState, currentDAGObject, levels, 
+                                     irListToSend >>
 
 CoreResetIRs(self) == /\ pc[self] = "CoreResetIRs"
                       /\ IF Cardinality(irSetToReset[self]) > 0
@@ -468,11 +476,11 @@ CoreResetIRs(self) == /\ pc[self] = "CoreResetIRs"
                                  /\ controllerLock' = <<NO_LOCK, NO_LOCK>>
                                  /\ pc' = [pc EXCEPT ![self] = "CoreHandler"]
                                  /\ UNCHANGED << NIBIRStatus, irSetToReset >>
-                      /\ UNCHANGED << switchLock, FirstInstall, 
-                                      controller2Switch, switch2Controller, 
-                                      DAGEventQueue, DAGState, 
-                                      currentDAGObject, levels, irListToSend, 
-                                      msg >>
+                      /\ UNCHANGED << switchLock, FirstInstall, dependencies, 
+                                      DAG, controller2Switch, 
+                                      switch2Controller, DAGEventQueue, 
+                                      DAGState, currentDAGObject, levels, 
+                                      irListToSend, msg >>
 
 coreHandler(self) == CoreHandler(self) \/ CoreResetIRs(self)
 
