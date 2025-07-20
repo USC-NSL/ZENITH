@@ -1,5 +1,5 @@
 --------------------------- MODULE locality_proofs ---------------------------
-EXTENDS TLAPS, Zenith
+EXTENDS TLAPS, zenith
 
 \* `Locality` lemmas are lemmas that state that certain actions always leave certain
 \* variables unchanged. These lemmas allow us to formally do away with certain steps
