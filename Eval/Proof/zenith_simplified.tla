@@ -1,222 +1,4 @@
 ---- MODULE zenith_simplified ----
-EXTENDS TLC
-
-VARIABLES sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
-          controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, 
-          switchObject, statusResolveMsg, swSeqChangedStatus, 
-          controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, 
-          DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, 
-          RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, 
-          ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, 
-          currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, 
-          setRemovableIRs, irsToUnschedule, unschedule, seqEvent, 
-          toBeScheduledIRs, nextIR, currDAG, IRDoneSet, nextIRObjectToSend, 
-          index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
-          pc
-
-(* define statement *)
-removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
-                                                            ELSE inSeq[j+1]]
-
-swCanReceivePackets(sw) == switchStatus[sw].nicAsic = NotFailed
-swOFACanProcessIRs(sw) == /\ switchStatus[sw].cpu = NotFailed
-                          /\ switchStatus[sw].ofa = NotFailed
-
-existMatchingEntryTCAM(swID, flowID) == flowID \in TCAM[swID]
-swCanInstallIRs(sw) == /\ switchStatus[sw].installer = NotFailed
-                       /\ switchStatus[sw].cpu = NotFailed
-
-returnSwitchElementsNotFailed(sw) == {
-    x \in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = NotFailed
-                                   /\ x = "nicAsic"
-}
-returnSwitchFailedElements(sw) == {
-    x \in DOMAIN switchStatus[sw]: /\ switchStatus[sw][x] = Failed
-                                   /\ \/ switchStatus[sw].cpu = NotFailed
-                                      \/ x \notin {"ofa", "installer"}
-}
-getInstallerStatus(stat) == IF stat = NotFailed
-                            THEN INSTALLER_UP
-                            ELSE INSTALLER_DOWN
-
-isPrimary(ir) == IF NadirIDAsInteger(ir) \leq MaxNumIRs THEN TRUE ELSE FALSE
-getDualOfIR(ir) == IF NadirIDAsInteger(ir) \leq MaxNumIRs THEN IntegerAsNadirID(NadirIDAsInteger(ir) + MaxNumIRs)
-                                                          ELSE IntegerAsNadirID(NadirIDAsInteger(ir) - MaxNumIRs)
-getPrimaryOfIR(ir) == IF NadirIDAsInteger(ir) \leq MaxNumIRs THEN ir
-                                                             ELSE IntegerAsNadirID(NadirIDAsInteger(ir) - MaxNumIRs)
-getSwitchForIR(ir) == IR2SW[getPrimaryOfIR(ir)]
-isClearIR(idID) == IF NadirIDAsInteger(idID) = 0 THEN TRUE ELSE FALSE
-getIRType(irID) == IF NadirIDAsInteger(irID) \leq MaxNumIRs THEN INSTALL_FLOW
-                                          ELSE DELETE_FLOW
-getIRIDForFlow(flowID, irType) == IF irType = INSTALLED_SUCCESSFULLY THEN flowID
-                                                                     ELSE IntegerAsNadirID(NadirIDAsInteger(flowID) + MaxNumIRs)
-
-getNIBIRState(irID) == IF isPrimary(irID) THEN NIBIRStatus[irID].primary
-                                          ELSE NIBIRStatus[getPrimaryOfIR(irID)].dual
-getRCIRState(irID) == IF isPrimary(irID) THEN RCIRStatus[irID].primary
-                                         ELSE RCIRStatus[getPrimaryOfIR(irID)].dual
-
-getSetUnschedulableIRs(nxtDAGV) == {x \in nxtDAGV: getRCIRState(x) # IR_NONE}
-getSetRemovableIRs(swSet, nxtDAGV) == {x \in 1..MaxNumIRs: /\ \/ getRCIRState(x) # IR_NONE
-                                                              \/ ScheduledIRs[x] = TRUE
-                                                           /\ x \notin nxtDAGV
-                                                           /\ getSwitchForIR(x) \in swSet}
-getSetIRsForSwitchInDAG(swID, nxtDAGV) == {x \in nxtDAGV: getSwitchForIR(x) = swID}
-isDependencySatisfied(DAG, ir) == ~\E y \in DAG.v: /\ <<y, ir>> \in DAG.e
-                                                   /\ getRCIRState(y) # IR_DONE
-getSetIRsCanBeScheduledNext(DAG)  == {x \in DAG.v: /\ getRCIRState(x) = IR_NONE
-                                                   /\ isDependencySatisfied(DAG, x)
-                                                   /\ RCSwSuspensionStatus[getSwitchForIR(x)] = SW_RUN
-                                                   /\ ScheduledIRs[x] = FALSE}
-allIRsInDAGInstalled(DAG) == ~\E y \in DAG.v: getRCIRState(y) # IR_DONE
-isDAGStale(id) == DAGState[id] # DAG_SUBMIT
-isSwitchSuspended(sw) == SwSuspensionStatus[sw] = SW_SUSPEND
-existsMonitoringEventHigherNum(monEvent) == \E x \in DOMAIN swSeqChangedStatus: /\ swSeqChangedStatus[x].swID = monEvent.swID
-                                                                                /\ swSeqChangedStatus[x].num > monEvent.num
-                                                                                /\ swSeqChangedStatus[x].type # CLEARED_TCAM_SUCCESSFULLY
-
-shouldSuspendRunningSw(monEvent) == /\ \/ monEvent.type = OFA_DOWN
-                                       \/ monEvent.type = NIC_ASIC_DOWN
-                                       \/ /\ monEvent.type = KEEP_ALIVE
-                                          /\ monEvent.installerStatus = INSTALLER_DOWN
-                                    /\ SwSuspensionStatus[monEvent.swID] = SW_RUN
-
-shouldClearSuspendedSw(monEvent) == /\ monEvent.type = KEEP_ALIVE
-                                    /\ monEvent.installerStatus = INSTALLER_UP
-                                    /\ SwSuspensionStatus[monEvent.swID] = SW_SUSPEND
-
-shouldFreeSuspendedSw(monEvent) == /\ monEvent.type = CLEARED_TCAM_SUCCESSFULLY
-                                   /\ monEvent.installerStatus = INSTALLER_UP
-                                   /\ SwSuspensionStatus[monEvent.swID] = SW_SUSPEND
-
-getIRSetToReset(SID) == {x \in 1..MaxNumIRs: /\ getSwitchForIR(x) = SID
-                                             /\ getNIBIRState(x) # IR_NONE}
-
-isFinished == \A x \in 1..MaxNumIRs: getNIBIRState(x) = IR_DONE
-allIRsInDAGAreStable(DAG) == ~\E y \in DAG.v: /\ getRCIRState(y) = IR_DONE
-                                              /\ \/ getRCIRState(getDualOfIR(y)) # IR_NONE
-                                                 \/ ScheduledIRs[getDualOfIR(y)] = TRUE
-dagObjectShouldBeProcessed(dagObject) == \/ /\ ~allIRsInDAGInstalled(dagObject.dag)
-                                            /\ ~isDAGStale(dagObject.id)
-                                         \/ ~allIRsInDAGAreStable(dagObject.dag)
-
-RECURSIVE AddDeleteDAGIRDoneSet(_, _)
-AddDeleteDAGIRDoneSet(irSet, doneSet) ==
-    IF Cardinality(irSet) = 0
-        THEN doneSet
-        ELSE LET pickedIR == CHOOSE x \in irSet: TRUE
-             IN IF getIRType(pickedIR) = INSTALL_FLOW
-                    THEN AddDeleteDAGIRDoneSet(irSet \ {pickedIR}, doneSet \cup {pickedIR})
-                    ELSE AddDeleteDAGIRDoneSet(irSet \ {pickedIR}, doneSet \ {pickedIR})
-
-RECURSIVE _GetDependencyEdges(_, _, _)
-_GetDependencyEdges(irToRemove, irsToConnect, edges) ==
-    IF Cardinality(irsToConnect) = 0
-        THEN edges
-        ELSE LET irToConnect == CHOOSE x \in irsToConnect: TRUE
-             IN _GetDependencyEdges(irToRemove, irsToConnect \ {irToConnect}, edges \cup {<<getDualOfIR(irToRemove), irToConnect>>})
-
-GetDependencyEdges(irToRemove, irsToConnect) == _GetDependencyEdges(irToRemove, irsToConnect, {})
-
-RECURSIVE CreateTEDAG(_, _)
-CreateTEDAG(irsToRemove, dag) ==
-    IF Cardinality(irsToRemove) = 0
-        THEN dag
-        ELSE
-            LET irToRemove == CHOOSE x \in irsToRemove: TRUE
-            IN CreateTEDAG(
-                    irsToRemove \ {irToRemove},
-                    [
-                        v |-> (dag.v \cup {getDualOfIR(irToRemove)}),
-                        e |-> (dag.e \cup GetDependencyEdges(
-                            irToRemove,
-                            getSetIRsForSwitchInDAG(getSwitchForIR(irToRemove), dag.v)
-                        ))
-                    ])
-
-
-vars == << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
-           controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, 
-           switchObject, statusResolveMsg, swSeqChangedStatus, 
-           controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, 
-           DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, 
-           RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, 
-           ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, 
-           currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, 
-           setRemovableIRs, irsToUnschedule, unschedule, seqEvent, 
-           toBeScheduledIRs, nextIR, currDAG, IRDoneSet, nextIRObjectToSend, 
-           index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
-           pc >>
-
-ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({rc0} \X {NIB_EVENT_HANDLER})) \cup (({rc0} \X {CONT_TE})) \cup (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
-
-Init == (* Global variables *)
-        /\ sw_fail_ordering_var = SW_FAIL_ORDERING
-        /\ switchStatus =                [
-                              x \in SW |-> [
-                                  cpu |-> NotFailed,
-                                  nicAsic |-> NotFailed,
-                                  ofa |-> NotFailed,
-                                  installer |-> NotFailed
-                              ]
-                          ]
-        /\ installedIRs = <<>>
-        /\ TCAM = [x \in SW |-> {}]
-        /\ controlMsgCounter = [x \in SW |-> 0]
-        /\ RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
-        /\ ingressPkt = NADIR_NULL
-        /\ statusMsg = NADIR_NULL
-        /\ switchObject = NADIR_NULL
-        /\ statusResolveMsg = NADIR_NULL
-        /\ swSeqChangedStatus = <<>>
-        /\ controller2Switch = [x \in SW |-> <<>>]
-        /\ switch2Controller = <<>>
-        /\ TEEventQueue = <<>>
-        /\ DAGEventQueue = <<>>
-        /\ DAGQueue = <<>>
-        /\ IRQueueNIB = <<>>
-        /\ RCNIBEventQueue = <<>>
-        /\ DAGState = [x \in 1..MaxDAGID |-> DAG_NONE]
-        /\ RCSwSuspensionStatus = [y \in SW |-> SW_RUN]
-        /\ RCIRStatus = [y \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
-        /\ NIBIRStatus = [x \in 1..MaxNumIRs |-> [primary |-> IR_NONE, dual |-> IR_NONE]]
-        /\ SwSuspensionStatus = [x \in SW |-> SW_RUN]
-        /\ ScheduledIRs = [x \in 1..2*MaxNumIRs |-> FALSE]
-        /\ seqWorkerIsBusy = FALSE
-        /\ nibEvent = NADIR_NULL
-        /\ topoChangeEvent = NADIR_NULL
-        /\ currSetDownSw = {}
-        /\ prev_dag_id = NADIR_NULL
-        /\ init = TRUE
-        /\ DAGID = NADIR_NULL
-        /\ nxtDAG = NADIR_NULL
-        /\ nxtDAGVertices = {}
-        /\ setRemovableIRs = {}
-        /\ irsToUnschedule = {}
-        /\ unschedule = NADIR_NULL
-        /\ seqEvent = NADIR_NULL
-        /\ toBeScheduledIRs = {}
-        /\ nextIR = NADIR_NULL
-        /\ currDAG = NADIR_NULL
-        /\ IRDoneSet = {}
-        /\ nextIRObjectToSend = NADIR_NULL
-        /\ index = 0
-        /\ monitoringEvent = NADIR_NULL
-        /\ setIRsToReset = {}
-        /\ resetIR = NADIR_NULL
-        /\ msg = NADIR_NULL
-        /\ currentIRID = NADIR_NULL
-        /\ pc = [self \in ProcSet |-> CASE self \in ({SW_SIMPLE_ID} \X SW) -> "SwitchSimpleProcess"
-                                        [] self \in ({SW_FAILURE_PROC} \X SW) -> "SwitchFailure"
-                                        [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
-                                        [] self \in ({rc0} \X {NIB_EVENT_HANDLER}) -> "RCSNIBEventHndlerProc"
-                                        [] self \in ({rc0} \X {CONT_TE}) -> "ControllerTEProc"
-                                        [] self \in ({rc0} \X {CONT_BOSS_SEQ}) -> "ControllerBossSeqProc"
-                                        [] self \in ({rc0} \X {CONT_WORKER_SEQ}) -> "ControllerWorkerSeqProc"
-                                        [] self \in ({ofc0} \X CONTROLLER_THREAD_POOL) -> "ControllerThread"
-                                        [] self \in ({ofc0} \X {CONT_EVENT}) -> "ControllerEventHandlerProc"
-                                        [] self \in ({ofc0} \X {CONT_MONITOR}) -> "ControllerMonitorCheckIfMastr"]
-
 SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ swCanReceivePackets(self[2])
                              /\ Len(controller2Switch[self[2]]) > 0
@@ -254,7 +36,7 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                                                                               installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)
                                                                                           ]
                                                                                       )
-                                                         ELSE TRUE
+                                                         ELSE /\ TRUE
                              /\ pc' = [pc EXCEPT ![self] = "SwitchSimpleProcess"]
 
 swProcess(self) == SwitchSimpleProcess(self)
@@ -375,9 +157,23 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
 
 ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnecessaryIRs"
-                                          /\ nxtDAG' = [nxtDAG EXCEPT !.dag = CreateTEDAG(setRemovableIRs, nxtDAG.dag)]
-                                          /\ irsToUnschedule' = nxtDAG'.dag.v
-                                          /\ pc' = [pc EXCEPT ![self] = "ControllerUnscheduleIRsInDAG"]
+                                          /\ IF Cardinality(setRemovableIRs) > 0
+                                                THEN /\ irToRemove' = (CHOOSE x \in setRemovableIRs: TRUE)
+                                                     /\ setRemovableIRs' = setRemovableIRs \ {irToRemove'}
+                                                     /\ irToAdd' = getDualOfIR(irToRemove')
+                                                     /\ irsToConnect' = getSetIRsForSwitchInDAG(getSwitchForIR(irToRemove'), nxtDAG.dag.v)
+                                                     /\ nxtDAG' = [nxtDAG EXCEPT !.dag.v = nxtDAG.dag.v \cup {irToAdd'}]
+                                                     /\ pc' = [pc EXCEPT ![self] = "ConnectEdges"]
+                                                ELSE /\ irsToUnschedule' = nxtDAG.dag.v
+                                                     /\ pc' = [pc EXCEPT ![self] = "ControllerUnscheduleIRsInDAG"]
+
+ConnectEdges(self) == /\ pc[self] = "ConnectEdges"
+                      /\ IF Cardinality(irsToConnect) > 0
+                            THEN /\ irToConnect' = (CHOOSE x \in irsToConnect: TRUE)
+                                 /\ irsToConnect' = irsToConnect \ {irToConnect'}
+                                 /\ nxtDAG' = [nxtDAG EXCEPT !.dag.e = nxtDAG.dag.e \cup {<<irToAdd, irToConnect'>>}]
+                                 /\ pc' = [pc EXCEPT ![self] = "ConnectEdges"]
+                            ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
 
 ControllerUnscheduleIRsInDAG(self) == /\ pc[self] = "ControllerUnscheduleIRsInDAG"
                                       /\ IF Cardinality(irsToUnschedule) > 0
@@ -399,6 +195,7 @@ controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTEComputeDagBasedOnTopo(self)
                                          \/ ControllerTEWaitForStaleDAGToBeRemoved(self)
                                          \/ ControllerTERemoveUnnecessaryIRs(self)
+                                         \/ ConnectEdges(self)
                                          \/ ControllerUnscheduleIRsInDAG(self)
                                          \/ ControllerTESubmitNewDAG(self)
 
@@ -434,10 +231,10 @@ ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqSchedu
                                                    /\ toBeScheduledIRs' # {}
                                                    /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                                               ELSE /\ seqWorkerIsBusy' = FALSE
+                                                   /\ irSet' = currDAG.dag.v
                                                    /\ IF allIRsInDAGInstalled(currDAG.dag)
-                                                         THEN /\ IRDoneSet' = AddDeleteDAGIRDoneSet(currDAG.dag.v, IRDoneSet)
-                                                         ELSE /\ TRUE
-                                                   /\ pc' = [pc EXCEPT ![self] = "RemoveDagFromQueue"]
+                                                         THEN /\ pc' = [pc EXCEPT ![self] = "AddDeleteDAGIRDoneSet"]
+                                                         ELSE /\ pc' = [pc EXCEPT ![self] = "RemoveDagFromQueue"]
 
 SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                             /\ IF toBeScheduledIRs = {} \/ isDAGStale(currDAG.id)
@@ -448,9 +245,19 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             /\ IF getIRType(nextIR') = INSTALL_FLOW
                                                   THEN /\ IRDoneSet' = (IRDoneSet \cup {nextIR'})
                                                   ELSE /\ IRDoneSet' = IRDoneSet \ {getDualOfIR(nextIR')}
-                                            /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> nextIR', sw |-> destination]), tag |-> NADIR_NULL])
+                                            /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> nextIR', sw |-> destination]), tag |-> (getIRStructTag(destination))])
                                             /\ toBeScheduledIRs' = (toBeScheduledIRs\{nextIR'})
                                        /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
+
+AddDeleteDAGIRDoneSet(self) == /\ pc[self] = "AddDeleteDAGIRDoneSet"
+                               /\ IF Cardinality(irSet) > 0
+                                     THEN /\ pickedIR' = (CHOOSE x \in irSet: TRUE)
+                                          /\ IF (getIRType(pickedIR') = INSTALL_FLOW)
+                                                THEN /\ IRDoneSet' = (IRDoneSet \cup {pickedIR'})
+                                                ELSE /\ IRDoneSet' = IRDoneSet \ {pickedIR'}
+                                          /\ irSet' = irSet \ {pickedIR'}
+                                          /\ pc' = [pc EXCEPT ![self] = "AddDeleteDAGIRDoneSet"]
+                                     ELSE /\ pc' = [pc EXCEPT ![self] = "RemoveDagFromQueue"]
 
 RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
                             /\ DAGQueue' = Tail(DAGQueue)
@@ -459,11 +266,12 @@ RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
 controllerSequencer(self) == ControllerWorkerSeqProc(self)
                                 \/ ControllerWorkerSeqScheduleDAG(self)
                                 \/ SchedulerMechanism(self)
+                                \/ AddDeleteDAGIRDoneSet(self)
                                 \/ RemoveDagFromQueue(self)
 
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
-                          /\ ExistsItemWithTag(IRQueueNIB, NADIR_NULL) \/ ExistsItemWithTag(IRQueueNIB, self)
-                          /\ index' = GetItemIndexWithTag(IRQueueNIB, self)
+                          /\ ExistsItemWithTag(IRQueueNIB, self)
+                          /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, self)
                           /\ nextIRObjectToSend' = IRQueueNIB[index'].data
                           /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![index'].tag = self]
                           /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
@@ -550,7 +358,7 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
 
 ControllerRequestTCAMClear(self) == /\ pc[self] = "ControllerRequestTCAMClear"
                                     /\ IF ~existsMonitoringEventHigherNum(monitoringEvent)
-                                          THEN /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> 0, sw |-> monitoringEvent.swID]), tag |-> NADIR_NULL])
+                                          THEN /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> 0, sw |-> monitoringEvent.swID]), tag |-> (getIRStructTag(monitoringEvent.swID))])
                                           ELSE /\ TRUE
                                     /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
 
@@ -627,29 +435,4 @@ controllerMonitoringServer(self) == ControllerMonitorCheckIfMastr(self)
                                        \/ MonitoringServerRemoveFromQueue(self)
                                        \/ ControllerProcessIRMod(self)
                                        \/ ForwardToEH(self)
-
-Next == (\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
-           \/ (\E self \in ({SW_FAILURE_PROC} \X SW): swFailureProc(self))
-           \/ (\E self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self))
-           \/ (\E self \in ({rc0} \X {NIB_EVENT_HANDLER}): rcNibEventHandler(self))
-           \/ (\E self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self))
-           \/ (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): controllerBossSequencer(self))
-           \/ (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self))
-           \/ (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
-           \/ (\E self \in ({ofc0} \X {CONT_EVENT}): controllerEventHandler(self))
-           \/ (\E self \in ({ofc0} \X {CONT_MONITOR}): controllerMonitoringServer(self))
-
-Spec == /\ Init /\ [][Next]_vars
-        /\ WF_vars(Next)
-        /\ \A self \in ({SW_SIMPLE_ID} \X SW) : WF_vars(swProcess(self))
-        /\ \A self \in ({SW_FAILURE_PROC} \X SW) : WF_vars(swFailureProc(self))
-        /\ \A self \in ({SW_RESOLVE_PROC} \X SW) : WF_vars(swResolveFailure(self))
-        /\ \A self \in ({rc0} \X {NIB_EVENT_HANDLER}) : WF_vars(rcNibEventHandler(self))
-        /\ \A self \in ({rc0} \X {CONT_TE}) : WF_vars(controllerTrafficEngineering(self))
-        /\ \A self \in ({rc0} \X {CONT_BOSS_SEQ}) : WF_vars(controllerBossSequencer(self))
-        /\ \A self \in ({rc0} \X {CONT_WORKER_SEQ}) : WF_vars(controllerSequencer(self))
-        /\ \A self \in ({ofc0} \X CONTROLLER_THREAD_POOL) : WF_vars(controllerWorkerThreads(self))
-        /\ \A self \in ({ofc0} \X {CONT_EVENT}) : WF_vars(controllerEventHandler(self))
-        /\ \A self \in ({ofc0} \X {CONT_MONITOR}) : WF_vars(controllerMonitoringServer(self))
-
 ====

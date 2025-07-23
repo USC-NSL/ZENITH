@@ -16,6 +16,7 @@ CONSTANTS TOPO_DAG_MAPPING, IR2SW
 CONSTANTS Failed, NotFailed
 CONSTANTS SW_SIMPLE_ID, SW_RESOLVE_PROC, SW_FAILURE_PROC, SW_FAIL_ORDERING
 CONSTANTS NADIR_NULL
+CONSTANTS SW_THREAD_SHARD_MAP
 
 CONSTANTS FINAL_DAG
 
@@ -32,7 +33,9 @@ VARIABLES sw_fail_ordering_var, switchStatus, installedIRs, TCAM,
     index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
     pc,
     irSet, pickedIR,
-    irToRemove, irToAdd, irsToConnect, irToConnect
+    irToRemove, irToAdd, irsToConnect, irToConnect,
+    AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+    AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq
 
 vars == << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
            controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, 
@@ -45,7 +48,9 @@ vars == << sw_fail_ordering_var, switchStatus, installedIRs, TCAM,
            setRemovableIRs, irsToUnschedule, unschedule, seqEvent, 
            toBeScheduledIRs, nextIR, currDAG, IRDoneSet, nextIRObjectToSend, 
            index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
-           pc, irSet, pickedIR, irToRemove, irToAdd, irsToConnect, irToConnect >>
+           pc, irSet, pickedIR, irToRemove, irToAdd, irsToConnect, irToConnect,
+           AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+           AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
 
 (* All of our processes *)
 ProcSet == 
@@ -122,6 +127,13 @@ Init == (* Global variables *)
         /\ irToAdd = NADIR_NULL
         /\ irsToConnect = {}
         /\ irToConnect = NADIR_NULL
+        /\ AUX_IRQ_enq = [t \in CONTROLLER_THREAD_POOL |-> <<>>]
+        /\ AUX_IRQ_deq = [t \in CONTROLLER_THREAD_POOL |-> <<>>]
+        /\ AUX_C2S_enq = [sw \in SW |-> <<>>]
+        /\ AUX_C2S_deq = [sw \in SW |-> <<>>]
+        /\ AUX_SEQ_sched_num = 1
+        /\ AUX_SEQ_enq = [sw \in SW |-> <<>>]
+        /\ AUX_SEQ_deq = [sw \in SW |-> <<>>]
         /\ pc = [self \in ProcSet |-> CASE self \in ({SW_SIMPLE_ID} \X SW) -> "SwitchSimpleProcess"
                                         [] self \in ({SW_FAILURE_PROC} \X SW) -> "SwitchFailure"
                                         [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
@@ -202,6 +214,13 @@ ConsistencyReq == \A x, y \in rangeSeq(installedIRs): \/ x = y
                                                          /\ <<Zenith!getIRIDForFlow(x, INSTALLED_SUCCESSFULLY), Zenith!getIRIDForFlow(y, INSTALLED_SUCCESSFULLY)>> \notin whichDAG(x).e
 
 TypeOK == Zenith!TypeOK
+AUX_TypeOK == Zenith!AUX_TypeOK
+AUX_SeqOrderPreserved == Zenith!AUX_SeqOrderPreserved
+IRQ_ordering == Zenith!IRQ_ordering
+C2S_ordering == Zenith!C2S_ordering
+continuity_C2S_to_switch == Zenith!continuity_C2S_to_switch
+continuity_IRQ_to_C2S == Zenith!continuity_IRQ_to_C2S
+continuity_SEQ_to_IRQ == Zenith!continuity_SEQ_to_IRQ
 
 CONSTANTS
 s0, s1
@@ -251,5 +270,6 @@ const_TOPO_DAG_MAPPING ==
 \*     ({s1} :> [v |-> {4}, e |-> {}]) @@
 \*     ({s0, s1} :> [v |-> {}, e |-> {}])
 
+const_SW_THREAD_SHARD_MAP == (s0 :> t0) @@ (s1 :> t0)
 
 ====

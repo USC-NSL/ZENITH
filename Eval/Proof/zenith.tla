@@ -16,6 +16,7 @@ CONSTANTS TOPO_DAG_MAPPING, IR2SW
 CONSTANTS Failed, NotFailed
 CONSTANTS SW_SIMPLE_ID, SW_RESOLVE_PROC, SW_FAILURE_PROC, SW_FAIL_ORDERING
 CONSTANTS NADIR_NULL
+CONSTANTS SW_THREAD_SHARD_MAP
 
 INSTALLABLE_IR_SET == 1..MaxNumIRs
 SCHEDULABLE_IR_SET == 1..2*MaxNumIRs
@@ -27,11 +28,7 @@ GetFirstItemIndexWithTag(queue, tag) ==
     CHOOSE x \in DOMAIN queue: /\ queue[x].tag = tag
                                /\ ~\E y \in DOMAIN queue: /\ y < x
                                                           /\ queue[y].tag = tag
-GetFirstUntaggedItemIndex(queue) == GetFirstItemIndexWithTag(queue, NADIR_NULL)
 RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < index THEN seq[j] ELSE seq[j+1]]
-GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
-                                    THEN GetFirstUntaggedItemIndex(queue)
-                                    ELSE GetFirstItemIndexWithTag(queue, tag)
 
 (*--fair algorithm zenith
     variables 
@@ -109,6 +106,27 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
         msg = NADIR_NULL, 
         currentIRID = NADIR_NULL,
 
+        (* Auxiliary variables used for proofs *)
+        (*
+            To describe queue ordering, a natural way is to keep a 
+            list for each object that is enqueued or dequeued.
+            We then assert that for each two object that are enqueued
+            one after the other, they are dequeued one after the other
+            as well.
+        *)
+        \* Auxiliary queue variables for `IRQueueNIB`.
+        AUX_IRQ_enq = [t \in CONTROLLER_THREAD_POOL |-> <<>>],
+        AUX_IRQ_deq = [t \in CONTROLLER_THREAD_POOL |-> <<>>],
+        \* Auxiliary queue variables for `controller2switch`.
+        AUX_C2S_enq = [sw \in SW |-> <<>>],
+        AUX_C2S_deq = [sw \in SW |-> <<>>],
+        \* Auxiliary variable that assigns a unique, monotonically increasing
+        \* number to each object the Sequencer schedules
+        AUX_SEQ_sched_num = 1,
+        \* Auxiliary variable for checking IR ordering from SEQ to 
+        \* switches and express invariants ...
+        AUX_SEQ_enq = [sw \in SW |-> <<>>],
+        AUX_SEQ_deq = [sw \in SW |-> <<>>],
     define
         removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
                                                                     ELSE inSeq[j+1]]
@@ -194,6 +212,7 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
         dagObjectShouldBeProcessed(dagObject) == \/ /\ ~allIRsInDAGInstalled(dagObject.dag)
                                                     /\ ~isDAGStale(dagObject.id)
                                                  \/ ~allIRsInDAGAreStable(dagObject.dag)
+        getIRStructTag(destination) == SW_THREAD_SHARD_MAP[destination]
     end define
 
     macro removeFromSeqSet(SeqSet, obj)
@@ -320,17 +339,18 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
         queue[branch] := Append(queue[branch], object);
     end macro;
 
-    macro NadirAckQueuePut(queue, object)
+    macro NadirAckQueuePut(queue, object, tag)
     begin
-        queue := Append(queue, [data |-> object, tag |-> NADIR_NULL]);
+        queue := Append(queue, [data |-> object, tag |-> tag]);
+        AUX_IRQ_enq[tag] := Append(AUX_IRQ_enq[tag], object);
     end macro;
 
     macro NadirAckQueueGet(queue, tag, index, message)
     begin
-        await ExistsItemWithTag(queue, NADIR_NULL) \/ ExistsItemWithTag(queue, tag);
-        index := GetItemIndexWithTag(queue, tag);
+        await ExistsItemWithTag(queue, tag);
+        index := GetFirstItemIndexWithTag(queue, tag);
         message := queue[index].data;
-        queue[index].tag := tag;
+        AUX_IRQ_deq[tag] := Append(AUX_IRQ_deq[tag], message);
     end macro;
 
     macro NadirAckQueueAck(queue, tag, index)
@@ -349,7 +369,18 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
                     type |-> CLEAR_TCAM, 
                     flow |-> 0, 
                     to |-> irObject.sw, 
-                    from |-> self[1]
+                    from |-> self[1],
+                    sched_num |-> irObject.sched_num
+                ]
+            );
+            AUX_C2S_enq[irObject.sw] := Append(
+                AUX_C2S_enq[irObject.sw], 
+                [
+                    type |-> CLEAR_TCAM, 
+                    flow |-> 0, 
+                    to |-> irObject.sw, 
+                    from |-> self[1],
+                    sched_num |-> irObject.sched_num
                 ]
             );
         else
@@ -360,7 +391,18 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
                     type |-> getIRType(irObject.IR), 
                     flow |-> getPrimaryOfIR(irObject.IR), 
                     to |-> irObject.sw, 
-                    from |-> self[1]
+                    from |-> self[1],
+                    sched_num |-> irObject.sched_num
+                ]
+            );
+            AUX_C2S_enq[irObject.sw] := Append(
+                AUX_C2S_enq[irObject.sw], 
+                [
+                    type |-> getIRType(irObject.IR), 
+                    flow |-> getPrimaryOfIR(irObject.IR), 
+                    to |-> irObject.sw, 
+                    from |-> self[1],
+                    sched_num |-> irObject.sched_num
                 ]
             );
         end if;
@@ -419,6 +461,8 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
         await Len(controller2Switch[self[2]]) > 0;
         ingressPkt := Head(controller2Switch[self[2]]);
         controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
+        AUX_C2S_deq[self[2]] := Append(AUX_C2S_deq[self[2]], ingressPkt);
+        AUX_SEQ_deq[self[2]] := Append(AUX_SEQ_deq[self[2]], ingressPkt);
         if ingressPkt.type = INSTALL_FLOW then
             installToTCAM(ingressPkt.flow);
             sendConfirmation(ingressPkt.from, ingressPkt.flow, INSTALLED_SUCCESSFULLY);
@@ -599,8 +643,14 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
                             else
                                 IRDoneSet := IRDoneSet \ {getDualOfIR(nextIR)}
                             end if;
-
-                            NadirAckQueuePut(IRQueueNIB, [IR |-> nextIR, sw |-> destination]);
+                            NadirAckQueuePut(
+                                IRQueueNIB, 
+                                [IR |-> nextIR, sw |-> destination, sched_num |-> AUX_SEQ_sched_num], 
+                                getIRStructTag(destination));
+                            AUX_SEQ_enq[destination] := Append(
+                                AUX_SEQ_enq[destination], 
+                                [IR |-> nextIR, sw |-> destination, sched_num |-> AUX_SEQ_sched_num]);
+                            AUX_SEQ_sched_num := AUX_SEQ_sched_num + 1;
                             toBeScheduledIRs := toBeScheduledIRs\{nextIR};
                         end with;
                     end if;
@@ -630,7 +680,7 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
     begin
     ControllerThread:
     while TRUE do
-        NadirAckQueueGet(IRQueueNIB, self, index, nextIRObjectToSend);
+        NadirAckQueueGet(IRQueueNIB, self[2], index, nextIRObjectToSend);
 
         ControllerThreadSendIR:        
             if isClearIR(nextIRObjectToSend.IR) then
@@ -650,7 +700,7 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
             end if;
         
         ControllerThreadRemoveIRFromQueue:
-            NadirAckQueueAck(IRQueueNIB, self, index);
+            NadirAckQueueAck(IRQueueNIB, self[2], index);
     end while;
     end process
 
@@ -671,7 +721,14 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
         elsif shouldClearSuspendedSw(monitoringEvent) then
             ControllerRequestTCAMClear:
                 if ~existsMonitoringEventHigherNum(monitoringEvent) then
-                    NadirAckQueuePut(IRQueueNIB, [IR |-> 0, sw |-> monitoringEvent.swID]);
+                    NadirAckQueuePut(
+                        IRQueueNIB, 
+                        [IR |-> 0, sw |-> monitoringEvent.swID, sched_num |-> AUX_SEQ_sched_num], 
+                        getIRStructTag(monitoringEvent.swID));
+                    AUX_SEQ_enq[monitoringEvent.swID] := Append(
+                        AUX_SEQ_enq[monitoringEvent.swID], 
+                        [IR |-> 0, sw |-> monitoringEvent.swID, sched_num |-> AUX_SEQ_sched_num]);
+                    AUX_SEQ_sched_num := AUX_SEQ_sched_num + 1;
                 end if;
 
         elsif shouldFreeSuspendedSw(monitoringEvent) then
@@ -736,7 +793,7 @@ GetItemIndexWithTag(queue, tag) == IF ~ExistsItemWithTag(queue, tag)
     end while
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "c8e87574" /\ chksum(tla) = "38f36060")
+\* BEGIN TRANSLATION (chksum(pcal) = "9db7c9ee" /\ chksum(tla) = "b1202614")
 VARIABLES sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
           controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, 
           switchObject, statusResolveMsg, swSeqChangedStatus, 
@@ -748,7 +805,9 @@ VARIABLES sw_fail_ordering_var, switchStatus, installedIRs, TCAM,
           setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, 
           irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, 
           currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, 
-          monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, pc
+          monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
+          AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+          AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq, pc
 
 (* define statement *)
 removeFromSeq(inSeq, RID) == [j \in 1..(Len(inSeq) - 1) |-> IF j < RID THEN inSeq[j]
@@ -835,6 +894,7 @@ allIRsInDAGAreStable(DAG) == ~\E y \in DAG.v: /\ getRCIRState(y) = IR_DONE
 dagObjectShouldBeProcessed(dagObject) == \/ /\ ~allIRsInDAGInstalled(dagObject.dag)
                                             /\ ~isDAGStale(dagObject.id)
                                          \/ ~allIRsInDAGAreStable(dagObject.dag)
+getIRStructTag(destination) == SW_THREAD_SHARD_MAP[destination]
 
 
 vars == << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
@@ -848,7 +908,9 @@ vars == << sw_fail_ordering_var, switchStatus, installedIRs, TCAM,
            setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, 
            irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, 
            currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, 
-           monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, pc >>
+           monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, 
+           AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+           AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq, pc >>
 
 ProcSet == (({SW_SIMPLE_ID} \X SW)) \cup (({SW_FAILURE_PROC} \X SW)) \cup (({SW_RESOLVE_PROC} \X SW)) \cup (({rc0} \X {NIB_EVENT_HANDLER})) \cup (({rc0} \X {CONT_TE})) \cup (({rc0} \X {CONT_BOSS_SEQ})) \cup (({rc0} \X {CONT_WORKER_SEQ})) \cup (({ofc0} \X CONTROLLER_THREAD_POOL)) \cup (({ofc0} \X {CONT_EVENT})) \cup (({ofc0} \X {CONT_MONITOR}))
 
@@ -914,6 +976,13 @@ Init == (* Global variables *)
         /\ resetIR = NADIR_NULL
         /\ msg = NADIR_NULL
         /\ currentIRID = NADIR_NULL
+        /\ AUX_IRQ_enq = [t \in CONTROLLER_THREAD_POOL |-> <<>>]
+        /\ AUX_IRQ_deq = [t \in CONTROLLER_THREAD_POOL |-> <<>>]
+        /\ AUX_C2S_enq = [sw \in SW |-> <<>>]
+        /\ AUX_C2S_deq = [sw \in SW |-> <<>>]
+        /\ AUX_SEQ_sched_num = 1
+        /\ AUX_SEQ_enq = [sw \in SW |-> <<>>]
+        /\ AUX_SEQ_deq = [sw \in SW |-> <<>>]
         /\ pc = [self \in ProcSet |-> CASE self \in ({SW_SIMPLE_ID} \X SW) -> "SwitchSimpleProcess"
                                         [] self \in ({SW_FAILURE_PROC} \X SW) -> "SwitchFailure"
                                         [] self \in ({SW_RESOLVE_PROC} \X SW) -> "SwitchResolveFailure"
@@ -930,6 +999,8 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ Len(controller2Switch[self[2]]) > 0
                              /\ ingressPkt' = Head(controller2Switch[self[2]])
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
+                             /\ AUX_C2S_deq' = [AUX_C2S_deq EXCEPT ![self[2]] = Append(AUX_C2S_deq[self[2]], ingressPkt')]
+                             /\ AUX_SEQ_deq' = [AUX_SEQ_deq EXCEPT ![self[2]] = Append(AUX_SEQ_deq[self[2]], ingressPkt')]
                              /\ IF ingressPkt'.type = INSTALL_FLOW
                                    THEN /\ installedIRs' = Append(installedIRs, (ingressPkt'.flow))
                                         /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \cup {(ingressPkt'.flow)}]
@@ -991,7 +1062,10 @@ SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                                              IRDoneSet, irSet, pickedIR, 
                                              nextIRObjectToSend, index, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, msg, currentIRID >>
+                                             resetIR, msg, currentIRID, 
+                                             AUX_IRQ_enq, AUX_IRQ_deq, 
+                                             AUX_C2S_enq, AUX_SEQ_sched_num, 
+                                             AUX_SEQ_enq >>
 
 swProcess(self) == SwitchSimpleProcess(self)
 
@@ -1034,7 +1108,10 @@ SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                                        currDAG, IRDoneSet, irSet, pickedIR, 
                                        nextIRObjectToSend, index, 
                                        monitoringEvent, setIRsToReset, resetIR, 
-                                       msg, currentIRID >>
+                                       msg, currentIRID, AUX_IRQ_enq, 
+                                       AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+                                       AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                       AUX_SEQ_deq >>
 
 swFailureProc(self) == SwitchFailure(self)
 
@@ -1075,7 +1152,11 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                                               irSet, pickedIR, 
                                               nextIRObjectToSend, index, 
                                               monitoringEvent, setIRsToReset, 
-                                              resetIR, msg, currentIRID >>
+                                              resetIR, msg, currentIRID, 
+                                              AUX_IRQ_enq, AUX_IRQ_deq, 
+                                              AUX_C2S_enq, AUX_C2S_deq, 
+                                              AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                              AUX_SEQ_deq >>
 
 swResolveFailure(self) == SwitchResolveFailure(self)
 
@@ -1139,7 +1220,11 @@ RCSNIBEventHndlerProc(self) == /\ pc[self] = "RCSNIBEventHndlerProc"
                                                irSet, pickedIR, 
                                                nextIRObjectToSend, index, 
                                                monitoringEvent, setIRsToReset, 
-                                               resetIR, msg, currentIRID >>
+                                               resetIR, msg, currentIRID, 
+                                               AUX_IRQ_enq, AUX_IRQ_deq, 
+                                               AUX_C2S_enq, AUX_C2S_deq, 
+                                               AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                               AUX_SEQ_deq >>
 
 rcNibEventHandler(self) == RCSNIBEventHndlerProc(self)
 
@@ -1171,7 +1256,11 @@ ControllerTEProc(self) == /\ pc[self] = "ControllerTEProc"
                                           IRDoneSet, irSet, pickedIR, 
                                           nextIRObjectToSend, index, 
                                           monitoringEvent, setIRsToReset, 
-                                          resetIR, msg, currentIRID >>
+                                          resetIR, msg, currentIRID, 
+                                          AUX_IRQ_enq, AUX_IRQ_deq, 
+                                          AUX_C2S_enq, AUX_C2S_deq, 
+                                          AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                          AUX_SEQ_deq >>
 
 ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                      /\ IF init # TRUE
@@ -1226,7 +1315,11 @@ ControllerTEEventProcessing(self) == /\ pc[self] = "ControllerTEEventProcessing"
                                                      nextIRObjectToSend, index, 
                                                      monitoringEvent, 
                                                      setIRsToReset, resetIR, 
-                                                     msg, currentIRID >>
+                                                     msg, currentIRID, 
+                                                     AUX_IRQ_enq, AUX_IRQ_deq, 
+                                                     AUX_C2S_enq, AUX_C2S_deq, 
+                                                     AUX_SEQ_sched_num, 
+                                                     AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDagBasedOnTopo"
                                            /\ IF DAGID = NADIR_NULL
@@ -1286,7 +1379,14 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                            monitoringEvent, 
                                                            setIRsToReset, 
                                                            resetIR, msg, 
-                                                           currentIRID >>
+                                                           currentIRID, 
+                                                           AUX_IRQ_enq, 
+                                                           AUX_IRQ_deq, 
+                                                           AUX_C2S_enq, 
+                                                           AUX_C2S_deq, 
+                                                           AUX_SEQ_sched_num, 
+                                                           AUX_SEQ_enq, 
+                                                           AUX_SEQ_deq >>
 
 ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitForStaleDAGToBeRemoved"
                                                 /\ DAGState[prev_dag_id] = DAG_NONE
@@ -1342,7 +1442,14 @@ ControllerTEWaitForStaleDAGToBeRemoved(self) == /\ pc[self] = "ControllerTEWaitF
                                                                 monitoringEvent, 
                                                                 setIRsToReset, 
                                                                 resetIR, msg, 
-                                                                currentIRID >>
+                                                                currentIRID, 
+                                                                AUX_IRQ_enq, 
+                                                                AUX_IRQ_deq, 
+                                                                AUX_C2S_enq, 
+                                                                AUX_C2S_deq, 
+                                                                AUX_SEQ_sched_num, 
+                                                                AUX_SEQ_enq, 
+                                                                AUX_SEQ_deq >>
 
 ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnecessaryIRs"
                                           /\ IF Cardinality(setRemovableIRs) > 0
@@ -1401,7 +1508,14 @@ ControllerTERemoveUnnecessaryIRs(self) == /\ pc[self] = "ControllerTERemoveUnnec
                                                           monitoringEvent, 
                                                           setIRsToReset, 
                                                           resetIR, msg, 
-                                                          currentIRID >>
+                                                          currentIRID, 
+                                                          AUX_IRQ_enq, 
+                                                          AUX_IRQ_deq, 
+                                                          AUX_C2S_enq, 
+                                                          AUX_C2S_deq, 
+                                                          AUX_SEQ_sched_num, 
+                                                          AUX_SEQ_enq, 
+                                                          AUX_SEQ_deq >>
 
 ConnectEdges(self) == /\ pc[self] = "ConnectEdges"
                       /\ IF Cardinality(irsToConnect) > 0
@@ -1431,7 +1545,10 @@ ConnectEdges(self) == /\ pc[self] = "ConnectEdges"
                                       currDAG, IRDoneSet, irSet, pickedIR, 
                                       nextIRObjectToSend, index, 
                                       monitoringEvent, setIRsToReset, resetIR, 
-                                      msg, currentIRID >>
+                                      msg, currentIRID, AUX_IRQ_enq, 
+                                      AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+                                      AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                      AUX_SEQ_deq >>
 
 ControllerUnscheduleIRsInDAG(self) == /\ pc[self] = "ControllerUnscheduleIRsInDAG"
                                       /\ IF Cardinality(irsToUnschedule) > 0
@@ -1481,7 +1598,11 @@ ControllerUnscheduleIRsInDAG(self) == /\ pc[self] = "ControllerUnscheduleIRsInDA
                                                       nextIRObjectToSend, 
                                                       index, monitoringEvent, 
                                                       setIRsToReset, resetIR, 
-                                                      msg, currentIRID >>
+                                                      msg, currentIRID, 
+                                                      AUX_IRQ_enq, AUX_IRQ_deq, 
+                                                      AUX_C2S_enq, AUX_C2S_deq, 
+                                                      AUX_SEQ_sched_num, 
+                                                      AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                   /\ DAGState' = [DAGState EXCEPT ![nxtDAG.id] = DAG_SUBMIT]
@@ -1517,7 +1638,11 @@ ControllerTESubmitNewDAG(self) == /\ pc[self] = "ControllerTESubmitNewDAG"
                                                   nextIRObjectToSend, index, 
                                                   monitoringEvent, 
                                                   setIRsToReset, resetIR, msg, 
-                                                  currentIRID >>
+                                                  currentIRID, AUX_IRQ_enq, 
+                                                  AUX_IRQ_deq, AUX_C2S_enq, 
+                                                  AUX_C2S_deq, 
+                                                  AUX_SEQ_sched_num, 
+                                                  AUX_SEQ_enq, AUX_SEQ_deq >>
 
 controllerTrafficEngineering(self) == ControllerTEProc(self)
                                          \/ ControllerTEEventProcessing(self)
@@ -1568,7 +1693,10 @@ ControllerBossSeqProc(self) == /\ pc[self] = "ControllerBossSeqProc"
                                                pickedIR, nextIRObjectToSend, 
                                                index, monitoringEvent, 
                                                setIRsToReset, resetIR, msg, 
-                                               currentIRID >>
+                                               currentIRID, AUX_IRQ_enq, 
+                                               AUX_IRQ_deq, AUX_C2S_enq, 
+                                               AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                               AUX_SEQ_enq, AUX_SEQ_deq >>
 
 WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
                                      /\ seqWorkerIsBusy = FALSE
@@ -1609,7 +1737,11 @@ WaitForRCSeqWorkerTerminate(self) == /\ pc[self] = "WaitForRCSeqWorkerTerminate"
                                                      nextIRObjectToSend, index, 
                                                      monitoringEvent, 
                                                      setIRsToReset, resetIR, 
-                                                     msg, currentIRID >>
+                                                     msg, currentIRID, 
+                                                     AUX_IRQ_enq, AUX_IRQ_deq, 
+                                                     AUX_C2S_enq, AUX_C2S_deq, 
+                                                     AUX_SEQ_sched_num, 
+                                                     AUX_SEQ_enq, AUX_SEQ_deq >>
 
 controllerBossSequencer(self) == ControllerBossSeqProc(self)
                                     \/ WaitForRCSeqWorkerTerminate(self)
@@ -1648,7 +1780,11 @@ ControllerWorkerSeqProc(self) == /\ pc[self] = "ControllerWorkerSeqProc"
                                                  pickedIR, nextIRObjectToSend, 
                                                  index, monitoringEvent, 
                                                  setIRsToReset, resetIR, msg, 
-                                                 currentIRID >>
+                                                 currentIRID, AUX_IRQ_enq, 
+                                                 AUX_IRQ_deq, AUX_C2S_enq, 
+                                                 AUX_C2S_deq, 
+                                                 AUX_SEQ_sched_num, 
+                                                 AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqScheduleDAG"
                                         /\ IF dagObjectShouldBeProcessed(currDAG)
@@ -1699,7 +1835,14 @@ ControllerWorkerSeqScheduleDAG(self) == /\ pc[self] = "ControllerWorkerSeqSchedu
                                                         nextIRObjectToSend, 
                                                         index, monitoringEvent, 
                                                         setIRsToReset, resetIR, 
-                                                        msg, currentIRID >>
+                                                        msg, currentIRID, 
+                                                        AUX_IRQ_enq, 
+                                                        AUX_IRQ_deq, 
+                                                        AUX_C2S_enq, 
+                                                        AUX_C2S_deq, 
+                                                        AUX_SEQ_sched_num, 
+                                                        AUX_SEQ_enq, 
+                                                        AUX_SEQ_deq >>
 
 SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                             /\ IF toBeScheduledIRs = {} \/ isDAGStale(currDAG.id)
@@ -1707,14 +1850,22 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                        /\ UNCHANGED << IRQueueNIB, 
                                                        ScheduledIRs, 
                                                        toBeScheduledIRs, 
-                                                       nextIR, IRDoneSet >>
+                                                       nextIR, IRDoneSet, 
+                                                       AUX_IRQ_enq, 
+                                                       AUX_SEQ_sched_num, 
+                                                       AUX_SEQ_enq >>
                                   ELSE /\ nextIR' = (CHOOSE x \in toBeScheduledIRs: TRUE)
                                        /\ LET destination == getSwitchForIR(nextIR') IN
                                             /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![nextIR'] = TRUE]
                                             /\ IF getIRType(nextIR') = INSTALL_FLOW
                                                   THEN /\ IRDoneSet' = (IRDoneSet \cup {nextIR'})
                                                   ELSE /\ IRDoneSet' = IRDoneSet \ {getDualOfIR(nextIR')}
-                                            /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> nextIR', sw |-> destination]), tag |-> NADIR_NULL])
+                                            /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num]), tag |-> (getIRStructTag(destination))])
+                                            /\ AUX_IRQ_enq' = [AUX_IRQ_enq EXCEPT ![(getIRStructTag(destination))] = Append(AUX_IRQ_enq[(getIRStructTag(destination))], ([IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num]))]
+                                            /\ AUX_SEQ_enq' = [AUX_SEQ_enq EXCEPT ![destination] =                         Append(
+                                                                                                   AUX_SEQ_enq[destination],
+                                                                                                   [IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num])]
+                                            /\ AUX_SEQ_sched_num' = AUX_SEQ_sched_num + 1
                                             /\ toBeScheduledIRs' = (toBeScheduledIRs\{nextIR'})
                                        /\ pc' = [pc EXCEPT ![self] = "SchedulerMechanism"]
                             /\ UNCHANGED << sw_fail_ordering_var, switchStatus, 
@@ -1739,7 +1890,9 @@ SchedulerMechanism(self) == /\ pc[self] = "SchedulerMechanism"
                                             irSet, pickedIR, 
                                             nextIRObjectToSend, index, 
                                             monitoringEvent, setIRsToReset, 
-                                            resetIR, msg, currentIRID >>
+                                            resetIR, msg, currentIRID, 
+                                            AUX_IRQ_deq, AUX_C2S_enq, 
+                                            AUX_C2S_deq, AUX_SEQ_deq >>
 
 AddDeleteDAGIRDoneSet(self) == /\ pc[self] = "AddDeleteDAGIRDoneSet"
                                /\ IF Cardinality(irSet) > 0
@@ -1778,7 +1931,11 @@ AddDeleteDAGIRDoneSet(self) == /\ pc[self] = "AddDeleteDAGIRDoneSet"
                                                nextIR, currDAG, 
                                                nextIRObjectToSend, index, 
                                                monitoringEvent, setIRsToReset, 
-                                               resetIR, msg, currentIRID >>
+                                               resetIR, msg, currentIRID, 
+                                               AUX_IRQ_enq, AUX_IRQ_deq, 
+                                               AUX_C2S_enq, AUX_C2S_deq, 
+                                               AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                               AUX_SEQ_deq >>
 
 RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
                             /\ DAGQueue' = Tail(DAGQueue)
@@ -1807,7 +1964,10 @@ RemoveDagFromQueue(self) == /\ pc[self] = "RemoveDagFromQueue"
                                             pickedIR, nextIRObjectToSend, 
                                             index, monitoringEvent, 
                                             setIRsToReset, resetIR, msg, 
-                                            currentIRID >>
+                                            currentIRID, AUX_IRQ_enq, 
+                                            AUX_IRQ_deq, AUX_C2S_enq, 
+                                            AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                            AUX_SEQ_enq, AUX_SEQ_deq >>
 
 controllerSequencer(self) == ControllerWorkerSeqProc(self)
                                 \/ ControllerWorkerSeqScheduleDAG(self)
@@ -1816,10 +1976,10 @@ controllerSequencer(self) == ControllerWorkerSeqProc(self)
                                 \/ RemoveDagFromQueue(self)
 
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
-                          /\ ExistsItemWithTag(IRQueueNIB, NADIR_NULL) \/ ExistsItemWithTag(IRQueueNIB, self)
-                          /\ index' = GetItemIndexWithTag(IRQueueNIB, self)
+                          /\ ExistsItemWithTag(IRQueueNIB, (self[2]))
+                          /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))
                           /\ nextIRObjectToSend' = IRQueueNIB[index'].data
-                          /\ IRQueueNIB' = [IRQueueNIB EXCEPT ![index'].tag = self]
+                          /\ AUX_IRQ_deq' = [AUX_IRQ_deq EXCEPT ![(self[2])] = Append(AUX_IRQ_deq[(self[2])], nextIRObjectToSend')]
                           /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                           /\ UNCHANGED << sw_fail_ordering_var, switchStatus, 
                                           installedIRs, TCAM, 
@@ -1828,7 +1988,8 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           statusResolveMsg, swSeqChangedStatus, 
                                           controller2Switch, switch2Controller, 
                                           TEEventQueue, DAGEventQueue, 
-                                          DAGQueue, RCNIBEventQueue, DAGState, 
+                                          DAGQueue, IRQueueNIB, 
+                                          RCNIBEventQueue, DAGState, 
                                           RCSwSuspensionStatus, RCIRStatus, 
                                           NIBIRStatus, SwSuspensionStatus, 
                                           ScheduledIRs, seqWorkerIsBusy, 
@@ -1841,7 +2002,10 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           toBeScheduledIRs, nextIR, currDAG, 
                                           IRDoneSet, irSet, pickedIR, 
                                           monitoringEvent, setIRsToReset, 
-                                          resetIR, msg, currentIRID >>
+                                          resetIR, msg, currentIRID, 
+                                          AUX_IRQ_enq, AUX_C2S_enq, 
+                                          AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                          AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                 /\ IF isClearIR(nextIRObjectToSend.IR)
@@ -1851,16 +2015,39 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                                                                                                                                                                         type |-> CLEAR_TCAM,
                                                                                                                                                                                                         flow |-> 0,
                                                                                                                                                                                                         to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                                        from |-> self[1]
+                                                                                                                                                                                                        from |-> self[1],
+                                                                                                                                                                                                        sched_num |-> nextIRObjectToSend.sched_num
                                                                                                                                                                                                     ]))]
+                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
+                                                                                                                                      AUX_C2S_enq[nextIRObjectToSend.sw],
+                                                                                                                                      [
+                                                                                                                                          type |-> CLEAR_TCAM,
+                                                                                                                                          flow |-> 0,
+                                                                                                                                          to |-> nextIRObjectToSend.sw,
+                                                                                                                                          from |-> self[1],
+                                                                                                                                          sched_num |-> nextIRObjectToSend.sched_num
+                                                                                                                                      ]
+                                                                                                                                  )]
                                                             ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
                                                                                                                                                                                                         type |-> getIRType(nextIRObjectToSend.IR),
                                                                                                                                                                                                         flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
                                                                                                                                                                                                         to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                                        from |-> self[1]
+                                                                                                                                                                                                        from |-> self[1],
+                                                                                                                                                                                                        sched_num |-> nextIRObjectToSend.sched_num
                                                                                                                                                                                                     ]))]
+                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
+                                                                                                                                      AUX_C2S_enq[nextIRObjectToSend.sw],
+                                                                                                                                      [
+                                                                                                                                          type |-> getIRType(nextIRObjectToSend.IR),
+                                                                                                                                          flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
+                                                                                                                                          to |-> nextIRObjectToSend.sw,
+                                                                                                                                          from |-> self[1],
+                                                                                                                                          sched_num |-> nextIRObjectToSend.sched_num
+                                                                                                                                      ]
+                                                                                                                                  )]
                                                  ELSE /\ TRUE
-                                                      /\ UNCHANGED controller2Switch
+                                                      /\ UNCHANGED << controller2Switch, 
+                                                                      AUX_C2S_enq >>
                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                            /\ UNCHANGED << RCNIBEventQueue, 
                                                            NIBIRStatus >>
@@ -1882,7 +2069,8 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                  ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                                       /\ UNCHANGED << RCNIBEventQueue, 
                                                                       NIBIRStatus >>
-                                           /\ UNCHANGED controller2Switch
+                                           /\ UNCHANGED << controller2Switch, 
+                                                           AUX_C2S_enq >>
                                 /\ UNCHANGED << sw_fail_ordering_var, 
                                                 switchStatus, installedIRs, 
                                                 TCAM, controlMsgCounter, 
@@ -1909,7 +2097,10 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 irSet, pickedIR, 
                                                 nextIRObjectToSend, index, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, msg, currentIRID >>
+                                                resetIR, msg, currentIRID, 
+                                                AUX_IRQ_enq, AUX_IRQ_deq, 
+                                                AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                                AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                    /\ IF isClearIR(nextIRObjectToSend.IR)
@@ -1917,14 +2108,36 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                                                                                                                                                      type |-> CLEAR_TCAM,
                                                                                                                                                                                      flow |-> 0,
                                                                                                                                                                                      to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                     from |-> self[1]
+                                                                                                                                                                                     from |-> self[1],
+                                                                                                                                                                                     sched_num |-> nextIRObjectToSend.sched_num
                                                                                                                                                                                  ]))]
+                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
+                                                                                                                   AUX_C2S_enq[nextIRObjectToSend.sw],
+                                                                                                                   [
+                                                                                                                       type |-> CLEAR_TCAM,
+                                                                                                                       flow |-> 0,
+                                                                                                                       to |-> nextIRObjectToSend.sw,
+                                                                                                                       from |-> self[1],
+                                                                                                                       sched_num |-> nextIRObjectToSend.sched_num
+                                                                                                                   ]
+                                                                                                               )]
                                          ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
                                                                                                                                                                                      type |-> getIRType(nextIRObjectToSend.IR),
                                                                                                                                                                                      flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
                                                                                                                                                                                      to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                     from |-> self[1]
+                                                                                                                                                                                     from |-> self[1],
+                                                                                                                                                                                     sched_num |-> nextIRObjectToSend.sched_num
                                                                                                                                                                                  ]))]
+                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
+                                                                                                                   AUX_C2S_enq[nextIRObjectToSend.sw],
+                                                                                                                   [
+                                                                                                                       type |-> getIRType(nextIRObjectToSend.IR),
+                                                                                                                       flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
+                                                                                                                       to |-> nextIRObjectToSend.sw,
+                                                                                                                       from |-> self[1],
+                                                                                                                       sched_num |-> nextIRObjectToSend.sched_num
+                                                                                                                   ]
+                                                                                                               )]
                                    /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                    /\ UNCHANGED << sw_fail_ordering_var, 
                                                    switchStatus, installedIRs, 
@@ -1956,10 +2169,13 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    nextIRObjectToSend, index, 
                                                    monitoringEvent, 
                                                    setIRsToReset, resetIR, msg, 
-                                                   currentIRID >>
+                                                   currentIRID, AUX_IRQ_enq, 
+                                                   AUX_IRQ_deq, AUX_C2S_deq, 
+                                                   AUX_SEQ_sched_num, 
+                                                   AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadRemoveIRFromQueue(self) == /\ pc[self] = "ControllerThreadRemoveIRFromQueue"
-                                           /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, self)
+                                           /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))
                                            /\ IRQueueNIB' = RemoveFromSequenceByIndex(IRQueueNIB, index')
                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                            /\ UNCHANGED << sw_fail_ordering_var, 
@@ -2006,7 +2222,14 @@ ControllerThreadRemoveIRFromQueue(self) == /\ pc[self] = "ControllerThreadRemove
                                                            monitoringEvent, 
                                                            setIRsToReset, 
                                                            resetIR, msg, 
-                                                           currentIRID >>
+                                                           currentIRID, 
+                                                           AUX_IRQ_enq, 
+                                                           AUX_IRQ_deq, 
+                                                           AUX_C2S_enq, 
+                                                           AUX_C2S_deq, 
+                                                           AUX_SEQ_sched_num, 
+                                                           AUX_SEQ_enq, 
+                                                           AUX_SEQ_deq >>
 
 controllerWorkerThreads(self) == ControllerThread(self)
                                     \/ ControllerThreadSendIR(self)
@@ -2055,7 +2278,11 @@ ControllerEventHandlerProc(self) == /\ pc[self] = "ControllerEventHandlerProc"
                                                     pickedIR, 
                                                     nextIRObjectToSend, index, 
                                                     setIRsToReset, resetIR, 
-                                                    msg, currentIRID >>
+                                                    msg, currentIRID, 
+                                                    AUX_IRQ_enq, AUX_IRQ_deq, 
+                                                    AUX_C2S_enq, AUX_C2S_deq, 
+                                                    AUX_SEQ_sched_num, 
+                                                    AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEvenHanlderRemoveEventFromQueue"
                                                    /\ swSeqChangedStatus' = Tail(swSeqChangedStatus)
@@ -2111,7 +2338,14 @@ ControllerEvenHanlderRemoveEventFromQueue(self) == /\ pc[self] = "ControllerEven
                                                                    setIRsToReset, 
                                                                    resetIR, 
                                                                    msg, 
-                                                                   currentIRID >>
+                                                                   currentIRID, 
+                                                                   AUX_IRQ_enq, 
+                                                                   AUX_IRQ_deq, 
+                                                                   AUX_C2S_enq, 
+                                                                   AUX_C2S_deq, 
+                                                                   AUX_SEQ_sched_num, 
+                                                                   AUX_SEQ_enq, 
+                                                                   AUX_SEQ_deq >>
 
 ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                              /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent.swID] = SW_SUSPEND]
@@ -2140,13 +2374,25 @@ ControllerSuspendSW(self) == /\ pc[self] = "ControllerSuspendSW"
                                              IRDoneSet, irSet, pickedIR, 
                                              nextIRObjectToSend, index, 
                                              monitoringEvent, setIRsToReset, 
-                                             resetIR, msg, currentIRID >>
+                                             resetIR, msg, currentIRID, 
+                                             AUX_IRQ_enq, AUX_IRQ_deq, 
+                                             AUX_C2S_enq, AUX_C2S_deq, 
+                                             AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                             AUX_SEQ_deq >>
 
 ControllerRequestTCAMClear(self) == /\ pc[self] = "ControllerRequestTCAMClear"
                                     /\ IF ~existsMonitoringEventHigherNum(monitoringEvent)
-                                          THEN /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> 0, sw |-> monitoringEvent.swID]), tag |-> NADIR_NULL])
+                                          THEN /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> 0, sw |-> monitoringEvent.swID, sched_num |-> AUX_SEQ_sched_num]), tag |-> (getIRStructTag(monitoringEvent.swID))])
+                                               /\ AUX_IRQ_enq' = [AUX_IRQ_enq EXCEPT ![(getIRStructTag(monitoringEvent.swID))] = Append(AUX_IRQ_enq[(getIRStructTag(monitoringEvent.swID))], ([IR |-> 0, sw |-> monitoringEvent.swID, sched_num |-> AUX_SEQ_sched_num]))]
+                                               /\ AUX_SEQ_enq' = [AUX_SEQ_enq EXCEPT ![monitoringEvent.swID] =                                  Append(
+                                                                                                               AUX_SEQ_enq[monitoringEvent.swID],
+                                                                                                               [IR |-> 0, sw |-> monitoringEvent.swID, sched_num |-> AUX_SEQ_sched_num])]
+                                               /\ AUX_SEQ_sched_num' = AUX_SEQ_sched_num + 1
                                           ELSE /\ TRUE
-                                               /\ UNCHANGED IRQueueNIB
+                                               /\ UNCHANGED << IRQueueNIB, 
+                                                               AUX_IRQ_enq, 
+                                                               AUX_SEQ_sched_num, 
+                                                               AUX_SEQ_enq >>
                                     /\ pc' = [pc EXCEPT ![self] = "ControllerEvenHanlderRemoveEventFromQueue"]
                                     /\ UNCHANGED << sw_fail_ordering_var, 
                                                     switchStatus, installedIRs, 
@@ -2180,7 +2426,9 @@ ControllerRequestTCAMClear(self) == /\ pc[self] = "ControllerRequestTCAMClear"
                                                     nextIRObjectToSend, index, 
                                                     monitoringEvent, 
                                                     setIRsToReset, resetIR, 
-                                                    msg, currentIRID >>
+                                                    msg, currentIRID, 
+                                                    AUX_IRQ_deq, AUX_C2S_enq, 
+                                                    AUX_C2S_deq, AUX_SEQ_deq >>
 
 ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIsLastEvent"
                                           /\ IF ~existsMonitoringEventHigherNum(monitoringEvent)
@@ -2231,7 +2479,14 @@ ControllerCheckIfThisIsLastEvent(self) == /\ pc[self] = "ControllerCheckIfThisIs
                                                           monitoringEvent, 
                                                           setIRsToReset, 
                                                           resetIR, msg, 
-                                                          currentIRID >>
+                                                          currentIRID, 
+                                                          AUX_IRQ_enq, 
+                                                          AUX_IRQ_deq, 
+                                                          AUX_C2S_enq, 
+                                                          AUX_C2S_deq, 
+                                                          AUX_SEQ_sched_num, 
+                                                          AUX_SEQ_enq, 
+                                                          AUX_SEQ_deq >>
 
 getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                            /\ setIRsToReset' = getIRSetToReset(monitoringEvent.swID)
@@ -2261,7 +2516,10 @@ getIRsToBeChecked(self) == /\ pc[self] = "getIRsToBeChecked"
                                            IRDoneSet, irSet, pickedIR, 
                                            nextIRObjectToSend, index, 
                                            monitoringEvent, resetIR, msg, 
-                                           currentIRID >>
+                                           currentIRID, AUX_IRQ_enq, 
+                                           AUX_IRQ_deq, AUX_C2S_enq, 
+                                           AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                           AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                      /\ resetIR' = (CHOOSE x \in setIRsToReset: TRUE)
@@ -2296,7 +2554,10 @@ ResetAllIRs(self) == /\ pc[self] = "ResetAllIRs"
                                      seqEvent, toBeScheduledIRs, nextIR, 
                                      currDAG, IRDoneSet, irSet, pickedIR, 
                                      nextIRObjectToSend, index, 
-                                     monitoringEvent, msg, currentIRID >>
+                                     monitoringEvent, msg, currentIRID, 
+                                     AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, 
+                                     AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                     AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                    /\ SwSuspensionStatus' = [SwSuspensionStatus EXCEPT ![monitoringEvent.swID] = SW_RUN]
@@ -2332,7 +2593,11 @@ ControllerFreeSuspendedSW(self) == /\ pc[self] = "ControllerFreeSuspendedSW"
                                                    nextIRObjectToSend, index, 
                                                    monitoringEvent, 
                                                    setIRsToReset, resetIR, msg, 
-                                                   currentIRID >>
+                                                   currentIRID, AUX_IRQ_enq, 
+                                                   AUX_IRQ_deq, AUX_C2S_enq, 
+                                                   AUX_C2S_deq, 
+                                                   AUX_SEQ_sched_num, 
+                                                   AUX_SEQ_enq, AUX_SEQ_deq >>
 
 controllerEventHandler(self) == ControllerEventHandlerProc(self)
                                    \/ ControllerEvenHanlderRemoveEventFromQueue(self)
@@ -2388,7 +2653,14 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                                        nextIRObjectToSend, 
                                                        index, monitoringEvent, 
                                                        setIRsToReset, resetIR, 
-                                                       currentIRID >>
+                                                       currentIRID, 
+                                                       AUX_IRQ_enq, 
+                                                       AUX_IRQ_deq, 
+                                                       AUX_C2S_enq, 
+                                                       AUX_C2S_deq, 
+                                                       AUX_SEQ_sched_num, 
+                                                       AUX_SEQ_enq, 
+                                                       AUX_SEQ_deq >>
 
 MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFromQueue"
                                          /\ switch2Controller' = Tail(switch2Controller)
@@ -2435,7 +2707,14 @@ MonitoringServerRemoveFromQueue(self) == /\ pc[self] = "MonitoringServerRemoveFr
                                                          monitoringEvent, 
                                                          setIRsToReset, 
                                                          resetIR, msg, 
-                                                         currentIRID >>
+                                                         currentIRID, 
+                                                         AUX_IRQ_enq, 
+                                                         AUX_IRQ_deq, 
+                                                         AUX_C2S_enq, 
+                                                         AUX_C2S_deq, 
+                                                         AUX_SEQ_sched_num, 
+                                                         AUX_SEQ_enq, 
+                                                         AUX_SEQ_deq >>
 
 ControllerProcessIRMod(self) == /\ pc[self] = "ControllerProcessIRMod"
                                 /\ currentIRID' = getIRIDForFlow(msg.flow, msg.type)
@@ -2476,7 +2755,10 @@ ControllerProcessIRMod(self) == /\ pc[self] = "ControllerProcessIRMod"
                                                 irSet, pickedIR, 
                                                 nextIRObjectToSend, index, 
                                                 monitoringEvent, setIRsToReset, 
-                                                resetIR, msg >>
+                                                resetIR, msg, AUX_IRQ_enq, 
+                                                AUX_IRQ_deq, AUX_C2S_enq, 
+                                                AUX_C2S_deq, AUX_SEQ_sched_num, 
+                                                AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ForwardToEH(self) == /\ pc[self] = "ForwardToEH"
                      /\ swSeqChangedStatus' = Append(swSeqChangedStatus, msg)
@@ -2500,7 +2782,10 @@ ForwardToEH(self) == /\ pc[self] = "ForwardToEH"
                                      currDAG, IRDoneSet, irSet, pickedIR, 
                                      nextIRObjectToSend, index, 
                                      monitoringEvent, setIRsToReset, resetIR, 
-                                     msg, currentIRID >>
+                                     msg, currentIRID, AUX_IRQ_enq, 
+                                     AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, 
+                                     AUX_SEQ_sched_num, AUX_SEQ_enq, 
+                                     AUX_SEQ_deq >>
 
 controllerMonitoringServer(self) == ControllerMonitorCheckIfMastr(self)
                                        \/ MonitoringServerRemoveFromQueue(self)
@@ -2602,13 +2887,13 @@ ENUM_MODULE_STATE == {Failed, NotFailed}
 
 STRUCT_SET_RC_DAG == [v: SUBSET SCHEDULABLE_IR_SET, e: SUBSET (SCHEDULABLE_IR_SET \X SCHEDULABLE_IR_SET)]
 STRUCT_SET_DAG_OBJECT == [id: DAG_ID_SET, dag: STRUCT_SET_RC_DAG]
-STRUCT_IR == [IR: ALL_IR_SET, sw: SW]
+STRUCT_IR == [IR: ALL_IR_SET, sw: SW, sched_num: Nat]
 STRUCT_IR_PAIR == [primary: ENUM_SET_IR_STATE, dual: ENUM_SET_IR_STATE]
-STRUCT_SET_NIB_TAGGED_IR == [data: STRUCT_IR, tag: ({ofc0} \X CONTROLLER_THREAD_POOL) \cup {NADIR_NULL}]
+STRUCT_SET_NIB_TAGGED_IR == [data: STRUCT_IR, tag: CONTROLLER_THREAD_POOL]
 
 MSG_SET_TIMEOUT == [swID: SW, num: Nat, type: {NIC_ASIC_DOWN, OFA_DOWN}]
 MSG_SET_KEEPALIVE == [swID: SW, num: Nat, type: {KEEP_ALIVE, CLEARED_TCAM_SUCCESSFULLY}, installerStatus: ENUM_SET_INSTALLER_STATUS]
-MSG_SET_OF_CMD == [from: {ofc0}, type: ENUM_SET_OF_CMD, to: SW, flow: Nat]
+MSG_SET_OF_CMD == [from: {ofc0}, type: ENUM_SET_OF_CMD, to: SW, flow: Nat, sched_num: Nat]
 MSG_SET_OF_ACK == [to: {ofc0}, type: ENUM_SET_OF_ACK, from: SW, flow: Nat]
 MSG_SET_SWITCH_EVENT == (MSG_SET_OF_ACK \cup MSG_SET_TIMEOUT \cup MSG_SET_KEEPALIVE)
 MSG_SET_TOPO_MOD == [type: {TOPO_MOD}, sw: SW, state: ENUM_SET_SW_STATE]
@@ -2686,19 +2971,20 @@ ConstantAssumptions == /\ MaxDAGID \in Nat
                        /\ IR2SW \in [INSTALLABLE_IR_SET -> SW]
                        /\ TOPO_DAG_MAPPING \in [SUBSET SW -> STRUCT_SET_RC_DAG]
                        /\ SW_FAIL_ORDERING \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
+                       /\ SW_THREAD_SHARD_MAP \in [SW -> CONTROLLER_THREAD_POOL]
 
 ASSUME ConstantAssumptions
 
 \* Local variables
 \* Only the associated process can change these variables ...
-swProcessLocals == <<ingressPkt, installedIRs>>
+swProcessLocals == <<ingressPkt, installedIRs, AUX_SEQ_deq, AUX_C2S_deq>>
 swFailureProcLocals == <<statusMsg, switchObject, sw_fail_ordering_var>>
 swResolveFailureLocals == <<statusResolveMsg>>
 rcNibEventHandlerLocals == <<nibEvent, RCIRStatus, RCSwSuspensionStatus>>
 controllerTrafficEngineeringLocals == <<topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect>>
 controllerBossSequencerLocals == <<seqEvent>>
 controllerSequencerLocals == <<toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, seqWorkerIsBusy>>
-controllerWorkerThreadsLocals == <<nextIRObjectToSend, index>>
+controllerWorkerThreadsLocals == <<nextIRObjectToSend, index, AUX_IRQ_deq, AUX_C2S_enq>>
 controllerEventHandlerLocals == <<monitoringEvent, setIRsToReset, resetIR, SwSuspensionStatus>>
 controllerMonitoringServerLocals == <<msg, currentIRID>>
 
@@ -2718,5 +3004,75 @@ ofcModuleVariables == <<NIBIRStatus>>
 \* DAGQueue = <<>>,
 \* IRQueueNIB = <<>>,
 \* RCNIBEventQueue = <<>>,
+\* AUX_IRQ_enq
+\* AUX_SEQ_enq
+
+AUX_TypeOK == /\ AUX_IRQ_enq \in [CONTROLLER_THREAD_POOL -> Seq(STRUCT_IR)]
+              /\ AUX_IRQ_deq \in [CONTROLLER_THREAD_POOL -> Seq(STRUCT_IR)]
+              /\ AUX_C2S_enq \in [SW -> Seq(MSG_SET_OF_CMD)]
+              /\ AUX_C2S_deq \in [SW -> Seq(MSG_SET_OF_CMD)]
+              /\ AUX_SEQ_sched_num \in Nat
+              /\ AUX_SEQ_enq \in [SW -> Seq(STRUCT_IR)]
+              /\ AUX_SEQ_deq \in [SW -> Seq(MSG_SET_OF_CMD)]
+
+AUX_SeqOrderPreserved == 
+    \A sw \in SW:
+        \E f \in [DOMAIN AUX_SEQ_deq[sw] -> DOMAIN AUX_SEQ_enq[sw]]:
+            /\ \A x \in DOMAIN f: AUX_SEQ_deq[sw][x].sched_num = AUX_SEQ_enq[sw][f[x]].sched_num
+            /\ \A x, y \in DOMAIN f: (x < y) <=> (f[x] < f[y])
+
+\* Given the enqueue (`enq`) and dequeue (`deq`) history of an object, we say that 
+\* ordering has been preserved, if there exists a monotonic function `f` from
+\* indices of `deq` to `enq` such that the following holds:
+\*
+\* For every two indices `x` and `y` that x < y, we must have that
+\*  - `f[x] < f[y]`
+\*  - `enq[f[x]] = deq[x]`
+\*  - `enq[f[y]] = deq[y]`
+\*
+\* Intuitively, `f[x]` maps indices of `deq` to `enq`, meaning that it allows
+\* one to get enqueue indices from dequeue indices. We then assert that the item
+\* on `deq` index `x` is dequeued _before_ `deq` index `y` if and only if 
+\* `f` maps them to the same items on the enqueue history, and they were indeed
+\* enqueued in the same order.
+\* Note that this definition allows for certain items in the queue to be lost, since
+\* `f` can be arbitrary.
+OrderingPreserved(enq, deq) ==
+    \E f \in [DOMAIN deq -> DOMAIN enq]:
+        /\ \A x \in DOMAIN f: enq[f[x]] = deq[x]
+        /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
+
+IRQ_ordering == 
+    \A t \in CONTROLLER_THREAD_POOL: 
+        OrderingPreserved(AUX_IRQ_enq[t], AUX_IRQ_deq[t])
+
+C2S_ordering ==
+    \A sw \in SW:
+        OrderingPreserved(AUX_C2S_enq[sw], AUX_C2S_deq[sw])
+
+\* Continuity invariants
+continuity_C2S_to_switch ==
+    \A sw \in DOMAIN AUX_SEQ_deq:
+        \E f \in [DOMAIN AUX_SEQ_deq[sw] -> DOMAIN AUX_C2S_deq[sw]]:
+            /\ \A x \in DOMAIN f: AUX_SEQ_deq[sw][x].sched_num = AUX_C2S_deq[sw][f[x]].sched_num
+            /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
+
+ScheduledOfSw(q, sw) == {x \in DOMAIN q: q[x].sw = sw}
+continuity_IRQ_to_C2S ==
+    \A sw \in DOMAIN AUX_C2S_enq:
+        \E f \in [DOMAIN AUX_C2S_enq[sw] -> ScheduledOfSw(AUX_IRQ_deq[SW_THREAD_SHARD_MAP[sw]], sw)]:
+            /\ \A x \in DOMAIN f: 
+                /\ AUX_C2S_enq[sw][x].sched_num = AUX_IRQ_deq[SW_THREAD_SHARD_MAP[sw]][f[x]].sched_num
+                /\ AUX_IRQ_deq[SW_THREAD_SHARD_MAP[sw]][f[x]].sw = sw
+            /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
+
+continuity_SEQ_to_IRQ ==
+    \A sw \in DOMAIN AUX_SEQ_enq:
+        \E f \in [ScheduledOfSw(AUX_IRQ_enq[SW_THREAD_SHARD_MAP[sw]], sw) -> DOMAIN AUX_SEQ_enq[sw]]:
+            /\ \A x \in DOMAIN f:
+                /\ AUX_IRQ_enq[SW_THREAD_SHARD_MAP[sw]][x].sched_num = AUX_SEQ_enq[sw][f[x]].sched_num
+                /\ AUX_IRQ_enq[SW_THREAD_SHARD_MAP[sw]][x].sw = sw
+            /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
+                    
 
 =============================================================================

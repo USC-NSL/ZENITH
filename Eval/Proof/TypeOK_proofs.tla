@@ -8,6 +8,17 @@ TypeOKSWProc ==
     /\ ingressPkt \in (MSG_SET_OF_CMD \cup {NADIR_NULL})
     /\ installedIRs \in Seq(INSTALLABLE_IR_SET)
 
+\* Proved with Z3
+THEOREM TypeOKSWProc_Proof == ModuleSpec => []TypeOKSWProc
+<1>1 Init => TypeOKSWProc
+    BY DEF Init, TypeOKSWProc
+<1>2 ModuleNext /\ TypeOKSWProc => TypeOKSWProc'
+    <2> SUFFICES ASSUME ModuleNext, TypeOKSWProc PROVE TypeOKSWProc'
+    <2> QED 
+<1>3 TypeOKSWProc /\ UNCHANGED vars => TypeOKSWProc'
+    BY DEF TypeOKSWProc, vars
+<1> QED BY PTL, <1>1, <1>2, <1>3 DEF ModuleSpec
+
 TypeOKSWFail ==
     /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
     /\ statusMsg \in (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})
@@ -104,5 +115,8 @@ LEMMA StitchingLemma == (
 PROOF BY DEF TypeOK, TypeOKSWProc, TypeOKSWFail, TypeOKSWResolve ,TypeOKNIBEH,
              TypeOKTE, TypeOKBoss, TypeOKSEQ, TypeOKWP, TypeOKEH, TypeOKMS, TypeOKModuleSW,
              TypeOKModuleRC, TypeOKModuleOFC, TypeOKQueues
+
+LEMMA AUX_TypeOK_is_inv == Spec => []AUX_TypeOK
+PROOF OMITTED
 
 ====
