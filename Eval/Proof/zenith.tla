@@ -47,12 +47,12 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
         controlMsgCounter = [x \in SW |-> 0],
         RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]],
         \* Previously local variable of `swProcess`
-        ingressPkt = NADIR_NULL,
+        ingressPkt = [x \in SW |-> NADIR_NULL],
         \* Previously local variable of `swFailureProc`
-        statusMsg = NADIR_NULL, 
-        switchObject = NADIR_NULL,
+        statusMsg = [x \in SW |-> NADIR_NULL], 
+        switchObject = [x \in SW |-> NADIR_NULL],
         \* Previously local variable of `swResolveFailure`
-        statusResolveMsg = NADIR_NULL,
+        statusResolveMsg = [x \in SW |-> NADIR_NULL],
         (* Zenith variables *)
         swSeqChangedStatus = <<>>,
         controller2Switch = [x \in SW |-> <<>>],
@@ -96,8 +96,8 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
         irSet = {}, 
         pickedIR = NADIR_NULL,       
         \* Previously local variable(s) of `ControllerWorkerThreads`
-        nextIRObjectToSend = NADIR_NULL, 
-        index = 0,
+        nextIRObjectToSend = [t \in CONTROLLER_THREAD_POOL |-> NADIR_NULL], 
+        index = [t \in CONTROLLER_THREAD_POOL |-> 0],
         \* Previously local variable(s) of `ControllerEventHandler`
         monitoringEvent = NADIR_NULL, 
         setIRsToReset = {}, 
@@ -228,10 +228,10 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
     begin
         if switchStatus[self[2]].nicAsic = NotFailed then
             controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;
-            statusMsg := [type |-> NIC_ASIC_DOWN, 
+            statusMsg[self[2]] := [type |-> NIC_ASIC_DOWN, 
                             swID |-> self[2],
                             num |-> controlMsgCounter[self[2]]];
-            switch2Controller := Append(switch2Controller, statusMsg);
+            switch2Controller := Append(switch2Controller, statusMsg[self[2]]);
         end if;
         
         switchStatus[self[2]] := [cpu |-> Failed, nicAsic |-> Failed, 
@@ -248,13 +248,13 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
         controller2Switch[self[2]] := <<>>;
         
         controlMsgCounter[self[2]] := controlMsgCounter[self[2]] + 1;  
-        statusResolveMsg := [
+        statusResolveMsg[self[2]] := [
             type |-> KEEP_ALIVE, 
             swID |-> self[2],
             num |-> controlMsgCounter[self[2]],
             installerStatus |-> getInstallerStatus(switchStatus[self[2]].installer)
         ];
-        switch2Controller := Append(switch2Controller, statusResolveMsg);
+        switch2Controller := Append(switch2Controller, statusResolveMsg[self[2]]);
     end macro;
 
     macro installToTCAM(newFlow)
@@ -459,17 +459,17 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
     while TRUE do
         await swCanReceivePackets(self[2]);         
         await Len(controller2Switch[self[2]]) > 0;
-        ingressPkt := Head(controller2Switch[self[2]]);
+        ingressPkt[self[2]] := Head(controller2Switch[self[2]]);
         controller2Switch[self[2]] := Tail(controller2Switch[self[2]]);
-        AUX_C2S_deq[self[2]] := Append(AUX_C2S_deq[self[2]], ingressPkt);
-        AUX_SEQ_deq[self[2]] := Append(AUX_SEQ_deq[self[2]], ingressPkt);
-        if ingressPkt.type = INSTALL_FLOW then
-            installToTCAM(ingressPkt.flow);
-            sendConfirmation(ingressPkt.from, ingressPkt.flow, INSTALLED_SUCCESSFULLY);
-        elsif ingressPkt.type = DELETE_FLOW then
-            removeFromTCAM(ingressPkt.flow);
-            sendConfirmation(ingressPkt.from, ingressPkt.flow, DELETED_SUCCESSFULLY);
-        elsif ingressPkt.type = CLEAR_TCAM then
+        AUX_C2S_deq[self[2]] := Append(AUX_C2S_deq[self[2]], ingressPkt[self[2]]);
+        AUX_SEQ_deq[self[2]] := Append(AUX_SEQ_deq[self[2]], ingressPkt[self[2]]);
+        if ingressPkt[self[2]].type = INSTALL_FLOW then
+            installToTCAM(ingressPkt[self[2]].flow);
+            sendConfirmation(ingressPkt[self[2]].from, ingressPkt[self[2]].flow, INSTALLED_SUCCESSFULLY);
+        elsif ingressPkt[self[2]].type = DELETE_FLOW then
+            removeFromTCAM(ingressPkt[self[2]].flow);
+            sendConfirmation(ingressPkt[self[2]].from, ingressPkt[self[2]].flow, DELETED_SUCCESSFULLY);
+        elsif ingressPkt[self[2]].type = CLEAR_TCAM then
             clearTCAM();
             sendClearConfirmation();
         end if;
@@ -482,9 +482,9 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
     while TRUE do
         await sw_fail_ordering_var # <<>>;
         await \E x \in Head(sw_fail_ordering_var): x.sw = self[2];
-        switchObject := CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2];
-        RecoveryStatus[self[2]].transient := switchObject.transient || RecoveryStatus[self[2]].partial := switchObject.partial;
-        removeFromSeqSet(sw_fail_ordering_var, switchObject);
+        switchObject[self[2]] := CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2];
+        RecoveryStatus[self[2]].transient := switchObject[self[2]].transient || RecoveryStatus[self[2]].partial := switchObject[self[2]].partial;
+        removeFromSeqSet(sw_fail_ordering_var, switchObject[self[2]]);
         completeFailure();
     end while
     end process
@@ -680,27 +680,27 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
     begin
     ControllerThread:
     while TRUE do
-        NadirAckQueueGet(IRQueueNIB, self[2], index, nextIRObjectToSend);
+        NadirAckQueueGet(IRQueueNIB, self[2], index[self[2]], nextIRObjectToSend[self[2]]);
 
         ControllerThreadSendIR:        
-            if isClearIR(nextIRObjectToSend.IR) then
-                if isSwitchSuspended(nextIRObjectToSend.sw) then
-                    controllerSendIR(nextIRObjectToSend);
+            if isClearIR(nextIRObjectToSend[self[2]].IR) then
+                if isSwitchSuspended(nextIRObjectToSend[self[2]].sw) then
+                    controllerSendIR(nextIRObjectToSend[self[2]]);
                 end if;
-            elsif getNIBIRState(nextIRObjectToSend.IR) \in {IR_NONE, IR_SENT} then
-                if isSwitchSuspended(nextIRObjectToSend.sw) then
-                    NadirFIFOPut(RCNIBEventQueue, [type |-> IR_FAILED, IR |-> nextIRObjectToSend.IR, state |-> IR_NONE]);
+            elsif getNIBIRState(nextIRObjectToSend[self[2]].IR) \in {IR_NONE, IR_SENT} then
+                if isSwitchSuspended(nextIRObjectToSend[self[2]].sw) then
+                    NadirFIFOPut(RCNIBEventQueue, [type |-> IR_FAILED, IR |-> nextIRObjectToSend[self[2]].IR, state |-> IR_NONE]);
                 else
-                    setNIBIRState(nextIRObjectToSend.IR, IR_SENT);
-                    NadirFIFOPut(RCNIBEventQueue, [type |-> IR_MOD, IR |-> nextIRObjectToSend.IR, state |-> IR_SENT]);
+                    setNIBIRState(nextIRObjectToSend[self[2]].IR, IR_SENT);
+                    NadirFIFOPut(RCNIBEventQueue, [type |-> IR_MOD, IR |-> nextIRObjectToSend[self[2]].IR, state |-> IR_SENT]);
 
                     ControllerThreadForwardIR:
-                        controllerSendIR(nextIRObjectToSend);
+                        controllerSendIR(nextIRObjectToSend[self[2]]);
                 end if;
             end if;
         
         ControllerThreadRemoveIRFromQueue:
-            NadirAckQueueAck(IRQueueNIB, self[2], index);
+            NadirAckQueueAck(IRQueueNIB, self[2], index[self[2]]);
     end while;
     end process
 
@@ -793,7 +793,7 @@ RemoveFromSequenceByIndex(seq, index) == [j \in 1..(Len(seq) - 1) |-> IF j < ind
     end while
     end process
 end algorithm*)
-\* BEGIN TRANSLATION (chksum(pcal) = "9db7c9ee" /\ chksum(tla) = "b1202614")
+\* BEGIN TRANSLATION (chksum(pcal) = "32992ab3" /\ chksum(tla) = "17c8adb")
 VARIABLES sw_fail_ordering_var, switchStatus, installedIRs, TCAM, 
           controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, 
           switchObject, statusResolveMsg, swSeqChangedStatus, 
@@ -928,10 +928,10 @@ Init == (* Global variables *)
         /\ TCAM = [x \in SW |-> {}]
         /\ controlMsgCounter = [x \in SW |-> 0]
         /\ RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
-        /\ ingressPkt = NADIR_NULL
-        /\ statusMsg = NADIR_NULL
-        /\ switchObject = NADIR_NULL
-        /\ statusResolveMsg = NADIR_NULL
+        /\ ingressPkt = [x \in SW |-> NADIR_NULL]
+        /\ statusMsg = [x \in SW |-> NADIR_NULL]
+        /\ switchObject = [x \in SW |-> NADIR_NULL]
+        /\ statusResolveMsg = [x \in SW |-> NADIR_NULL]
         /\ swSeqChangedStatus = <<>>
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
@@ -969,8 +969,8 @@ Init == (* Global variables *)
         /\ IRDoneSet = {}
         /\ irSet = {}
         /\ pickedIR = NADIR_NULL
-        /\ nextIRObjectToSend = NADIR_NULL
-        /\ index = 0
+        /\ nextIRObjectToSend = [t \in CONTROLLER_THREAD_POOL |-> NADIR_NULL]
+        /\ index = [t \in CONTROLLER_THREAD_POOL |-> 0]
         /\ monitoringEvent = NADIR_NULL
         /\ setIRsToReset = {}
         /\ resetIR = NADIR_NULL
@@ -997,33 +997,33 @@ Init == (* Global variables *)
 SwitchSimpleProcess(self) == /\ pc[self] = "SwitchSimpleProcess"
                              /\ swCanReceivePackets(self[2])
                              /\ Len(controller2Switch[self[2]]) > 0
-                             /\ ingressPkt' = Head(controller2Switch[self[2]])
+                             /\ ingressPkt' = [ingressPkt EXCEPT ![self[2]] = Head(controller2Switch[self[2]])]
                              /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = Tail(controller2Switch[self[2]])]
-                             /\ AUX_C2S_deq' = [AUX_C2S_deq EXCEPT ![self[2]] = Append(AUX_C2S_deq[self[2]], ingressPkt')]
-                             /\ AUX_SEQ_deq' = [AUX_SEQ_deq EXCEPT ![self[2]] = Append(AUX_SEQ_deq[self[2]], ingressPkt')]
-                             /\ IF ingressPkt'.type = INSTALL_FLOW
-                                   THEN /\ installedIRs' = Append(installedIRs, (ingressPkt'.flow))
-                                        /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \cup {(ingressPkt'.flow)}]
+                             /\ AUX_C2S_deq' = [AUX_C2S_deq EXCEPT ![self[2]] = Append(AUX_C2S_deq[self[2]], ingressPkt'[self[2]])]
+                             /\ AUX_SEQ_deq' = [AUX_SEQ_deq EXCEPT ![self[2]] = Append(AUX_SEQ_deq[self[2]], ingressPkt'[self[2]])]
+                             /\ IF ingressPkt'[self[2]].type = INSTALL_FLOW
+                                   THEN /\ installedIRs' = Append(installedIRs, (ingressPkt'[self[2]].flow))
+                                        /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \cup {(ingressPkt'[self[2]].flow)}]
                                         /\ switch2Controller' = Append(switch2Controller, (           [
                                                                     type |-> INSTALLED_SUCCESSFULLY,
                                                                     from |-> self[2],
-                                                                    to |-> (ingressPkt'.from),
-                                                                    flow |-> (ingressPkt'.flow)
+                                                                    to |-> (ingressPkt'[self[2]].from),
+                                                                    flow |-> (ingressPkt'[self[2]].flow)
                                                                 ]))
                                         /\ UNCHANGED controlMsgCounter
-                                   ELSE /\ IF ingressPkt'.type = DELETE_FLOW
-                                              THEN /\ IF existMatchingEntryTCAM(self[2], (ingressPkt'.flow))
-                                                         THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \ {(ingressPkt'.flow)}]
+                                   ELSE /\ IF ingressPkt'[self[2]].type = DELETE_FLOW
+                                              THEN /\ IF existMatchingEntryTCAM(self[2], (ingressPkt'[self[2]].flow))
+                                                         THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = TCAM[self[2]] \ {(ingressPkt'[self[2]].flow)}]
                                                          ELSE /\ TRUE
                                                               /\ TCAM' = TCAM
                                                    /\ switch2Controller' = Append(switch2Controller, (           [
                                                                                type |-> DELETED_SUCCESSFULLY,
                                                                                from |-> self[2],
-                                                                               to |-> (ingressPkt'.from),
-                                                                               flow |-> (ingressPkt'.flow)
+                                                                               to |-> (ingressPkt'[self[2]].from),
+                                                                               flow |-> (ingressPkt'[self[2]].flow)
                                                                            ]))
                                                    /\ UNCHANGED controlMsgCounter
-                                              ELSE /\ IF ingressPkt'.type = CLEAR_TCAM
+                                              ELSE /\ IF ingressPkt'[self[2]].type = CLEAR_TCAM
                                                          THEN /\ TCAM' = [TCAM EXCEPT ![self[2]] = {}]
                                                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
                                                               /\ switch2Controller' =                      Append(
@@ -1072,18 +1072,18 @@ swProcess(self) == SwitchSimpleProcess(self)
 SwitchFailure(self) == /\ pc[self] = "SwitchFailure"
                        /\ sw_fail_ordering_var # <<>>
                        /\ \E x \in Head(sw_fail_ordering_var): x.sw = self[2]
-                       /\ switchObject' = (CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2])
-                       /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = switchObject'.transient,
-                                                                   ![self[2]].partial = switchObject'.partial]
+                       /\ switchObject' = [switchObject EXCEPT ![self[2]] = CHOOSE x \in Head(sw_fail_ordering_var): x.sw = self[2]]
+                       /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]].transient = switchObject'[self[2]].transient,
+                                                                   ![self[2]].partial = switchObject'[self[2]].partial]
                        /\ IF Cardinality(Head(sw_fail_ordering_var)) = 1
                              THEN /\ sw_fail_ordering_var' = Tail(sw_fail_ordering_var)
-                             ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{switchObject'})>> \o Tail(sw_fail_ordering_var)
+                             ELSE /\ sw_fail_ordering_var' = <<(Head(sw_fail_ordering_var)\{(switchObject'[self[2]])})>> \o Tail(sw_fail_ordering_var)
                        /\ IF switchStatus[self[2]].nicAsic = NotFailed
                              THEN /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                                  /\ statusMsg' = [type |-> NIC_ASIC_DOWN,
-                                                     swID |-> self[2],
-                                                     num |-> controlMsgCounter'[self[2]]]
-                                  /\ switch2Controller' = Append(switch2Controller, statusMsg')
+                                  /\ statusMsg' = [statusMsg EXCEPT ![self[2]] =       [type |-> NIC_ASIC_DOWN,
+                                                                                 swID |-> self[2],
+                                                                                 num |-> controlMsgCounter'[self[2]]]]
+                                  /\ switch2Controller' = Append(switch2Controller, statusMsg'[self[2]])
                              ELSE /\ TRUE
                                   /\ UNCHANGED << controlMsgCounter, statusMsg, 
                                                   switch2Controller >>
@@ -1122,13 +1122,13 @@ SwitchResolveFailure(self) == /\ pc[self] = "SwitchResolveFailure"
                               /\ TCAM' = [TCAM EXCEPT ![self[2]] = {}]
                               /\ controller2Switch' = [controller2Switch EXCEPT ![self[2]] = <<>>]
                               /\ controlMsgCounter' = [controlMsgCounter EXCEPT ![self[2]] = controlMsgCounter[self[2]] + 1]
-                              /\ statusResolveMsg' =                     [
-                                                         type |-> KEEP_ALIVE,
-                                                         swID |-> self[2],
-                                                         num |-> controlMsgCounter'[self[2]],
-                                                         installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)
-                                                     ]
-                              /\ switch2Controller' = Append(switch2Controller, statusResolveMsg')
+                              /\ statusResolveMsg' = [statusResolveMsg EXCEPT ![self[2]] =                              [
+                                                                                               type |-> KEEP_ALIVE,
+                                                                                               swID |-> self[2],
+                                                                                               num |-> controlMsgCounter'[self[2]],
+                                                                                               installerStatus |-> getInstallerStatus(switchStatus'[self[2]].installer)
+                                                                                           ]]
+                              /\ switch2Controller' = Append(switch2Controller, statusResolveMsg'[self[2]])
                               /\ RecoveryStatus' = [RecoveryStatus EXCEPT ![self[2]] = [transient |-> 0, partial |-> 0]]
                               /\ pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
                               /\ UNCHANGED << sw_fail_ordering_var, 
@@ -1977,9 +1977,9 @@ controllerSequencer(self) == ControllerWorkerSeqProc(self)
 
 ControllerThread(self) == /\ pc[self] = "ControllerThread"
                           /\ ExistsItemWithTag(IRQueueNIB, (self[2]))
-                          /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))
-                          /\ nextIRObjectToSend' = IRQueueNIB[index'].data
-                          /\ AUX_IRQ_deq' = [AUX_IRQ_deq EXCEPT ![(self[2])] = Append(AUX_IRQ_deq[(self[2])], nextIRObjectToSend')]
+                          /\ index' = [index EXCEPT ![self[2]] = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))]
+                          /\ nextIRObjectToSend' = [nextIRObjectToSend EXCEPT ![self[2]] = IRQueueNIB[(index'[self[2]])].data]
+                          /\ AUX_IRQ_deq' = [AUX_IRQ_deq EXCEPT ![(self[2])] = Append(AUX_IRQ_deq[(self[2])], (nextIRObjectToSend'[self[2]]))]
                           /\ pc' = [pc EXCEPT ![self] = "ControllerThreadSendIR"]
                           /\ UNCHANGED << sw_fail_ordering_var, switchStatus, 
                                           installedIRs, TCAM, 
@@ -2008,63 +2008,63 @@ ControllerThread(self) == /\ pc[self] = "ControllerThread"
                                           AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
-                                /\ IF isClearIR(nextIRObjectToSend.IR)
-                                      THEN /\ IF isSwitchSuspended(nextIRObjectToSend.sw)
-                                                 THEN /\ IF isClearIR(nextIRObjectToSend.IR)
-                                                            THEN /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
-                                                                                                                                                                                                        type |-> CLEAR_TCAM,
-                                                                                                                                                                                                        flow |-> 0,
-                                                                                                                                                                                                        to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                                        from |-> self[1],
-                                                                                                                                                                                                        sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                                                                                    ]))]
-                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
-                                                                                                                                      AUX_C2S_enq[nextIRObjectToSend.sw],
-                                                                                                                                      [
-                                                                                                                                          type |-> CLEAR_TCAM,
-                                                                                                                                          flow |-> 0,
-                                                                                                                                          to |-> nextIRObjectToSend.sw,
-                                                                                                                                          from |-> self[1],
-                                                                                                                                          sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                      ]
-                                                                                                                                  )]
-                                                            ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
-                                                                                                                                                                                                        type |-> getIRType(nextIRObjectToSend.IR),
-                                                                                                                                                                                                        flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
-                                                                                                                                                                                                        to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                                        from |-> self[1],
-                                                                                                                                                                                                        sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                                                                                    ]))]
-                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
-                                                                                                                                      AUX_C2S_enq[nextIRObjectToSend.sw],
-                                                                                                                                      [
-                                                                                                                                          type |-> getIRType(nextIRObjectToSend.IR),
-                                                                                                                                          flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
-                                                                                                                                          to |-> nextIRObjectToSend.sw,
-                                                                                                                                          from |-> self[1],
-                                                                                                                                          sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                      ]
-                                                                                                                                  )]
+                                /\ IF isClearIR(nextIRObjectToSend[self[2]].IR)
+                                      THEN /\ IF isSwitchSuspended(nextIRObjectToSend[self[2]].sw)
+                                                 THEN /\ IF isClearIR((nextIRObjectToSend[self[2]]).IR)
+                                                            THEN /\ controller2Switch' = [controller2Switch EXCEPT ![((nextIRObjectToSend[self[2]]).sw)] = Append(controller2Switch[((nextIRObjectToSend[self[2]]).sw)], ([
+                                                                                                                                                                                                                              type |-> CLEAR_TCAM,
+                                                                                                                                                                                                                              flow |-> 0,
+                                                                                                                                                                                                                              to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                                                                                              from |-> self[1],
+                                                                                                                                                                                                                              sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                                                                                          ]))]
+                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![(nextIRObjectToSend[self[2]]).sw] =                             Append(
+                                                                                                                                                 AUX_C2S_enq[(nextIRObjectToSend[self[2]]).sw],
+                                                                                                                                                 [
+                                                                                                                                                     type |-> CLEAR_TCAM,
+                                                                                                                                                     flow |-> 0,
+                                                                                                                                                     to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                     from |-> self[1],
+                                                                                                                                                     sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                 ]
+                                                                                                                                             )]
+                                                            ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![((nextIRObjectToSend[self[2]]).sw)] = Append(controller2Switch[((nextIRObjectToSend[self[2]]).sw)], ([
+                                                                                                                                                                                                                              type |-> getIRType((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                                                                                              flow |-> getPrimaryOfIR((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                                                                                              to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                                                                                              from |-> self[1],
+                                                                                                                                                                                                                              sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                                                                                          ]))]
+                                                                 /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![(nextIRObjectToSend[self[2]]).sw] =                             Append(
+                                                                                                                                                 AUX_C2S_enq[(nextIRObjectToSend[self[2]]).sw],
+                                                                                                                                                 [
+                                                                                                                                                     type |-> getIRType((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                     flow |-> getPrimaryOfIR((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                     to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                     from |-> self[1],
+                                                                                                                                                     sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                 ]
+                                                                                                                                             )]
                                                  ELSE /\ TRUE
                                                       /\ UNCHANGED << controller2Switch, 
                                                                       AUX_C2S_enq >>
                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                            /\ UNCHANGED << RCNIBEventQueue, 
                                                            NIBIRStatus >>
-                                      ELSE /\ IF getNIBIRState(nextIRObjectToSend.IR) \in {IR_NONE, IR_SENT}
-                                                 THEN /\ IF isSwitchSuspended(nextIRObjectToSend.sw)
-                                                            THEN /\ RCNIBEventQueue' = Append(RCNIBEventQueue, ([type |-> IR_FAILED, IR |-> nextIRObjectToSend.IR, state |-> IR_NONE]))
+                                      ELSE /\ IF getNIBIRState(nextIRObjectToSend[self[2]].IR) \in {IR_NONE, IR_SENT}
+                                                 THEN /\ IF isSwitchSuspended(nextIRObjectToSend[self[2]].sw)
+                                                            THEN /\ RCNIBEventQueue' = Append(RCNIBEventQueue, ([type |-> IR_FAILED, IR |-> nextIRObjectToSend[self[2]].IR, state |-> IR_NONE]))
                                                                  /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                                                  /\ UNCHANGED NIBIRStatus
-                                                            ELSE /\ IF (isPrimary((nextIRObjectToSend.IR)))
-                                                                       THEN /\ IF IR_SENT = IR_DONE /\ NIBIRStatus[(nextIRObjectToSend.IR)].dual = IR_DONE
-                                                                                  THEN /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![(nextIRObjectToSend.IR)] = [primary |-> IR_DONE, dual |-> IR_NONE]]
-                                                                                  ELSE /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![(nextIRObjectToSend.IR)].primary = IR_SENT]
-                                                                       ELSE /\ LET primary == getPrimaryOfIR((nextIRObjectToSend.IR)) IN
+                                                            ELSE /\ IF (isPrimary((nextIRObjectToSend[self[2]].IR)))
+                                                                       THEN /\ IF IR_SENT = IR_DONE /\ NIBIRStatus[(nextIRObjectToSend[self[2]].IR)].dual = IR_DONE
+                                                                                  THEN /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![(nextIRObjectToSend[self[2]].IR)] = [primary |-> IR_DONE, dual |-> IR_NONE]]
+                                                                                  ELSE /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![(nextIRObjectToSend[self[2]].IR)].primary = IR_SENT]
+                                                                       ELSE /\ LET primary == getPrimaryOfIR((nextIRObjectToSend[self[2]].IR)) IN
                                                                                  IF IR_SENT = IR_DONE /\ NIBIRStatus[primary].primary = IR_DONE
                                                                                     THEN /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![primary] = [primary |-> IR_NONE, dual |-> IR_DONE]]
                                                                                     ELSE /\ NIBIRStatus' = [NIBIRStatus EXCEPT ![primary].dual = IR_SENT]
-                                                                 /\ RCNIBEventQueue' = Append(RCNIBEventQueue, ([type |-> IR_MOD, IR |-> nextIRObjectToSend.IR, state |-> IR_SENT]))
+                                                                 /\ RCNIBEventQueue' = Append(RCNIBEventQueue, ([type |-> IR_MOD, IR |-> nextIRObjectToSend[self[2]].IR, state |-> IR_SENT]))
                                                                  /\ pc' = [pc EXCEPT ![self] = "ControllerThreadForwardIR"]
                                                  ELSE /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                                       /\ UNCHANGED << RCNIBEventQueue, 
@@ -2103,41 +2103,41 @@ ControllerThreadSendIR(self) == /\ pc[self] = "ControllerThreadSendIR"
                                                 AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
-                                   /\ IF isClearIR(nextIRObjectToSend.IR)
-                                         THEN /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
-                                                                                                                                                                                     type |-> CLEAR_TCAM,
-                                                                                                                                                                                     flow |-> 0,
-                                                                                                                                                                                     to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                     from |-> self[1],
-                                                                                                                                                                                     sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                                                                 ]))]
-                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
-                                                                                                                   AUX_C2S_enq[nextIRObjectToSend.sw],
-                                                                                                                   [
-                                                                                                                       type |-> CLEAR_TCAM,
-                                                                                                                       flow |-> 0,
-                                                                                                                       to |-> nextIRObjectToSend.sw,
-                                                                                                                       from |-> self[1],
-                                                                                                                       sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                   ]
-                                                                                                               )]
-                                         ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![(nextIRObjectToSend.sw)] = Append(controller2Switch[(nextIRObjectToSend.sw)], ([
-                                                                                                                                                                                     type |-> getIRType(nextIRObjectToSend.IR),
-                                                                                                                                                                                     flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
-                                                                                                                                                                                     to |-> nextIRObjectToSend.sw,
-                                                                                                                                                                                     from |-> self[1],
-                                                                                                                                                                                     sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                                                                                 ]))]
-                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![nextIRObjectToSend.sw] =                             Append(
-                                                                                                                   AUX_C2S_enq[nextIRObjectToSend.sw],
-                                                                                                                   [
-                                                                                                                       type |-> getIRType(nextIRObjectToSend.IR),
-                                                                                                                       flow |-> getPrimaryOfIR(nextIRObjectToSend.IR),
-                                                                                                                       to |-> nextIRObjectToSend.sw,
-                                                                                                                       from |-> self[1],
-                                                                                                                       sched_num |-> nextIRObjectToSend.sched_num
-                                                                                                                   ]
-                                                                                                               )]
+                                   /\ IF isClearIR((nextIRObjectToSend[self[2]]).IR)
+                                         THEN /\ controller2Switch' = [controller2Switch EXCEPT ![((nextIRObjectToSend[self[2]]).sw)] = Append(controller2Switch[((nextIRObjectToSend[self[2]]).sw)], ([
+                                                                                                                                                                                                           type |-> CLEAR_TCAM,
+                                                                                                                                                                                                           flow |-> 0,
+                                                                                                                                                                                                           to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                                                                           from |-> self[1],
+                                                                                                                                                                                                           sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                                                                       ]))]
+                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![(nextIRObjectToSend[self[2]]).sw] =                             Append(
+                                                                                                                              AUX_C2S_enq[(nextIRObjectToSend[self[2]]).sw],
+                                                                                                                              [
+                                                                                                                                  type |-> CLEAR_TCAM,
+                                                                                                                                  flow |-> 0,
+                                                                                                                                  to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                  from |-> self[1],
+                                                                                                                                  sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                              ]
+                                                                                                                          )]
+                                         ELSE /\ controller2Switch' = [controller2Switch EXCEPT ![((nextIRObjectToSend[self[2]]).sw)] = Append(controller2Switch[((nextIRObjectToSend[self[2]]).sw)], ([
+                                                                                                                                                                                                           type |-> getIRType((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                                                                           flow |-> getPrimaryOfIR((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                                                                                           to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                                                                                           from |-> self[1],
+                                                                                                                                                                                                           sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                                                                                                       ]))]
+                                              /\ AUX_C2S_enq' = [AUX_C2S_enq EXCEPT ![(nextIRObjectToSend[self[2]]).sw] =                             Append(
+                                                                                                                              AUX_C2S_enq[(nextIRObjectToSend[self[2]]).sw],
+                                                                                                                              [
+                                                                                                                                  type |-> getIRType((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                  flow |-> getPrimaryOfIR((nextIRObjectToSend[self[2]]).IR),
+                                                                                                                                  to |-> (nextIRObjectToSend[self[2]]).sw,
+                                                                                                                                  from |-> self[1],
+                                                                                                                                  sched_num |-> (nextIRObjectToSend[self[2]]).sched_num
+                                                                                                                              ]
+                                                                                                                          )]
                                    /\ pc' = [pc EXCEPT ![self] = "ControllerThreadRemoveIRFromQueue"]
                                    /\ UNCHANGED << sw_fail_ordering_var, 
                                                    switchStatus, installedIRs, 
@@ -2175,8 +2175,8 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                                    AUX_SEQ_enq, AUX_SEQ_deq >>
 
 ControllerThreadRemoveIRFromQueue(self) == /\ pc[self] = "ControllerThreadRemoveIRFromQueue"
-                                           /\ index' = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))
-                                           /\ IRQueueNIB' = RemoveFromSequenceByIndex(IRQueueNIB, index')
+                                           /\ index' = [index EXCEPT ![self[2]] = GetFirstItemIndexWithTag(IRQueueNIB, (self[2]))]
+                                           /\ IRQueueNIB' = RemoveFromSequenceByIndex(IRQueueNIB, (index'[self[2]]))
                                            /\ pc' = [pc EXCEPT ![self] = "ControllerThread"]
                                            /\ UNCHANGED << sw_fail_ordering_var, 
                                                            switchStatus, 
@@ -2917,10 +2917,10 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ TCAM \in [SW -> SUBSET INSTALLABLE_IR_SET]
            /\ controlMsgCounter \in [SW -> Nat]
            /\ RecoveryStatus \in [SW -> STRUCT_RECOVERY_STATUS]
-           /\ ingressPkt \in (MSG_SET_OF_CMD \cup {NADIR_NULL})
-           /\ statusMsg \in (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})
-           /\ switchObject \in (STRUCT_SET_SWITCH_OBJECT \cup {NADIR_NULL})
-           /\ statusResolveMsg \in (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})
+           /\ ingressPkt \in [SW -> (MSG_SET_OF_CMD \cup {NADIR_NULL})]
+           /\ statusMsg \in [SW -> (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})]
+           /\ switchObject \in [SW -> (STRUCT_SET_SWITCH_OBJECT \cup {NADIR_NULL})]
+           /\ statusResolveMsg \in [SW -> (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})]
            /\ swSeqChangedStatus \in Seq(MSG_SET_TIMEOUT \cup MSG_SET_KEEPALIVE)
            /\ switch2Controller \in Seq(MSG_SET_SWITCH_EVENT)
            /\ TEEventQueue \in Seq(MSG_SET_TE_EVENT)
@@ -2958,8 +2958,8 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ IRDoneSet \in SUBSET SCHEDULABLE_IR_SET
            /\ irSet \in SUBSET SCHEDULABLE_IR_SET
            /\ pickedIR \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
-           /\ nextIRObjectToSend \in (STRUCT_IR \cup {NADIR_NULL})
-           /\ index \in Nat
+           /\ nextIRObjectToSend \in [CONTROLLER_THREAD_POOL -> (STRUCT_IR \cup {NADIR_NULL})]
+           /\ index \in [CONTROLLER_THREAD_POOL -> Nat]
            /\ monitoringEvent \in (MSG_SET_KEEPALIVE \cup MSG_SET_TIMEOUT \cup {NADIR_NULL})
            /\ setIRsToReset \in SUBSET SCHEDULABLE_IR_SET
            /\ resetIR \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
@@ -3036,7 +3036,9 @@ AUX_SeqOrderPreserved ==
 \* `f` maps them to the same items on the enqueue history, and they were indeed
 \* enqueued in the same order.
 \* Note that this definition allows for certain items in the queue to be lost, since
-\* `f` can be arbitrary.
+\* `f` can be arbitrary. We need this flexibility, since some object in `enq` may
+\* never be delivered into `deq` (such as when a switch fails in-flight IRs are 
+\* drpped).
 OrderingPreserved(enq, deq) ==
     \E f \in [DOMAIN deq -> DOMAIN enq]:
         /\ \A x \in DOMAIN f: enq[f[x]] = deq[x]
@@ -3073,6 +3075,16 @@ continuity_SEQ_to_IRQ ==
                 /\ AUX_IRQ_enq[SW_THREAD_SHARD_MAP[sw]][x].sched_num = AUX_SEQ_enq[sw][f[x]].sched_num
                 /\ AUX_IRQ_enq[SW_THREAD_SHARD_MAP[sw]][x].sw = sw
             /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
-                    
 
+\* Progression invariant
+
+SetSwitchesOfDAG(dag) == {IR2SW[ir]: ir \in dag.v}
+
+progression_inv == 
+    (currDAG # NADIR_NULL) => 
+        \/ getSetIRsCanBeScheduledNext(currDAG.dag) # {}
+        \/ \E ir \in currDAG.dag.v: /\ isDependencySatisfied(currDAG.dag, ir)
+                                    /\ ScheduledIRs[ir] = FALSE
+        \/ \E ir \in currDAG.dag.v: \/ ScheduledIRs[ir] = TRUE
+                                    \/ getNIBIRState(ir) = IR_SENT
 =============================================================================

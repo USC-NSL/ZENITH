@@ -79,10 +79,10 @@ Init == (* Global variables *)
         /\ TCAM = [x \in SW |-> {}]
         /\ controlMsgCounter = [x \in SW |-> 0]
         /\ RecoveryStatus = [x \in SW |-> [transient |-> 0, partial |-> 0]]
-        /\ ingressPkt = NADIR_NULL
-        /\ statusMsg = NADIR_NULL
-        /\ switchObject = NADIR_NULL
-        /\ statusResolveMsg = NADIR_NULL
+        /\ ingressPkt = [x \in SW |-> NADIR_NULL]
+        /\ statusMsg = [x \in SW |-> NADIR_NULL]
+        /\ switchObject = [x \in SW |-> NADIR_NULL]
+        /\ statusResolveMsg = [x \in SW |-> NADIR_NULL]
         /\ swSeqChangedStatus = <<>>
         /\ controller2Switch = [x \in SW |-> <<>>]
         /\ switch2Controller = <<>>
@@ -114,8 +114,8 @@ Init == (* Global variables *)
         /\ nextIR = NADIR_NULL
         /\ currDAG = NADIR_NULL
         /\ IRDoneSet = {}
-        /\ nextIRObjectToSend = NADIR_NULL
-        /\ index = 0
+        /\ nextIRObjectToSend = [t \in CONTROLLER_THREAD_POOL |-> NADIR_NULL]
+        /\ index = [t \in CONTROLLER_THREAD_POOL |-> 0]
         /\ monitoringEvent = NADIR_NULL
         /\ setIRsToReset = {}
         /\ resetIR = NADIR_NULL
@@ -221,6 +221,7 @@ C2S_ordering == Zenith!C2S_ordering
 continuity_C2S_to_switch == Zenith!continuity_C2S_to_switch
 continuity_IRQ_to_C2S == Zenith!continuity_IRQ_to_C2S
 continuity_SEQ_to_IRQ == Zenith!continuity_SEQ_to_IRQ
+progression_inv == Zenith!progression_inv
 
 CONSTANTS
 s0, s1
