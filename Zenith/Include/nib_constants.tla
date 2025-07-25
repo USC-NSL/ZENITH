@@ -53,4 +53,7 @@ CONSTANTS SW_RECONCILE
 
 \* CONSTANTS ASYNC_EVENT
 
+(* NEW *)
+CONSTANTS IR_FAILED
+
 ===========================================================================

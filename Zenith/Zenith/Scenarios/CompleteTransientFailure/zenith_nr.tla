@@ -299,28 +299,28 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
             controllerWaitForLockFree();
             getNextDAGID();
             nxtDAG := [id |-> DAGID, dag |-> TOPO_DAG_MAPPING[currSetDownSw]];
-            if prev_dag = nxtDAG.dag then
-                goto ControllerTEProc;
-            else
-                nxtDAGVertices := nxtDAG.dag.v;
-                if init = 0 then
-                    DAGState[prev_dag_id] := DAG_STALE;
-                
-                    ControllerTESendDagStaleNotif:
-                        controllerWaitForLockFree();
-                        DAGEventQueue := Append(DAGEventQueue, [type |-> DAG_STALE, id |-> prev_dag_id]);
-                
-                    ControllerTEWaitForStaleDAGToBeRemoved:
-                        controllerWaitForLockFree();
-                        await DAGState[prev_dag_id] = DAG_NONE;
-                        prev_dag_id := DAGID;
-                        prev_dag := nxtDAG.dag;
-                        setRemovableIRs := getSetRemovableIRs(SW \ currSetDownSw, nxtDAGVertices);
-                else
-                    init := 0;
+            \* if prev_dag = nxtDAG.dag /\ Cardinality(nxtDAG.dag.v) # 0 then
+            \*     goto ControllerTEProc;
+            \* else
+            nxtDAGVertices := nxtDAG.dag.v;
+            if init = 0 then
+                DAGState[prev_dag_id] := DAG_STALE;
+            
+                ControllerTESendDagStaleNotif:
+                    controllerWaitForLockFree();
+                    DAGEventQueue := Append(DAGEventQueue, [type |-> DAG_STALE, id |-> prev_dag_id]);
+            
+                ControllerTEWaitForStaleDAGToBeRemoved:
+                    controllerWaitForLockFree();
+                    await DAGState[prev_dag_id] = DAG_NONE;
                     prev_dag_id := DAGID;
-                end if;
+                    prev_dag := nxtDAG.dag;
+                    setRemovableIRs := getSetRemovableIRs(SW \ currSetDownSw, nxtDAGVertices);
+            else
+                init := 0;
+                prev_dag_id := DAGID;
             end if;
+            \* end if;
             
         ControllerTERemoveUnnecessaryIRs:
             while setRemovableIRs # {} do
@@ -796,7 +796,7 @@ ASSUME \A x \in 1..MaxNumIRs: /\ x \in DOMAIN IR2FLOW
 end algorithm*)
 \* BEGIN TRANSLATION - the hash of the PCal code: PCal-1f8f2c4c79611c3d669c9d57bdd1d35e
 \* Process variable stepOfFailure of process controllerSequencer at line 387 col 50 changed to stepOfFailure_
-\* Process variable stepOfFailure of process controllerWorkerThreads at line 485 col 66 changed to stepOfFailure_c
+\* Process variable stepOfFailure of process controllerWorkerThreads at line 484 col 66 changed to stepOfFailure_c
 VARIABLES switchLock, controllerLock, swSeqChangedStatus, controller2Switch, 
           switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, 
           IRQueueNIB, RCNIBEventQueue, FirstInstall, RCProcSet, OFCProcSet, 
@@ -1156,22 +1156,16 @@ ControllerTEComputeDagBasedOnTopo(self) == /\ pc[self] = "ControllerTEComputeDag
                                                  THEN /\ DAGID' = [DAGID EXCEPT ![self] = 1]
                                                  ELSE /\ DAGID' = [DAGID EXCEPT ![self] = (DAGID[self] % MaxDAGID) + 1]
                                            /\ nxtDAG' = [nxtDAG EXCEPT ![self] = [id |-> DAGID'[self], dag |-> TOPO_DAG_MAPPING[currSetDownSw[self]]]]
-                                           /\ IF prev_dag[self] = nxtDAG'[self].dag
-                                                 THEN /\ pc' = [pc EXCEPT ![self] = "ControllerTEProc"]
-                                                      /\ UNCHANGED << DAGState, 
-                                                                      prev_dag_id, 
-                                                                      init, 
-                                                                      nxtDAGVertices >>
-                                                 ELSE /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
-                                                      /\ IF init[self] = 0
-                                                            THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
-                                                                 /\ UNCHANGED << prev_dag_id, 
-                                                                                 init >>
-                                                            ELSE /\ init' = [init EXCEPT ![self] = 0]
-                                                                 /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID'[self]]
-                                                                 /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
-                                                                 /\ UNCHANGED DAGState
+                                           /\ nxtDAGVertices' = [nxtDAGVertices EXCEPT ![self] = nxtDAG'[self].dag.v]
+                                           /\ IF init[self] = 0
+                                                 THEN /\ DAGState' = [DAGState EXCEPT ![prev_dag_id[self]] = DAG_STALE]
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTESendDagStaleNotif"]
+                                                      /\ UNCHANGED << prev_dag_id, 
+                                                                      init >>
+                                                 ELSE /\ init' = [init EXCEPT ![self] = 0]
+                                                      /\ prev_dag_id' = [prev_dag_id EXCEPT ![self] = DAGID'[self]]
+                                                      /\ pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+                                                      /\ UNCHANGED DAGState
                                            /\ UNCHANGED << switchLock, 
                                                            controllerLock, 
                                                            swSeqChangedStatus, 
@@ -2168,9 +2162,9 @@ ControllerThreadForwardIR(self) == /\ pc[self] = "ControllerThreadForwardIR"
                                          ELSE /\ stepOfFailure_c' = [stepOfFailure_c EXCEPT ![self] = 0]
                                    /\ IF (stepOfFailure_c'[self] # 1)
                                          THEN /\ Assert(irTypeMapping[nextIRIDToSend[self]].type \in {INSTALL_FLOW, DELETE_FLOW}, 
-                                                        "Failure of assertion at line 188, column 9 of macro called at line 532, column 29.")
+                                                        "Failure of assertion at line 188, column 9 of macro called at line 531, column 29.")
                                               /\ Assert(irTypeMapping[nextIRIDToSend[self]].flow \in 1..MaxNumFlows, 
-                                                        "Failure of assertion at line 189, column 9 of macro called at line 532, column 29.")
+                                                        "Failure of assertion at line 189, column 9 of macro called at line 531, column 29.")
                                               /\ controller2Switch' = [controller2Switch EXCEPT ![ir2sw[nextIRIDToSend[self]]] =                                   Append(
                                                                                                                                      controller2Switch[ir2sw[nextIRIDToSend[self]]],
                                                                                                                                      [
@@ -3028,12 +3022,12 @@ ControllerMonitorCheckIfMastr(self) == /\ pc[self] = "ControllerMonitorCheckIfMa
                                        /\ controllerLock' = self
                                        /\ msg' = [msg EXCEPT ![self] = Head(switch2Controller)]
                                        /\ Assert(msg'[self].flow \in 1..MaxNumFlows, 
-                                                 "Failure of assertion at line 736, column 9.")
+                                                 "Failure of assertion at line 735, column 9.")
                                        /\ Assert(msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}, 
-                                                 "Failure of assertion at line 737, column 9.")
+                                                 "Failure of assertion at line 736, column 9.")
                                        /\ irID' = [irID EXCEPT ![self] = getIRIDForFlow(msg'[self].flow, msg'[self].type)]
                                        /\ Assert(msg'[self].from = ir2sw[irID'[self]], 
-                                                 "Failure of assertion at line 739, column 9.")
+                                                 "Failure of assertion at line 738, column 9.")
                                        /\ IF msg'[self].type \in {DELETED_SUCCESSFULLY, INSTALLED_SUCCESSFULLY}
                                              THEN /\ pc' = [pc EXCEPT ![self] = "ControllerUpdateIRDone"]
                                              ELSE /\ pc' = [pc EXCEPT ![self] = "MonitoringServerRemoveFromQueue"]
@@ -3280,7 +3274,7 @@ ControllerWatchDogProc(self) == /\ pc[self] = "ControllerWatchDogProc"
                                 /\ Cardinality(controllerFailedModules'[self]) > 0
                                 /\ \E module \in controllerFailedModules'[self]:
                                      /\ Assert(controllerSubmoduleFailStat[module] = Failed, 
-                                               "Failure of assertion at line 791, column 13.")
+                                               "Failure of assertion at line 790, column 13.")
                                      /\ controllerLock' = module
                                      /\ controllerSubmoduleFailStat' = [controllerSubmoduleFailStat EXCEPT ![module] = NotFailed]
                                 /\ pc' = [pc EXCEPT ![self] = "ControllerWatchDogProc"]
