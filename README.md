@@ -8,3 +8,5 @@ This repository contains all iterations of the `ZENITH` controller specification
 The TLA+ Toolbox, can be used to work with these specifications, however (especially for the ones under `Zenith/`) we found it easier to directly use the `tla2tools` JAR file.
 
 If inclined to follow this, the scripts for using it are available and described under `Zenith/`.
+
+>**Note:** Certain specification also declare model checking metrics (like state space size, diameter, etc.). In the particular case of verification times, these numbers heavily depend on the *single threaded* throughput of your processor of choice. Since `ZENITH` is a rather large specification, checking liveness properties dominates the verification time in the end, which can only be done on a single thread with TLC.
