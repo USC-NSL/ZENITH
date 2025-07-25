@@ -15,3 +15,7 @@ bin/
 include/
 share/
 lib64
+
+# Some old specs
+NadirSpecs
+Zenith/OldNadir

@@ -2,6 +2,9 @@
 
 This repository contains all iterations of the `ZENITH` controller specifications.
 
-Each directory contains a verified `ZENITH` specification for a different scenario, but the final version of `ZENITH` that we implement our code with are under the `Eval` directory.
+- `Zenith/` contains the final versions of the controller. We provide multiple version of it that handle different scenarios that show the main challanges of each scenario.
+- `PreviousSpecs/` contains all previous iterations of `ZENITH`. As discussed in the paper, designing `ZENITH` was a long procedure that required multiple iterations. Some of these scenarios also contain *bug* descriptions, which are particular traces that show how a particular specification might fail to uphold its requirements.
 
-We strongly suggest using the TLA+ Jar file directly for verification, as the scripts for using it are already written under `Eval`.
+The TLA$^+$ Toolbox, can be used to work with these specifications, however (especially for the ones under `Zenith/`) we found it easier to directly use the `tla2tools` JAR file.
+
+If inclined to follow this, the scripts for using it are available and described under `Zenith/`.
