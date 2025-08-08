@@ -2913,8 +2913,10 @@ STRUCT_RECOVERY_STATUS == [transient: {0, 1}, partial: {0, 1}]
 
 TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ switchStatus \in [SW -> STRUCT_SET_SWITCH_STATUS]
-           /\ installedIRs \in Seq(INSTALLABLE_IR_SET)
-           /\ TCAM \in [SW -> SUBSET INSTALLABLE_IR_SET]
+        \*    /\ installedIRs \in Seq(INSTALLABLE_IR_SET)
+        \*    /\ TCAM \in [SW -> SUBSET INSTALLABLE_IR_SET]
+           /\ installedIRs \in Seq(Nat)
+           /\ TCAM \in [SW -> SUBSET Nat]
            /\ controlMsgCounter \in [SW -> Nat]
            /\ RecoveryStatus \in [SW -> STRUCT_RECOVERY_STATUS]
            /\ ingressPkt \in [SW -> (MSG_SET_OF_CMD \cup {NADIR_NULL})]

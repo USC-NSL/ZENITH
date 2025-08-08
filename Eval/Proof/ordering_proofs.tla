@@ -1,10 +1,23 @@
 ---- MODULE ordering_proofs ----
-EXTENDS TLAPS, zenith
+EXTENDS TLAPS, zenith, SequenceTheorems, range_theorems
+
+\* Note: With TLAPS 1.6.0, most proofs with the `<=>` token just fail with Z3.
+\*       However, Zenon is still able to finish them.
+
+LEMMA SequenceDomain == 
+ASSUME 
+    NEW S, NEW seq \in Seq(S)
+PROVE DOMAIN seq = 1..Len(seq)
+PROOF OBVIOUS 
 
 \* See `TypeOK_proofs` for these
 LEMMA AUX_TypeOK_is_inv == Spec => []AUX_TypeOK
 PROOF OMITTED
+LEMMA AUX_TypeOK_transit == AUX_TypeOK /\ Next => AUX_TypeOK'
+PROOF OMITTED 
 LEMMA TypeOK_is_inv == Spec => []TypeOK
+PROOF OMITTED 
+LEMMA TypeOK_in_transit == TypeOK /\ Next => TypeOK'
 PROOF OMITTED 
 
 \* We will take as fact that `IRQueueNIB` and `controller2switch`, individually,
@@ -18,15 +31,17 @@ LEMMA C2S_ordering_transit == (C2S_ordering /\ Next /\ AUX_TypeOK) => C2S_orderi
 PROOF OMITTED 
 
 LEMMA IRQ_ordering_is_inv == Spec => []IRQ_ordering
+<1> USE DEF ConstantAssumptions
 <1>1 Init => IRQ_ordering
-    BY DEF IRQ_ordering, Init, OrderingPreserved
+    BY ConstantAssumptions DEF IRQ_ordering, Init, OrderingPreserved
 <1>2 IRQ_ordering /\ (UNCHANGED vars) => IRQ_ordering'
     BY DEF vars, IRQ_ordering, OrderingPreserved
 <1> QED BY PTL, <1>1, <1>2, AUX_TypeOK_is_inv, IRQ_ordering_transit DEF Spec
 
 LEMMA C2S_ordering_is_inv == Spec => []C2S_ordering
+<1> USE DEF ConstantAssumptions
 <1>1 Init => C2S_ordering
-    BY DEF C2S_ordering, Init, OrderingPreserved
+    BY ConstantAssumptions DEF C2S_ordering, Init, OrderingPreserved
 <1>2 C2S_ordering /\ (UNCHANGED vars) => C2S_ordering'
     BY DEF vars, C2S_ordering, OrderingPreserved
 <1> QED BY PTL, <1>1, <1>2, AUX_TypeOK_is_inv, C2S_ordering_transit DEF Spec
@@ -41,10 +56,13 @@ LEMMA C2S_ordering_is_inv == Spec => []C2S_ordering
 LEMMA continuity_C2S_to_switch_transit == (continuity_C2S_to_switch /\ Next /\ AUX_TypeOK) => continuity_C2S_to_switch'
 <1> SUFFICES ASSUME continuity_C2S_to_switch, Next, AUX_TypeOK PROVE continuity_C2S_to_switch'
     OBVIOUS 
-<1> USE DEF continuity_C2S_to_switch, Next
+<1> USE DEF continuity_C2S_to_switch, Next, AUX_TypeOK
 <1>1 /\ DOMAIN AUX_SEQ_deq' = SW
      /\ DOMAIN AUX_SEQ_deq = SW
-    PROOF OMITTED 
+     /\ DOMAIN AUX_C2S_deq' = SW
+     /\ DOMAIN AUX_C2S_deq = SW
+     /\ AUX_TypeOK'
+    PROOF BY AUX_TypeOK_transit DEF AUX_TypeOK
 <1>2 ASSUME 
         NEW sw \in SW
         PROVE \E f \in [DOMAIN AUX_SEQ_deq'[sw] -> DOMAIN AUX_C2S_deq'[sw]]:
@@ -56,22 +74,24 @@ LEMMA continuity_C2S_to_switch_transit == (continuity_C2S_to_switch /\ Next /\ A
     <2>sw CASE (swProcess(<<SW_SIMPLE_ID, sw>>))
         <3>1 SwitchSimpleProcess(<<SW_SIMPLE_ID, sw>>)
             BY <2>sw DEF swProcess
-        <3>2 /\ AUX_C2S_deq' = [AUX_C2S_deq EXCEPT ![sw] = Append(AUX_C2S_deq[sw], ingressPkt')]
-             /\ AUX_SEQ_deq' = [AUX_SEQ_deq EXCEPT ![sw] = Append(AUX_SEQ_deq[sw], ingressPkt')]
+        <3>2 /\ AUX_C2S_deq' = [AUX_C2S_deq EXCEPT ![sw] = Append(AUX_C2S_deq[sw], ingressPkt'[sw])]
+             /\ AUX_SEQ_deq' = [AUX_SEQ_deq EXCEPT ![sw] = Append(AUX_SEQ_deq[sw], ingressPkt'[sw])]
             BY <3>1 DEF SwitchSimpleProcess
-        <3>3 /\ AUX_C2S_deq'[sw] = Append(AUX_C2S_deq[sw], ingressPkt')
-             /\ AUX_SEQ_deq'[sw] = Append(AUX_SEQ_deq[sw], ingressPkt')
-            BY <3>2 DEF AUX_TypeOK
+        <3>3 /\ AUX_C2S_deq'[sw] = Append(AUX_C2S_deq[sw], ingressPkt'[sw])
+             /\ AUX_SEQ_deq'[sw] = Append(AUX_SEQ_deq[sw], ingressPkt'[sw])
+            BY <3>2
         <3>4 PICK f \in [DOMAIN AUX_SEQ_deq[sw] -> DOMAIN AUX_C2S_deq[sw]]:
                 /\ \A x \in DOMAIN f: AUX_SEQ_deq[sw][x].sched_num = AUX_C2S_deq[sw][f[x]].sched_num
                 /\ \A x, y \in DOMAIN f: (x < y) <=> f[x] < f[y]
             BY <1>1 DEF continuity_C2S_to_switch
         <3>5 /\ DOMAIN AUX_C2S_deq[sw] = 1..Len(AUX_C2S_deq[sw])
              /\ DOMAIN AUX_SEQ_deq[sw] = 1..Len(AUX_SEQ_deq[sw])
-            BY DEF AUX_TypeOK
+             /\ AUX_C2S_deq'[sw] \in Seq(MSG_SET_OF_CMD)
+             /\ AUX_SEQ_deq'[sw] \in Seq(MSG_SET_OF_CMD)
+            BY <1>1
         <3>6 /\ DOMAIN AUX_C2S_deq'[sw] = 1..Len(AUX_C2S_deq[sw])+1
              /\ DOMAIN AUX_SEQ_deq'[sw] = 1..Len(AUX_SEQ_deq[sw])+1
-            BY <3>3, <3>5 DEF AUX_TypeOK
+            BY <3>3, <3>5
         <3>7 DEFINE 
                 g == [x \in 1..Len(AUX_SEQ_deq[sw])+1 |-> 
                     IF x = Len(AUX_SEQ_deq[sw])+1 THEN Len(AUX_C2S_deq[sw]) + 1 ELSE f[x]]
@@ -100,29 +120,23 @@ LEMMA continuity_C2S_to_switch_transit == (continuity_C2S_to_switch /\ Next /\ A
                       /\ x = Len(AUX_SEQ_deq[sw])+1
                 <5>1 g[x] \in DOMAIN AUX_C2S_deq'[sw]
                     BY <4>b, <3>6
-                <5>2 /\ AUX_SEQ_deq'[sw][x] = ingressPkt'
-                     /\ AUX_C2S_deq'[sw][g[x]] = ingressPkt'
+                <5>2 /\ AUX_SEQ_deq'[sw][x] = ingressPkt'[sw]
+                     /\ AUX_C2S_deq'[sw][g[x]] = ingressPkt'[sw]
                     BY <4>b, <3>3
                 <5>3 AUX_SEQ_deq'[sw][x].sched_num = AUX_C2S_deq'[sw][g[x]].sched_num
                     BY <5>2
                 <5> QED BY <5>1, <5>3
             <4> QED BY <3>9, <4>a, <4>b
-        <3>11 ASSUME
-            NEW x \in DOMAIN g,
-            NEW y \in DOMAIN g,
-            x < y
-            PROVE g[x] < g[y]
-        <3>12 ASSUME
-            NEW x \in DOMAIN g,
-            NEW y \in DOMAIN g,
-            g[x] < g[y]
-            PROVE x < y
+        <3>11 \A x, y \in DOMAIN g: (x < y) => (g[x] < g[y])
+            PROOF OMITTED 
+        <3>12 \A x, y \in DOMAIN g: (g[x] < g[y]) => (x < y)
+            PROOF OMITTED 
         <3>13 \A x, y \in DOMAIN g: (x < y) <=> (g[x] < g[y])
-            BY <3>11, <3>12
+            BY Zenon, <3>11, <3>12
         <3>14 /\ g \in [DOMAIN AUX_SEQ_deq'[sw] -> DOMAIN AUX_C2S_deq'[sw]]
               /\ \A x \in DOMAIN g: AUX_SEQ_deq'[sw][x].sched_num = AUX_C2S_deq'[sw][g[x]].sched_num
             BY <3>10, <3>8
-        <3> QED BY <3>13, <3>14
+        <3> QED BY Zenon, <3>13, <3>14
     <2>other CASE ~(swProcess(<<SW_SIMPLE_ID, sw>>))
         (* Only switch actions change AUX_SEQ_deq and AUX_C2S_deq, this is tedious, but obvious to write ... *)
         PROOF OMITTED 
@@ -147,16 +161,14 @@ LEMMA continuity_C2S_to_switch_is_inv == Spec => []continuity_C2S_to_switch
 
 LEMMA continuity_IRQ_to_C2S_is_inv == Spec => []continuity_IRQ_to_C2S
 <1>1 Init => continuity_IRQ_to_C2S
-    BY DEF Init, continuity_IRQ_to_C2S
+    BY ConstantAssumptions DEF Init, continuity_IRQ_to_C2S, ScheduledOfSw, ConstantAssumptions
 <1>2 continuity_IRQ_to_C2S /\ (UNCHANGED vars) => continuity_IRQ_to_C2S'
     BY DEF vars, continuity_IRQ_to_C2S
 <1> QED BY PTL, <1>1, <1>2, continuity_IRQ_to_C2S_transit, AUX_TypeOK_is_inv DEF Spec
 
 LEMMA continuity_SEQ_to_IRQ_is_inv == Spec => []continuity_SEQ_to_IRQ
 <1>1 Init => continuity_SEQ_to_IRQ
-    \* Zenon just cannot prove this for whatever reason :-\ ...
-    PROOF OMITTED 
-    \* BY <1>a, ConstantAssumptions DEF Init, continuity_SEQ_to_IRQ, ScheduledOfSw, ConstantAssumptions
+    BY Isa, ConstantAssumptions DEF Init, continuity_SEQ_to_IRQ, ScheduledOfSw, ConstantAssumptions
 <1>2 continuity_SEQ_to_IRQ /\ (UNCHANGED vars) => continuity_SEQ_to_IRQ'
     BY DEF vars, continuity_SEQ_to_IRQ
 <1> QED BY PTL, <1>1, <1>2, continuity_SEQ_to_IRQ_transit, AUX_TypeOK_is_inv DEF Spec
