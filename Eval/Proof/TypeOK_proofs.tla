@@ -66,6 +66,36 @@ LEMMA FunctionExceptNumericalUpdateType ==
     PROVE g \in [S -> Nat]
     OBVIOUS 
 
+LEMMA PrimaryIRLemma == \A ir \in SCHEDULABLE_IR_SET: getPrimaryOfIR(ir) \in INSTALLABLE_IR_SET
+<1> USE DEF SCHEDULABLE_IR_SET, INSTALLABLE_IR_SET
+<1> SUFFICES ASSUME NEW ir \in SCHEDULABLE_IR_SET PROVE getPrimaryOfIR(ir) \in INSTALLABLE_IR_SET
+    OBVIOUS
+<1>1 \/ /\ ir \leq MaxNumIRs
+        /\ 1 \leq ir
+     \/ /\ MaxNumIRs+1 \leq ir
+        /\ ir \leq 2*MaxNumIRs
+    BY ConstantAssumptions DEF ConstantAssumptions
+<1>a CASE (ir \leq MaxNumIRs) /\ (1 \leq ir)
+    BY <1>a, ConstantAssumptions DEF ConstantAssumptions, getPrimaryOfIR
+<1>b CASE (MaxNumIRs+1 \leq ir) /\ (ir \leq 2*MaxNumIRs)
+    BY <1>b, ConstantAssumptions DEF ConstantAssumptions, getPrimaryOfIR
+<1> QED BY <1>1, <1>a, <1>b
+
+LEMMA DualIRLemma == \A ir \in SCHEDULABLE_IR_SET: getDualOfIR(ir) \in SCHEDULABLE_IR_SET
+<1> USE DEF SCHEDULABLE_IR_SET
+<1> SUFFICES ASSUME NEW ir \in SCHEDULABLE_IR_SET PROVE getDualOfIR(ir) \in SCHEDULABLE_IR_SET
+    OBVIOUS
+<1>1 \/ /\ ir \leq MaxNumIRs
+        /\ 1 \leq ir
+     \/ /\ MaxNumIRs+1 \leq ir
+        /\ ir \leq 2*MaxNumIRs
+    BY ConstantAssumptions DEF ConstantAssumptions
+<1>a CASE (ir \leq MaxNumIRs) /\ (1 \leq ir)
+    BY <1>a, ConstantAssumptions DEF ConstantAssumptions, getDualOfIR
+<1>b CASE (MaxNumIRs+1 \leq ir) /\ (ir \leq 2*MaxNumIRs)
+    BY <1>b, ConstantAssumptions DEF ConstantAssumptions, getDualOfIR
+<1> QED BY <1>1, <1>a, <1>b
+
 (* TODO: Finish this, it's trivial ... *)
 LEMMA TEMessageTypeLemma == 
     \A msg \in MSG_SET_TE_EVENT: /\ msg.type = TOPO_MOD => msg \in MSG_SET_TOPO_MOD
@@ -237,8 +267,8 @@ THEOREM TypeOK_inv == Spec => []TypeOK
                      /\ TEEventQueue' = Append(TEEventQueue, nibEvent')
                     BY <3>1, <3>topo, <4>update DEF RCSNIBEventHndlerProc
                 <5>chunk1 /\ RCSwSuspensionStatus' \in [SW -> ENUM_SET_SW_STATE]
-                          /\ TEEventQueue' \in Seq(MSG_SET_TE_EVENT)
-                    BY <3>chunk1, <5>1, <4>2 DEF TypeOK
+                          /\ TEEventQueue' \in Seq(MSG_SET_TOPO_MOD)
+                    BY <3>chunk1, <5>1, <4>2, <4>1 DEF TypeOK
                 <5> QED BY <3>chunk1, <4>chunk1, <5>chunk1 DEF TypeOK
             <4>noop CASE ~(RCSwSuspensionStatus[nibEvent'.sw] # nibEvent'.state)
                 <5>chunk1 UNCHANGED << TEEventQueue, RCSwSuspensionStatus >>
@@ -318,6 +348,240 @@ THEOREM TypeOK_inv == Spec => []TypeOK
             <4> QED BY <4>ir, <4>else
         <3> QED BY <3>topo, <3>else
     <2>5  CASE (\E self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self))
+        <3>1 PICK self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self)
+            BY <2>5
+        <3>ControllerTEProc CASE ControllerTEProc(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>1, <3>ControllerTEProc DEF ControllerTEProc
+            <4>init CASE (init = TRUE)
+                <5>chunk1 UNCHANGED topoChangeEvent
+                    BY <3>1, <3>ControllerTEProc, <4>init DEF ControllerTEProc
+                <5> QED BY <4>chunk1, <5>chunk1 DEF TypeOK
+            <4>else CASE ~(init = TRUE)
+                <5>1 /\ Len(TEEventQueue) > 0
+                     /\ topoChangeEvent' = Head(TEEventQueue)
+                    BY <3>1, <3>ControllerTEProc, <4>else DEF ControllerTEProc
+                <5>chunk1 topoChangeEvent' \in (MSG_SET_TOPO_MOD \cup {NADIR_NULL})
+                    BY <5>1 DEF TypeOK
+                <5> QED BY <4>chunk1, <5>chunk1 DEF TypeOK
+            <4> QED BY <4>init, <4>else
+        <3>ControllerTEEventProcessing CASE ControllerTEEventProcessing(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>1, <3>ControllerTEEventProcessing DEF ControllerTEEventProcessing
+            <4>not_init CASE (init # TRUE)
+                <5>null CASE (topoChangeEvent = NADIR_NULL)
+                    <6>chunk1 UNCHANGED << TEEventQueue, currSetDownSw >>
+                        BY <3>ControllerTEEventProcessing, <4>not_init, <5>null DEF ControllerTEEventProcessing
+                    <6>not_empty CASE (Len(TEEventQueue) > 0)
+                        <7>1 topoChangeEvent' = Head(TEEventQueue)
+                            BY <3>ControllerTEEventProcessing, <4>not_init, <5>null, <6>not_empty DEF ControllerTEEventProcessing
+                        <7>chunk1 topoChangeEvent' \in (MSG_SET_TOPO_MOD \cup {NADIR_NULL})
+                            BY <6>not_empty, <7>1 DEF TypeOK
+                        <7> QED BY <4>chunk1, <6>chunk1, <7>chunk1 DEF TypeOK
+                    <6>empty CASE ~(Len(TEEventQueue) > 0)
+                        <7>1 topoChangeEvent' = NADIR_NULL
+                            BY <3>ControllerTEEventProcessing, <4>not_init, <5>null, <6>empty DEF ControllerTEEventProcessing
+                        <7>chunk1 topoChangeEvent' \in (MSG_SET_TOPO_MOD \cup {NADIR_NULL})
+                            BY <7>1 DEF TypeOK
+                        <7> QED BY <4>chunk1, <6>chunk1, <7>chunk1 DEF TypeOK
+                    <6> QED BY <6>not_empty, <6>empty
+                <5>else CASE ~(topoChangeEvent = NADIR_NULL)
+                    <6>pre Len(TEEventQueue) > 0
+                        (* TODO: This needs its own lemma. Finish it ... *)
+                        PROOF OMITTED 
+                    <6>0 /\ TEEventQueue' = Tail(TEEventQueue)
+                         /\ topoChangeEvent' = NADIR_NULL
+                        BY <3>ControllerTEEventProcessing, <4>not_init, <5>else, <6>pre DEF ControllerTEEventProcessing
+                    <6>chunk1 /\ TEEventQueue' \in Seq(MSG_SET_TOPO_MOD)
+                              /\ topoChangeEvent' \in (MSG_SET_TOPO_MOD \cup {NADIR_NULL})
+                        BY <6>0, <6>pre DEF TypeOK
+                    <6>1 /\ topoChangeEvent \in MSG_SET_TOPO_MOD
+                         /\ topoChangeEvent.sw \in SW
+                        BY <5>else DEF TypeOK
+                    <6>suspend CASE (topoChangeEvent.state = SW_SUSPEND)
+                        <7>1 currSetDownSw' = (currSetDownSw \cup {topoChangeEvent.sw})
+                            BY <3>ControllerTEEventProcessing, <4>not_init, <5>else, <6>suspend DEF ControllerTEEventProcessing
+                        <7>chunk1 currSetDownSw' \in (SUBSET SW)
+                            BY <7>1, <6>1 DEF TypeOK
+                        <7> QED BY <7>chunk1, <6>chunk1, <4>chunk1 DEF TypeOK
+                    <6>else  CASE ~(topoChangeEvent.state = SW_SUSPEND)
+                        <7>1 currSetDownSw' = (currSetDownSw \ {topoChangeEvent.sw})
+                            BY <3>ControllerTEEventProcessing, <4>not_init, <5>else, <6>else DEF ControllerTEEventProcessing
+                        <7>chunk1 currSetDownSw' \in (SUBSET SW)
+                            BY <7>1, <6>1 DEF TypeOK
+                        <7> QED BY <7>chunk1, <6>chunk1, <4>chunk1 DEF TypeOK
+                    <6> QED BY <6>1, <6>suspend, <6>else
+                <5> QED BY <5>null, <5>else
+            <4>else CASE ~(init # TRUE)
+                <5>chunk1 UNCHANGED << TEEventQueue, topoChangeEvent, currSetDownSw >>
+                    BY <3>1, <3>ControllerTEEventProcessing, <4>else DEF ControllerTEEventProcessing
+                <5> QED BY <4>chunk1, <5>chunk1 DEF TypeOK
+            <4> QED BY <4>not_init, <4>else
+        <3>ControllerTEComputeDagBasedOnTopo CASE ControllerTEComputeDagBasedOnTopo(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ControllerTEComputeDagBasedOnTopo DEF ControllerTEComputeDagBasedOnTopo
+            <4>chunk2 DAGID' \in DAG_ID_SET
+                <5>null CASE (DAGID = NADIR_NULL)
+                    <6>1 DAGID' = 1
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>null DEF ControllerTEComputeDagBasedOnTopo
+                    <6> QED BY <6>1, ConstantAssumptions DEF ConstantAssumptions
+                <5>notnull CASE ~(DAGID = NADIR_NULL)
+                    <6>1 /\ DAGID \in DAG_ID_SET
+                         /\ DAGID' = (DAGID % MaxDAGID) + 1
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>notnull DEF ControllerTEComputeDagBasedOnTopo, TypeOK
+                    <6>pre /\ (DAGID % MaxDAGID) \geq 0
+                           /\ (DAGID % MaxDAGID) \leq MaxDAGID-1
+                        BY SMT, <6>1, ConstantAssumptions DEF ConstantAssumptions
+                    <6>2 /\ (DAGID % MaxDAGID) \geq 0
+                         /\ (DAGID % MaxDAGID) \leq MaxDAGID-1
+                         /\ (DAGID % MaxDAGID) \in 0..(MaxDAGID-1)
+                        BY SMT, <6>1, ConstantAssumptions DEF ConstantAssumptions
+                    <6>3 ((DAGID % MaxDAGID) + 1) \in 1..MaxDAGID
+                        BY <6>2, <6>1, SMT, ConstantAssumptions DEF ConstantAssumptions
+                    <6> QED BY SMT, <6>1, <6>3, ConstantAssumptions DEF ConstantAssumptions
+                <5> QED BY <5>null, <5>notnull
+            <4>1 /\ nxtDAG' = [id |-> DAGID', dag |-> TOPO_DAG_MAPPING[currSetDownSw]]
+                 /\ nxtDAGVertices' = nxtDAG'.dag.v
+                BY <3>ControllerTEComputeDagBasedOnTopo DEF ControllerTEComputeDagBasedOnTopo
+            <4>2 TOPO_DAG_MAPPING[currSetDownSw] \in STRUCT_SET_RC_DAG
+                BY ConstantAssumptions DEF TypeOK, ConstantAssumptions
+            <4>3 [id |-> DAGID', dag |-> TOPO_DAG_MAPPING[currSetDownSw]] \in (STRUCT_SET_DAG_OBJECT)
+                BY Zenon, <4>2, <4>chunk2
+            <4>chunk3 /\ nxtDAG' \in (STRUCT_SET_DAG_OBJECT)
+                      /\ nxtDAGVertices' \in SUBSET SCHEDULABLE_IR_SET
+                BY Zenon, <4>1, <4>3, ConstantAssumptions DEF ConstantAssumptions, TypeOK
+            <4>chunk4 /\ DAGState' \in [DAG_ID_SET -> ENUM_SET_DAG_STATE]
+                      /\ DAGEventQueue' \in Seq(MSG_SET_DAG_EVENT)
+                      /\ init' \in BOOLEAN 
+                      /\ prev_dag_id' \in (DAG_ID_SET \cup {NADIR_NULL})
+                <5>not_init CASE (init = FALSE)
+                    (* This needs its own lemma. prev_dag_id cannot be NULL here ... *)
+                    <6>pre prev_dag_id \in DAG_ID_SET
+                        PROOF OMITTED 
+                    <6>1 /\ DAGState' = [DAGState EXCEPT ![prev_dag_id] = DAG_STALE]
+                         /\ DAGEventQueue' = Append(DAGEventQueue, ([type |-> DAG_STALE, id |-> prev_dag_id]))
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>not_init DEF ControllerTEComputeDagBasedOnTopo
+                    <6>chunk1 UNCHANGED << prev_dag_id, init >>
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>not_init DEF ControllerTEComputeDagBasedOnTopo
+                    <6>2 [type |-> DAG_STALE, id |-> prev_dag_id] \in MSG_SET_DAG_EVENT
+                        BY Zenon, <6>pre DEF TypeOK
+                    <6>chunk2 /\ DAGState' \in [DAG_ID_SET -> ENUM_SET_DAG_STATE]
+                              /\ DAGEventQueue' \in Seq(MSG_SET_DAG_EVENT)
+                        BY <6>1, <6>2 DEF TypeOK
+                    <6> QED BY <6>chunk1, <6>chunk2 DEF TypeOK
+                <5>init CASE ~(init = FALSE)
+                    <6>1 /\ init' = FALSE
+                         /\ prev_dag_id' = DAGID'
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>init DEF ControllerTEComputeDagBasedOnTopo
+                    <6>chunk1 /\ UNCHANGED << DAGEventQueue, DAGState >>
+                              /\ init' \in BOOLEAN 
+                              /\ prev_dag_id' \in DAG_ID_SET
+                        BY <3>ControllerTEComputeDagBasedOnTopo, <5>init, <6>1, <4>chunk2 DEF ControllerTEComputeDagBasedOnTopo
+                    <6> QED BY <6>chunk1 DEF TypeOK
+                <5> QED BY <5>not_init, <5>init
+            <4> QED BY <4>chunk1, <4>chunk2, <4>chunk3, <4>chunk4 DEF TypeOK
+        <3>ControllerTEWaitForStaleDAGToBeRemoved CASE ControllerTEWaitForStaleDAGToBeRemoved(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, init, DAGID, nxtDAG, nxtDAGVertices, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ControllerTEWaitForStaleDAGToBeRemoved DEF ControllerTEWaitForStaleDAGToBeRemoved
+            <4>1 /\ prev_dag_id' = DAGID
+                 /\ setRemovableIRs' = getSetRemovableIRs(SW \ currSetDownSw, nxtDAGVertices)
+                BY <3>ControllerTEWaitForStaleDAGToBeRemoved DEF ControllerTEWaitForStaleDAGToBeRemoved                
+            <4>2 getSetRemovableIRs(SW \ currSetDownSw, nxtDAGVertices) \in SUBSET SCHEDULABLE_IR_SET
+                BY ConstantAssumptions DEF getSetRemovableIRs, TypeOK, getSwitchForIR, getPrimaryOfIR, ConstantAssumptions
+            <4>chunk2 /\ setRemovableIRs' \in SUBSET SCHEDULABLE_IR_SET
+                      /\ prev_dag_id' \in (DAG_ID_SET \cup {NADIR_NULL})
+                BY <4>1, <4>2 DEF TypeOK
+            <4> QED BY <4>chunk1, <4>chunk2 DEF TypeOK
+        <3>ControllerTERemoveUnnecessaryIRs CASE ControllerTERemoveUnnecessaryIRs(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAGVertices, unschedule, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ControllerTERemoveUnnecessaryIRs DEF ControllerTERemoveUnnecessaryIRs
+            <4>nonempty CASE (Cardinality(setRemovableIRs) > 0)
+                (* Needs its own lemma ... *)
+                <5>pre nxtDAG \in STRUCT_SET_DAG_OBJECT
+                    PROOF OMITTED 
+                <5>1 /\ irToRemove' = (CHOOSE x \in setRemovableIRs: TRUE)
+                     /\ setRemovableIRs' = setRemovableIRs \ {irToRemove'}
+                     /\ irToAdd' = getDualOfIR(irToRemove')
+                     /\ irsToConnect' = getSetIRsForSwitchInDAG(getSwitchForIR(irToRemove'), nxtDAG.dag.v)
+                     /\ nxtDAG' = [nxtDAG EXCEPT !.dag.v = nxtDAG.dag.v \cup {irToAdd'}]
+                     /\ pc' = [pc EXCEPT ![self] = "ConnectEdges"]
+                     /\ UNCHANGED irsToUnschedule
+                    BY <3>ControllerTERemoveUnnecessaryIRs, <4>nonempty DEF ControllerTERemoveUnnecessaryIRs
+                <5>chunk1 irToRemove' \in SCHEDULABLE_IR_SET
+                    <6>1 \E x \in setRemovableIRs: TRUE
+                        <7> SUFFICES ASSUME NEW x \in setRemovableIRs PROVE TRUE
+                        <7>1 x \in setRemovableIRs
+                            BY <4>nonempty
+                        <7> QED BY <7>1
+                    <6> QED BY <5>1, <6>1 DEF TypeOK
+                <5>chunk2 /\ setRemovableIRs' \in SUBSET SCHEDULABLE_IR_SET
+                          /\ irToAdd' \in SCHEDULABLE_IR_SET
+                          /\ irsToConnect' \in SUBSET SCHEDULABLE_IR_SET
+                          /\ UNCHANGED irsToUnschedule
+                    BY <5>1, <5>pre, <4>nonempty, <5>chunk1, ConstantAssumptions, DualIRLemma DEF getSetIRsForSwitchInDAG, getSwitchForIR, ConstantAssumptions, TypeOK
+                <5>2 [nxtDAG EXCEPT !.dag.v = nxtDAG.dag.v \cup {irToAdd'}] \in STRUCT_SET_DAG_OBJECT
+                    BY <5>chunk2, <5>pre DEF TypeOK
+                <5>chunk3 nxtDAG' \in STRUCT_SET_DAG_OBJECT
+                    BY <5>1, <5>2, <5>pre
+                <5> QED BY <4>chunk1, <5>chunk1, <5>chunk2, <5>chunk3 DEF TypeOK
+            <4>empty CASE ~(Cardinality(setRemovableIRs) > 0)
+                (* Needs its own lemma ... *)
+                <5>pre nxtDAG \in STRUCT_SET_DAG_OBJECT
+                    PROOF OMITTED 
+                <5>chunk1 UNCHANGED << nxtDAG, setRemovableIRs, irToRemove, irToAdd, irsToConnect >>
+                    BY <3>ControllerTERemoveUnnecessaryIRs, <4>empty DEF ControllerTERemoveUnnecessaryIRs
+                <5>1 irsToUnschedule' = nxtDAG.dag.v
+                    BY <3>ControllerTERemoveUnnecessaryIRs, <4>empty DEF ControllerTERemoveUnnecessaryIRs
+                <5>chunk2 irsToUnschedule' \in SUBSET SCHEDULABLE_IR_SET
+                    BY <5>pre, <5>1 DEF TypeOK
+                <5> QED BY <4>chunk1, <5>chunk1, <5>chunk2 DEF TypeOK
+            <4> QED BY <4>nonempty, <4>empty
+        <3>ConnectEdges CASE ConnectEdges(self)
+            (* Needs its own lemma ... *)
+            <4>pre /\ nxtDAG \in STRUCT_SET_DAG_OBJECT
+                   /\ irToConnect \in SCHEDULABLE_IR_SET
+                   /\ irToAdd \in SCHEDULABLE_IR_SET
+                PROOF OMITTED 
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ConnectEdges DEF ConnectEdges
+            <4>nonempty CASE (Cardinality(irsToConnect) > 0)
+                <5>1 /\ irToConnect' = (CHOOSE x \in irsToConnect: TRUE)
+                     /\ irsToConnect' = irsToConnect \ {irToConnect'}
+                     /\ nxtDAG' = [nxtDAG EXCEPT !.dag.e = nxtDAG.dag.e \cup {<<irToAdd, irToConnect'>>}]
+                    BY <3>ConnectEdges, <4>nonempty DEF ConnectEdges
+                <5>chunk1 irToConnect' \in SCHEDULABLE_IR_SET
+                    <6>1 \E x \in irsToConnect: TRUE
+                        <7> SUFFICES ASSUME NEW x \in irsToConnect PROVE TRUE
+                        <7>1 x \in irsToConnect
+                            BY <4>nonempty
+                        <7> QED BY <7>1
+                    <6> QED BY <5>1, <6>1 DEF TypeOK
+                <5>2 <<irToAdd, irToConnect'>> \in (SCHEDULABLE_IR_SET \X SCHEDULABLE_IR_SET)
+                    BY <4>pre, <5>chunk1 DEF TypeOK
+                <5>3 [nxtDAG EXCEPT !.dag.e = nxtDAG.dag.e \cup {<<irToAdd, irToConnect'>>}] \in STRUCT_SET_DAG_OBJECT
+                    BY <5>chunk1, <4>pre, <5>2 DEF TypeOK
+                <5>chunk2 /\ irsToConnect' \in SUBSET SCHEDULABLE_IR_SET
+                          /\ nxtDAG' \in STRUCT_SET_DAG_OBJECT
+                    BY <4>pre, <5>1, <5>chunk1, <5>3 DEF TypeOK
+                <5> QED BY <4>chunk1, <5>chunk1, <5>chunk2 DEF TypeOK
+            <4>empty CASE ~(Cardinality(irsToConnect) > 0)
+                <5>chunk1 UNCHANGED << nxtDAG, irsToConnect, irToConnect >>
+                    BY <3>ConnectEdges, <4>empty DEF ConnectEdges
+                <5> QED BY <4>chunk1, <5>chunk1 DEF TypeOK
+            <4> QED BY <4>nonempty, <4>empty
+        <3>ControllerUnscheduleIRsInDAG CASE ControllerUnscheduleIRsInDAG(self)
+        <3>ControllerTESubmitNewDAG CASE ControllerTESubmitNewDAG(self)
+        <3> QED BY
+            <3>1,
+            <3>ControllerTEProc,
+            <3>ControllerTEEventProcessing,
+            <3>ControllerTEComputeDagBasedOnTopo,
+            <3>ControllerTEWaitForStaleDAGToBeRemoved,
+            <3>ControllerTERemoveUnnecessaryIRs,
+            <3>ConnectEdges,
+            <3>ControllerUnscheduleIRsInDAG,
+            <3>ControllerTESubmitNewDAG
+         DEF controllerTrafficEngineering
     <2>6  CASE (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): controllerBossSequencer(self))
     <2>7  CASE (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self))
     <2>8  CASE (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))

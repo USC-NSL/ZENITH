@@ -2925,7 +2925,7 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ statusResolveMsg \in [SW -> (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})]
            /\ swSeqChangedStatus \in Seq(MSG_SET_TIMEOUT \cup MSG_SET_KEEPALIVE)
            /\ switch2Controller \in Seq(MSG_SET_SWITCH_EVENT)
-           /\ TEEventQueue \in Seq(MSG_SET_TE_EVENT)
+           /\ TEEventQueue \in Seq(MSG_SET_TOPO_MOD)
            /\ DAGEventQueue \in Seq(MSG_SET_DAG_EVENT)
            /\ DAGQueue \in Seq(STRUCT_SET_DAG_OBJECT)
            /\ RCNIBEventQueue \in Seq(MSG_SET_TE_EVENT)
@@ -2939,7 +2939,7 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ SwSuspensionStatus \in [SW -> ENUM_SET_SW_STATE]
            /\ ScheduledIRs \in [SCHEDULABLE_IR_SET -> BOOLEAN]
            /\ nibEvent \in (MSG_SET_TE_EVENT \cup {NADIR_NULL})
-           /\ topoChangeEvent \in (MSG_SET_TE_EVENT \cup {NADIR_NULL})
+           /\ topoChangeEvent \in (MSG_SET_TOPO_MOD \cup {NADIR_NULL})
            /\ currSetDownSw \in SUBSET SW
            /\ prev_dag_id \in (DAG_ID_SET \cup {NADIR_NULL})
            /\ DAGID \in (DAG_ID_SET \cup {NADIR_NULL})
@@ -2969,7 +2969,9 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ currentIRID \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
 
 ConstantAssumptions == /\ MaxDAGID \in Nat
+                       /\ MaxDAGID > 0
                        /\ MaxNumIRs \in Nat
+                       /\ MaxNumIRs > 0
                        /\ IR2SW \in [INSTALLABLE_IR_SET -> SW]
                        /\ TOPO_DAG_MAPPING \in [SUBSET SW -> STRUCT_SET_RC_DAG]
                        /\ SW_FAIL_ORDERING \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
