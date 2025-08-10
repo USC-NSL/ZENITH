@@ -2981,20 +2981,20 @@ ASSUME ConstantAssumptions
 
 \* Local variables
 \* Only the associated process can change these variables ...
-swProcessLocals == <<ingressPkt, installedIRs, AUX_SEQ_deq, AUX_C2S_deq>>
-swFailureProcLocals == <<statusMsg, switchObject, sw_fail_ordering_var>>
-swResolveFailureLocals == <<statusResolveMsg>>
+swProcessLocals(sw) == <<ingressPkt[sw], AUX_SEQ_deq[sw], AUX_C2S_deq[sw]>>
+swFailureProcLocals(sw) == <<statusMsg[sw], switchObject[sw]>>
+swResolveFailureLocals(sw) == <<statusResolveMsg[sw]>>
 rcNibEventHandlerLocals == <<nibEvent, RCIRStatus, RCSwSuspensionStatus>>
 controllerTrafficEngineeringLocals == <<topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect>>
 controllerBossSequencerLocals == <<seqEvent>>
 controllerSequencerLocals == <<toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, seqWorkerIsBusy>>
-controllerWorkerThreadsLocals == <<nextIRObjectToSend, index, AUX_IRQ_deq, AUX_C2S_enq>>
+controllerWorkerThreadsLocals(t) == <<nextIRObjectToSend[t], index[t], AUX_IRQ_deq[t], AUX_C2S_enq[t]>>
 controllerEventHandlerLocals == <<monitoringEvent, setIRsToReset, resetIR, SwSuspensionStatus>>
 controllerMonitoringServerLocals == <<msg, currentIRID>>
 
 \* Module variables
 \* Only the associated module can change these variables ...
-swModuleVariables == <<switchStatus, TCAM, controlMsgCounter, RecoveryStatus>>
+swModuleVariables == <<switchStatus, TCAM, controlMsgCounter, RecoveryStatus, installedIRs, sw_fail_ordering_var>>
 rcModuleVariables == <<ScheduledIRs, DAGState>>
 ofcModuleVariables == <<NIBIRStatus>>
 
