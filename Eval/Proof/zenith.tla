@@ -2911,10 +2911,21 @@ STRUCT_SET_SWITCH_STATUS == [
 ]
 STRUCT_RECOVERY_STATUS == [transient: {0, 1}, partial: {0, 1}]
 
+SWITCH_LABELS == {"SwitchSimpleProcess"}
+SWITCH_FAIL_LABELS == {"SwitchFailure"}
+SWITCH_RESOLVE_LABELS == {"SwitchResolveFailure"}
+NIB_EH_LABELS == {"RCSNIBEventHndlerProc"}
+TE_LABELS == {"ControllerTEProc", "ControllerTEEventProcessing", "ControllerTEComputeDagBasedOnTopo", "ControllerTEWaitForStaleDAGToBeRemoved", "ControllerTERemoveUnnecessaryIRs", "ConnectEdges", "ControllerUnscheduleIRsInDAG", "ControllerTESubmitNewDAG"}
+BOSS_LABELS == {"ControllerBossSeqProc", "WaitForRCSeqWorkerTerminate"}
+SEQ_LABELS == {"ControllerWorkerSeqProc", "ControllerWorkerSeqScheduleDAG", "SchedulerMechanism", "AddDeleteDAGIRDoneSet", "RemoveDagFromQueue"}
+WP_LABELS == {"ControllerThread", "ControllerThreadSendIR", "ControllerThreadForwardIR", "ControllerThreadRemoveIRFromQueue"}
+EH_LABELS == {"ControllerEventHandlerProc", "ControllerEvenHanlderRemoveEventFromQueue", "ControllerSuspendSW", "ControllerRequestTCAMClear", "ControllerCheckIfThisIsLastEvent", "getIRsToBeChecked", "ResetAllIRs", "ControllerFreeSuspendedSW"}
+MS_LABELS == {"ControllerMonitorCheckIfMastr", "MonitoringServerRemoveFromQueue", "ControllerProcessIRMod", "ForwardToEH"}
+
+ALL_LABELS == SWITCH_LABELS \cup SWITCH_FAIL_LABELS \cup SWITCH_RESOLVE_LABELS \cup NIB_EH_LABELS \cup TE_LABELS \cup BOSS_LABELS \cup SEQ_LABELS \cup WP_LABELS \cup EH_LABELS \cup MS_LABELS
+
 TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ switchStatus \in [SW -> STRUCT_SET_SWITCH_STATUS]
-        \*    /\ installedIRs \in Seq(INSTALLABLE_IR_SET)
-        \*    /\ TCAM \in [SW -> SUBSET INSTALLABLE_IR_SET]
            /\ installedIRs \in Seq(Nat)
            /\ TCAM \in [SW -> SUBSET Nat]
            /\ controlMsgCounter \in [SW -> Nat]
@@ -2967,6 +2978,18 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ resetIR \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
            /\ msg \in (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})
            /\ currentIRID \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
+           /\ pc \in [ProcSet -> ALL_LABELS]
+           /\ \A sw \in SW: pc[<<SW_SIMPLE_ID, sw>>] \in SWITCH_LABELS
+           /\ \A sw \in SW: pc[<<SW_FAILURE_PROC, sw>>] \in SWITCH_FAIL_LABELS
+           /\ \A sw \in SW: pc[<<SW_RESOLVE_PROC, sw>>] \in SWITCH_RESOLVE_LABELS
+           /\ pc[<<rc0, NIB_EVENT_HANDLER>>] \in NIB_EH_LABELS
+           /\ pc[<<rc0, CONT_TE>>] \in TE_LABELS
+           /\ pc[<<rc0, CONT_BOSS_SEQ>>] \in BOSS_LABELS
+           /\ pc[<<rc0, CONT_WORKER_SEQ>>] \in SEQ_LABELS
+           /\ \A t \in CONTROLLER_THREAD_POOL: pc[<<ofc0, t>>] \in WP_LABELS
+           /\ pc[<<ofc0, CONT_EVENT>>] \in EH_LABELS
+           /\ pc[<<ofc0, CONT_MONITOR>>] \in MS_LABELS
+           
 
 ConstantAssumptions == /\ MaxDAGID \in Nat
                        /\ MaxDAGID > 0
@@ -2981,16 +3004,16 @@ ASSUME ConstantAssumptions
 
 \* Local variables
 \* Only the associated process can change these variables ...
-swProcessLocals(sw) == <<ingressPkt[sw], AUX_SEQ_deq[sw], AUX_C2S_deq[sw]>>
-swFailureProcLocals(sw) == <<statusMsg[sw], switchObject[sw]>>
-swResolveFailureLocals(sw) == <<statusResolveMsg[sw]>>
-rcNibEventHandlerLocals == <<nibEvent, RCIRStatus, RCSwSuspensionStatus>>
-controllerTrafficEngineeringLocals == <<topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect>>
-controllerBossSequencerLocals == <<seqEvent>>
-controllerSequencerLocals == <<toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, seqWorkerIsBusy>>
-controllerWorkerThreadsLocals(t) == <<nextIRObjectToSend[t], index[t], AUX_IRQ_deq[t], AUX_C2S_enq[t]>>
-controllerEventHandlerLocals == <<monitoringEvent, setIRsToReset, resetIR, SwSuspensionStatus>>
-controllerMonitoringServerLocals == <<msg, currentIRID>>
+swProcessLocals(sw) == <<ingressPkt[sw], AUX_SEQ_deq[sw], AUX_C2S_deq[sw], pc[<<SW_SIMPLE_ID, sw>>]>>
+swFailureProcLocals(sw) == <<statusMsg[sw], switchObject[sw], pc[<<SW_FAILURE_PROC, sw>>]>>
+swResolveFailureLocals(sw) == <<statusResolveMsg[sw], pc[<<SW_RESOLVE_PROC, sw>>]>>
+rcNibEventHandlerLocals == <<nibEvent, RCIRStatus, RCSwSuspensionStatus, pc[<<rc0, NIB_EVENT_HANDLER>>]>>
+controllerTrafficEngineeringLocals == <<topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, pc[<<rc0, CONT_TE>>]>>
+controllerBossSequencerLocals == <<seqEvent, pc[<<rc0, CONT_BOSS_SEQ>>]>>
+controllerSequencerLocals == <<toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, seqWorkerIsBusy, pc[<<rc0, CONT_WORKER_SEQ>>]>>
+controllerWorkerThreadsLocals(t) == <<nextIRObjectToSend[t], index[t], AUX_IRQ_deq[t], AUX_C2S_enq[t], pc[<<ofc0, t>>]>>
+controllerEventHandlerLocals == <<monitoringEvent, setIRsToReset, resetIR, SwSuspensionStatus, pc[<<ofc0, CONT_EVENT>>]>>
+controllerMonitoringServerLocals == <<msg, currentIRID, pc[<<ofc0, CONT_MONITOR>>]>>
 
 \* Module variables
 \* Only the associated module can change these variables ...

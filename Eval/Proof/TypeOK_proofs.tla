@@ -1,5 +1,5 @@
 ---- MODULE TypeOK_proofs ----
-EXTENDS TLAPS, zenith, SequenceTheorems
+EXTENDS TLAPS, zenith, SequenceTheorems, FiniteSetTheorems, FunctionTheorems
 
 LEMMA FunctionOfQueuesTailType == 
     ASSUME 
@@ -98,9 +98,16 @@ LEMMA DualIRLemma == \A ir \in SCHEDULABLE_IR_SET: getDualOfIR(ir) \in SCHEDULAB
 
 (* TODO: Finish this, it's trivial ... *)
 LEMMA TEMessageTypeLemma == 
-    \A msg \in MSG_SET_TE_EVENT: /\ msg.type = TOPO_MOD => msg \in MSG_SET_TOPO_MOD
+    \A msg \in MSG_SET_TE_EVENT: /\ msg.type \in {TOPO_MOD, IR_MOD, IR_FAILED}
+                                 /\ msg.type = TOPO_MOD => msg \in MSG_SET_TOPO_MOD
                                  /\ msg.type = IR_MOD => msg \in MSG_SET_IR_MOD
                                  /\ msg.type = IR_FAILED => msg \in MSG_SET_IR_FAIL
+    PROOF OMITTED 
+
+LEMMA DAGEventMessageTypeLemma ==
+    \A msg \in MSG_SET_DAG_EVENT: /\ msg.type \in {DAG_NEW, DAG_STALE}
+                                  /\ msg.type = DAG_NEW => msg \in MSG_SET_DAG_NEW_NOTIF
+                                  /\ msg.type = DAG_STALE => msg \in MSG_SET_DAG_STALE_NOTIF
     PROOF OMITTED 
 
 LEMMA AUX_TypeOK_is_inv == Spec => []AUX_TypeOK
@@ -583,7 +590,152 @@ THEOREM TypeOK_inv == Spec => []TypeOK
             <3>ControllerTESubmitNewDAG
          DEF controllerTrafficEngineering
     <2>6  CASE (\E self \in ({rc0} \X {CONT_BOSS_SEQ}): controllerBossSequencer(self))
+        <3>1 PICK self \in ({rc0} \X {CONT_BOSS_SEQ}): controllerBossSequencer(self)
+            BY <2>6
+        <3>ControllerBossSeqProc CASE ControllerBossSeqProc(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, IRQueueNIB, RCNIBEventQueue, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ControllerBossSeqProc DEF ControllerBossSeqProc
+            <4>1 /\ Len(DAGEventQueue) > 0
+                 /\ seqEvent' = Head(DAGEventQueue)
+                 /\ DAGEventQueue' = Tail(DAGEventQueue)
+            <4>chunk2 /\ DAGEventQueue' \in Seq(MSG_SET_DAG_EVENT)
+                      /\ seqEvent' \in MSG_SET_DAG_EVENT
+                BY <4>1 DEF TypeOK
+            <4>new CASE (seqEvent'.type = DAG_NEW)
+                <5>pre seqEvent' \in MSG_SET_DAG_NEW_NOTIF
+                    BY <4>chunk2, <4>new, DAGEventMessageTypeLemma
+                <5>chunk1 UNCHANGED DAGState
+                    BY <3>ControllerBossSeqProc, <4>new DEF ControllerBossSeqProc
+                <5>1 /\ seqEvent'.dag_obj \in STRUCT_SET_DAG_OBJECT
+                     /\ DAGQueue' = Append(DAGQueue, (seqEvent'.dag_obj))
+                    BY Zenon, <3>ControllerBossSeqProc, <4>1, <4>new, <5>pre DEF ControllerBossSeqProc
+                <5>chunk2 DAGQueue' \in Seq(STRUCT_SET_DAG_OBJECT)
+                    BY <5>1 DEF TypeOK
+                <5> QED BY <4>chunk1, <4>chunk2, <5>chunk1, <5>chunk2 DEF TypeOK
+            <4>else CASE ~(seqEvent'.type = DAG_NEW)
+                <5>pre seqEvent' \in MSG_SET_DAG_STALE_NOTIF
+                    BY <4>chunk2, <4>else, DAGEventMessageTypeLemma
+                <5>chunk1 UNCHANGED DAGQueue
+                    BY <3>ControllerBossSeqProc, <4>else DEF ControllerBossSeqProc
+                <5>busy CASE (seqWorkerIsBusy # FALSE)
+                    <6>chunk1 UNCHANGED DAGState
+                        BY <3>ControllerBossSeqProc, <4>else, <5>busy DEF ControllerBossSeqProc
+                    <6> QED BY <4>chunk1, <4>chunk2, <5>chunk1, <6>chunk1 DEF TypeOK
+                <5>notbusy CASE ~(seqWorkerIsBusy # FALSE)
+                    <6>1 DAGState' = [DAGState EXCEPT ![seqEvent'.id] = DAG_NONE]
+                        BY <3>ControllerBossSeqProc, <4>else, <5>notbusy DEF ControllerBossSeqProc
+                    <6>chunk1 DAGState' \in [DAG_ID_SET -> ENUM_SET_DAG_STATE]
+                        BY <5>pre, <6>1 DEF TypeOK
+                    <6> QED BY <4>chunk1, <4>chunk2, <5>chunk1, <6>chunk1 DEF TypeOK
+                <5> QED BY <5>busy, <5>notbusy
+            <4> QED BY <4>new, <4>else
+        <3>WaitForRCSeqWorkerTerminate CASE WaitForRCSeqWorkerTerminate(self)
+        <3> QED BY <3>1, <3>ControllerBossSeqProc, <3>WaitForRCSeqWorkerTerminate DEF controllerBossSequencer
     <2>7  CASE (\E self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self))
+        <3>1 PICK self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self)
+        <3>ControllerWorkerSeqProc CASE ControllerWorkerSeqProc(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+            <4>1 /\ Len(DAGQueue) > 0
+                 /\ currDAG' = Head(DAGQueue)
+                 /\ seqWorkerIsBusy' = TRUE
+                BY <3>ControllerWorkerSeqProc DEF ControllerWorkerSeqProc
+            <4>chunk2 /\ currDAG' \in STRUCT_SET_DAG_OBJECT
+                      /\ seqWorkerIsBusy' \in BOOLEAN 
+                BY <4>1 DEF TypeOK
+            <4> QED BY <4>chunk1, <4>chunk2 DEF TypeOK
+        <3>ControllerWorkerSeqScheduleDAG CASE ControllerWorkerSeqScheduleDAG(self)
+            (* TODO: Finish this ... *)
+            <4>pre currDAG \in STRUCT_SET_DAG_OBJECT
+                PROOF OMITTED 
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, nextIR, currDAG, IRDoneSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>ControllerWorkerSeqScheduleDAG DEF ControllerWorkerSeqScheduleDAG
+            <4>process CASE dagObjectShouldBeProcessed(currDAG)
+                <5>chunk1 UNCHANGED << seqWorkerIsBusy, irSet >>
+                    BY <3>ControllerWorkerSeqScheduleDAG, <4>process DEF ControllerWorkerSeqScheduleDAG
+                <5>1 toBeScheduledIRs' = getSetIRsCanBeScheduledNext(currDAG.dag)
+                    BY <3>ControllerWorkerSeqScheduleDAG, <4>process DEF ControllerWorkerSeqScheduleDAG
+                <5>chunk2 toBeScheduledIRs' \in SUBSET SCHEDULABLE_IR_SET
+                    BY <4>pre, <5>1 DEF TypeOK, getSetIRsCanBeScheduledNext
+                <5> QED BY <4>chunk1, <5>chunk1, <5>chunk2 DEF TypeOK
+            <4>stop CASE ~dagObjectShouldBeProcessed(currDAG)
+                <5>chunk1 UNCHANGED toBeScheduledIRs
+                    BY <3>ControllerWorkerSeqScheduleDAG, <4>stop DEF ControllerWorkerSeqScheduleDAG
+                <5>1 /\ seqWorkerIsBusy' = FALSE
+                     /\ irSet' = currDAG.dag.v
+                    BY <3>ControllerWorkerSeqScheduleDAG, <4>stop DEF ControllerWorkerSeqScheduleDAG
+                <5>chunk2 /\ seqWorkerIsBusy' \in BOOLEAN
+                          /\ irSet' \in SUBSET SCHEDULABLE_IR_SET
+                    BY <4>pre, <5>1 DEF TypeOK
+                <5> QED BY <4>chunk1, <5>chunk1, <5>chunk2 DEF TypeOK
+            <4> QED BY <4>process, <4>stop
+        <3>SchedulerMechanism CASE SchedulerMechanism(self)
+            (* TODO: Finish this ... *)
+            <4>pre currDAG \in STRUCT_SET_DAG_OBJECT
+                PROOF OMITTED 
+            <4>fs IsFiniteSet(toBeScheduledIRs)
+                <5>1 IsFiniteSet(SCHEDULABLE_IR_SET)
+                    <6> DEFINE f == [x \in 1..2*MaxNumIRs |-> x]
+                    <6> USE DEF f
+                    <6>1 f \in [1..2*MaxNumIRs -> SCHEDULABLE_IR_SET]
+                        BY ConstantAssumptions DEF ConstantAssumptions
+                    <6>2 \A y \in SCHEDULABLE_IR_SET: y \in DOMAIN f /\ f[y] = y
+                        BY ConstantAssumptions DEF ConstantAssumptions
+                    <6>3 \A y \in SCHEDULABLE_IR_SET: \E x \in DOMAIN f: f[x] = y
+                        BY <6>2, ConstantAssumptions DEF ConstantAssumptions
+                    <6>4 ExistsSurjection(1..2*MaxNumIRs, SCHEDULABLE_IR_SET)
+                       BY <6>1, <6>3, Fun_IsSurj, ConstantAssumptions DEF ConstantAssumptions, ExistsSurjection
+                    <6> QED BY <6>4, FS_NatSurjection, ConstantAssumptions DEF ExistsSurjection, ConstantAssumptions
+                <5>2 toBeScheduledIRs \in SUBSET SCHEDULABLE_IR_SET
+                    BY DEF TypeOK
+                <5> QED BY <5>1, <5>2, FS_Subset
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, DAGQueue, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, currDAG, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_deq >>
+                BY <3>SchedulerMechanism DEF SchedulerMechanism
+            <4>stop CASE (toBeScheduledIRs = {} \/ isDAGStale(currDAG.id))
+                <5>chunk1 UNCHANGED << IRQueueNIB, ScheduledIRs, toBeScheduledIRs, nextIR, IRDoneSet, AUX_IRQ_enq, AUX_SEQ_sched_num, AUX_SEQ_enq >>
+                    BY <3>SchedulerMechanism, <4>stop DEF SchedulerMechanism
+                <5> QED BY <4>chunk1, <5>chunk1 DEF TypeOK
+            <4>keepworking CASE ~(toBeScheduledIRs = {} \/ isDAGStale(currDAG.id))
+                <5> DEFINE destination == getSwitchForIR(nextIR')
+                <5> USE DEF destination
+                <5>1 /\ nextIR' = (CHOOSE x \in toBeScheduledIRs: TRUE)
+                     /\ ScheduledIRs' = [ScheduledIRs EXCEPT ![nextIR'] = TRUE]
+                     /\ IRQueueNIB' = Append(IRQueueNIB, [data |-> ([IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num]), tag |-> (getIRStructTag(destination))])
+                     /\ AUX_IRQ_enq' = [AUX_IRQ_enq EXCEPT ![(getIRStructTag(destination))] = Append(AUX_IRQ_enq[(getIRStructTag(destination))], ([IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num]))]
+                     /\ AUX_SEQ_enq' = [AUX_SEQ_enq EXCEPT ![destination] = Append(AUX_SEQ_enq[destination], [IR |-> nextIR', sw |-> destination, sched_num |-> AUX_SEQ_sched_num])]
+                     /\ AUX_SEQ_sched_num' = AUX_SEQ_sched_num + 1
+                     /\ toBeScheduledIRs' = (toBeScheduledIRs\{nextIR'})
+                    BY <3>SchedulerMechanism, <4>keepworking DEF SchedulerMechanism
+                <5>2 Cardinality(toBeScheduledIRs) > 0
+                    BY <4>keepworking, <4>fs, FS_CardinalityType, FS_EmptySet DEF TypeOK
+                <5>chunk1 nextIR' \in SCHEDULABLE_IR_SET
+                    <6>1 \E x \in toBeScheduledIRs: TRUE
+                        <7> SUFFICES ASSUME NEW x \in toBeScheduledIRs PROVE TRUE
+                        <7>1 x \in toBeScheduledIRs
+                            BY <5>2
+                        <7> QED BY <7>1
+                    <6> QED BY <6>1, <5>1 DEF TypeOK
+                <5> QED
+            <4> QED BY <4>stop, <4>keepworking
+        <3>AddDeleteDAGIRDoneSet CASE AddDeleteDAGIRDoneSet(self)
+        <3>RemoveDagFromQueue CASE RemoveDagFromQueue(self)
+            <4>chunk1 UNCHANGED << sw_fail_ordering_var, switchStatus, installedIRs, TCAM, controlMsgCounter, RecoveryStatus, ingressPkt, statusMsg, switchObject, statusResolveMsg, swSeqChangedStatus, controller2Switch, switch2Controller, TEEventQueue, DAGEventQueue, IRQueueNIB, RCNIBEventQueue, DAGState, RCSwSuspensionStatus, RCIRStatus, NIBIRStatus, SwSuspensionStatus, ScheduledIRs, seqWorkerIsBusy, nibEvent, topoChangeEvent, currSetDownSw, prev_dag_id, init, DAGID, nxtDAG, nxtDAGVertices, setRemovableIRs, irsToUnschedule, unschedule, irToRemove, irToAdd, irsToConnect, irToConnect, seqEvent, toBeScheduledIRs, nextIR, currDAG, IRDoneSet, irSet, pickedIR, nextIRObjectToSend, index, monitoringEvent, setIRsToReset, resetIR, msg, currentIRID, AUX_IRQ_enq, AUX_IRQ_deq, AUX_C2S_enq, AUX_C2S_deq, AUX_SEQ_sched_num, AUX_SEQ_enq, AUX_SEQ_deq >>
+                BY <3>RemoveDagFromQueue DEF RemoveDagFromQueue
+            (* Bring this from progression proofs ... *)
+            <4>pre Len(DAGQueue) > 0
+                PROOF OMITTED 
+            <4>1 DAGQueue' = Tail(DAGQueue)
+                BY <3>RemoveDagFromQueue DEF RemoveDagFromQueue
+            <4>chunk2 DAGQueue' \in Seq(STRUCT_SET_DAG_OBJECT)
+                BY <4>pre, <4>1 DEF TypeOK
+            <4> QED BY <4>chunk1, <4>chunk2 DEF TypeOK
+        <3> QED BY 
+                <3>1, 
+                <3>ControllerWorkerSeqProc, 
+                <3>ControllerWorkerSeqScheduleDAG, 
+                <3>SchedulerMechanism, 
+                <3>AddDeleteDAGIRDoneSet, 
+                <3>RemoveDagFromQueue 
+            DEF controllerSequencer
     <2>8  CASE (\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
     <2>9  CASE (\E self \in ({ofc0} \X {CONT_EVENT}): controllerEventHandler(self))
     <2>10 CASE (\E self \in ({ofc0} \X {CONT_MONITOR}): controllerMonitoringServer(self))

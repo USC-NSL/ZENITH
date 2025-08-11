@@ -16,7 +16,9 @@ EXTENDS TLAPS, zenith
 LEMMA SwitchProcessLocality ==
     \A sw \in SW: 
         TypeOK /\ AUX_TypeOK /\ Next /\ ~(swProcess(<<SW_SIMPLE_ID, sw>>)) => UNCHANGED swProcessLocals(sw)
-<1> USE DEF Next, swProcessLocals
+<1> USE DEF Next, swProcessLocals, ProcSet,
+            SWITCH_LABELS, SWITCH_FAIL_LABELS, SWITCH_RESOLVE_LABELS, NIB_EH_LABELS, 
+            TE_LABELS, BOSS_LABELS, SEQ_LABELS, WP_LABELS, EH_LABELS, MS_LABELS, ALL_LABELS
 <1> SUFFICES ASSUME 
         NEW sw \in SW, 
         TypeOK, AUX_TypeOK, Next, ~(swProcess(<<SW_SIMPLE_ID, sw>>))
@@ -25,28 +27,96 @@ LEMMA SwitchProcessLocality ==
 <1>1 CASE (\E self \in ({SW_FAILURE_PROC} \X SW): swFailureProc(self))
     <2>1 PICK self \in ({SW_FAILURE_PROC} \X SW): swFailureProc(self)
         BY <1>1
-    <2> QED BY <2>1 DEF swFailureProc, SwitchFailure
+    <2>2 pc' = [pc EXCEPT ![self] = "SwitchFailure"]
+        BY <2>1 DEF swFailureProc, SwitchFailure
+    <2>3 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+        BY <2>1, <2>2 DEF TypeOK
+    <2> QED BY <2>1, <2>3 DEF swFailureProc, SwitchFailure
 <1>2 CASE (\E self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self))
     <2>1 PICK self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self)
         BY <1>2
-    <2> QED BY <2>1 DEF swResolveFailure, SwitchResolveFailure
+    <2>2 pc' = [pc EXCEPT ![self] = "SwitchResolveFailure"]
+        BY <2>1 DEF swResolveFailure, SwitchResolveFailure
+    <2>3 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+        BY <2>1, <2>2 DEF TypeOK
+    <2> QED BY <2>1, <2>3 DEF swResolveFailure, SwitchResolveFailure
 <1>3 CASE (\E self \in ({rc0} \X {NIB_EVENT_HANDLER}): rcNibEventHandler(self))
     <2>1 PICK self \in ({rc0} \X {NIB_EVENT_HANDLER}): rcNibEventHandler(self)
         BY <1>3
-    <2> QED BY <2>1 DEF rcNibEventHandler, RCSNIBEventHndlerProc
+    <2>2 pc' = [pc EXCEPT ![self] = "RCSNIBEventHndlerProc"]
+        BY <2>1 DEF rcNibEventHandler, RCSNIBEventHndlerProc
+    <2>3 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+        BY <2>1, <2>2 DEF TypeOK
+    <2> QED BY <2>1, <2>3 DEF rcNibEventHandler, RCSNIBEventHndlerProc
 <1>4 CASE (\E self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self))
     <2>1 PICK self \in ({rc0} \X {CONT_TE}): controllerTrafficEngineering(self)
         BY <1>4
     <2>2 CASE ControllerTEProc(self)
-        BY <2>2 DEF ControllerTEProc
+        <3>1 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+            <4>init CASE (init = TRUE)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerTEComputeDagBasedOnTopo"]
+                    BY <2>2, <4>init DEF ControllerTEProc
+                <5> QED BY <5>1 DEF TypeOK
+            <4>notinit CASE ~(init = TRUE)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerTEEventProcessing"]
+                    BY <2>2, <4>notinit DEF ControllerTEProc
+                <5> QED BY <5>1 DEF TypeOK
+            <4> QED BY <4>init, <4>notinit
+        <3> QED BY <2>2, <3>1 DEF ControllerTEProc
     <2>3 CASE ControllerTEEventProcessing(self)
-        BY <2>3 DEF ControllerTEEventProcessing
+        <3>1 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+            <4>notinit CASE (init # TRUE)
+                <5>topo CASE (topoChangeEvent = NADIR_NULL)
+                    <6>topo CASE (topoChangeEvent' = NADIR_NULL)
+                        <7>1 pc' = [pc EXCEPT ![self] = "ControllerTEComputeDagBasedOnTopo"]
+                            BY <2>3, <4>notinit, <5>topo, <6>topo DEF ControllerTEEventProcessing
+                        <7> QED BY <7>1 DEF TypeOK
+                    <6>else CASE ~(topoChangeEvent' = NADIR_NULL)
+                        <7>1 pc' = [pc EXCEPT ![self] = "ControllerTEEventProcessing"]
+                            BY <2>3, <4>notinit, <5>topo, <6>else DEF ControllerTEEventProcessing
+                        <7> QED BY <7>1 DEF TypeOK
+                    <6> QED BY <6>topo, <6>else
+                <5>else CASE ~(topoChangeEvent = NADIR_NULL)
+                    <6>1 pc' = [pc EXCEPT ![self] = "ControllerTEEventProcessing"]
+                        BY <2>3, <4>notinit, <5>else DEF ControllerTEEventProcessing
+                    <6> QED BY <6>1 DEF TypeOK
+                <5> QED BY <5>topo, <5>else
+            <4>init CASE ~(init # TRUE)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerTEComputeDagBasedOnTopo"]
+                    BY <2>3, <4>init DEF ControllerTEEventProcessing
+                <5> QED BY <5>1 DEF TypeOK
+            <4> QED BY <4>notinit, <4>init
+        <3> QED BY <2>3, <3>1 DEF ControllerTEEventProcessing
     <2>4 CASE ControllerTEComputeDagBasedOnTopo(self)
-        BY <2>4 DEF ControllerTEComputeDagBasedOnTopo
+        <3>1 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+            <4>notinit CASE (init = FALSE)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerTEWaitForStaleDAGToBeRemoved"]
+                    BY <2>4, <4>notinit DEF ControllerTEComputeDagBasedOnTopo
+                <5> QED BY <5>1 DEF TypeOK
+            <4>init CASE ~(init = FALSE)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+                    BY <2>4, <4>init DEF ControllerTEComputeDagBasedOnTopo
+                <5> QED BY <5>1 DEF TypeOK
+            <4> QED BY <4>notinit, <4>init
+        <3> QED BY <2>4, <3>1 DEF ControllerTEComputeDagBasedOnTopo
     <2>5 CASE ControllerTEWaitForStaleDAGToBeRemoved(self)
-        BY <2>5 DEF ControllerTEWaitForStaleDAGToBeRemoved
+        <3>1 pc' = [pc EXCEPT ![self] = "ControllerTERemoveUnnecessaryIRs"]
+            BY <2>5 DEF ControllerTEWaitForStaleDAGToBeRemoved
+        <3>2 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+            BY <3>1 DEF TypeOK
+        <3> QED BY <2>5, <3>2 DEF ControllerTEWaitForStaleDAGToBeRemoved
     <2>6 CASE ControllerTERemoveUnnecessaryIRs(self)
-        BY <2>6 DEF ControllerTERemoveUnnecessaryIRs
+        <3>1 pc'[<<SW_SIMPLE_ID, sw>>] = pc[<<SW_SIMPLE_ID, sw>>]
+            <4>notempty CASE (Cardinality(setRemovableIRs) > 0)
+                <5>1 pc' = [pc EXCEPT ![self] = "ConnectEdges"]
+                    BY <2>6, <4>notempty DEF ControllerTERemoveUnnecessaryIRs
+                <5> QED BY <5>1 DEF TypeOK
+            <4>empty CASE ~(Cardinality(setRemovableIRs) > 0)
+                <5>1 pc' = [pc EXCEPT ![self] = "ControllerUnscheduleIRsInDAG"]
+                    BY <2>6, <4>empty DEF ControllerTERemoveUnnecessaryIRs
+                <5> QED BY <5>1 DEF TypeOK
+            <4> QED BY <4>notempty, <4>empty
+        <3> QED BY <2>6, <3>1 DEF ControllerTERemoveUnnecessaryIRs
     <2>7 CASE ConnectEdges(self)
         BY <2>7 DEF ConnectEdges
     <2>8 CASE ControllerUnscheduleIRsInDAG(self)
