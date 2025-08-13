@@ -2924,6 +2924,7 @@ MS_LABELS == {"ControllerMonitorCheckIfMastr", "MonitoringServerRemoveFromQueue"
 
 ALL_LABELS == SWITCH_LABELS \cup SWITCH_FAIL_LABELS \cup SWITCH_RESOLVE_LABELS \cup NIB_EH_LABELS \cup TE_LABELS \cup BOSS_LABELS \cup SEQ_LABELS \cup WP_LABELS \cup EH_LABELS \cup MS_LABELS
 
+\* Type invariance. We will need this for virtually every proof.
 TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ switchStatus \in [SW -> STRUCT_SET_SWITCH_STATUS]
            /\ installedIRs \in Seq(Nat)
@@ -2978,19 +2979,22 @@ TypeOK ==  /\ sw_fail_ordering_var \in Seq(SUBSET STRUCT_SET_SWITCH_OBJECT)
            /\ resetIR \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
            /\ msg \in (MSG_SET_SWITCH_EVENT \cup {NADIR_NULL})
            /\ currentIRID \in (SCHEDULABLE_IR_SET \cup {NADIR_NULL})
-           /\ pc \in [ProcSet -> ALL_LABELS]
-           /\ \A sw \in SW: pc[<<SW_SIMPLE_ID, sw>>] \in SWITCH_LABELS
-           /\ \A sw \in SW: pc[<<SW_FAILURE_PROC, sw>>] \in SWITCH_FAIL_LABELS
-           /\ \A sw \in SW: pc[<<SW_RESOLVE_PROC, sw>>] \in SWITCH_RESOLVE_LABELS
-           /\ pc[<<rc0, NIB_EVENT_HANDLER>>] \in NIB_EH_LABELS
-           /\ pc[<<rc0, CONT_TE>>] \in TE_LABELS
-           /\ pc[<<rc0, CONT_BOSS_SEQ>>] \in BOSS_LABELS
-           /\ pc[<<rc0, CONT_WORKER_SEQ>>] \in SEQ_LABELS
-           /\ \A t \in CONTROLLER_THREAD_POOL: pc[<<ofc0, t>>] \in WP_LABELS
-           /\ pc[<<ofc0, CONT_EVENT>>] \in EH_LABELS
-           /\ pc[<<ofc0, CONT_MONITOR>>] \in MS_LABELS
-           
 
+\* Type invariance for the `pc` variable. The validity of this comes from the 
+\* definition of a correct PlusCal program.
+PC_TypeOK == /\ pc \in [ProcSet -> ALL_LABELS]
+             /\ \A sw \in SW: pc[<<SW_SIMPLE_ID, sw>>] \in SWITCH_LABELS
+             /\ \A sw \in SW: pc[<<SW_FAILURE_PROC, sw>>] \in SWITCH_FAIL_LABELS
+             /\ \A sw \in SW: pc[<<SW_RESOLVE_PROC, sw>>] \in SWITCH_RESOLVE_LABELS
+             /\ pc[<<rc0, NIB_EVENT_HANDLER>>] \in NIB_EH_LABELS
+             /\ pc[<<rc0, CONT_TE>>] \in TE_LABELS
+             /\ pc[<<rc0, CONT_BOSS_SEQ>>] \in BOSS_LABELS
+             /\ pc[<<rc0, CONT_WORKER_SEQ>>] \in SEQ_LABELS
+             /\ \A t \in CONTROLLER_THREAD_POOL: pc[<<ofc0, t>>] \in WP_LABELS
+             /\ pc[<<ofc0, CONT_EVENT>>] \in EH_LABELS
+             /\ pc[<<ofc0, CONT_MONITOR>>] \in MS_LABELS
+
+\* Assumptions about the inputs of the specification.
 ConstantAssumptions == /\ MaxDAGID \in Nat
                        /\ MaxDAGID > 0
                        /\ MaxNumIRs \in Nat
@@ -3021,19 +3025,7 @@ swModuleVariables == <<switchStatus, TCAM, controlMsgCounter, RecoveryStatus, in
 rcModuleVariables == <<ScheduledIRs, DAGState>>
 ofcModuleVariables == <<NIBIRStatus>>
 
-\* Queues ...
-\* A bunch of process can change each of these variables ...
-\* swSeqChangedStatus = <<>>,
-\* controller2Switch = [x \in SW |-> <<>>],
-\* switch2Controller = <<>>,
-\* TEEventQueue = <<>>,
-\* DAGEventQueue = <<>>,
-\* DAGQueue = <<>>,
-\* IRQueueNIB = <<>>,
-\* RCNIBEventQueue = <<>>,
-\* AUX_IRQ_enq
-\* AUX_SEQ_enq
-
+\* Type invariance for auxiliary variables.
 AUX_TypeOK == /\ AUX_IRQ_enq \in [CONTROLLER_THREAD_POOL -> Seq(STRUCT_IR)]
               /\ AUX_IRQ_deq \in [CONTROLLER_THREAD_POOL -> Seq(STRUCT_IR)]
               /\ AUX_C2S_enq \in [SW -> Seq(MSG_SET_OF_CMD)]

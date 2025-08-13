@@ -102,7 +102,30 @@ LEMMA TEMessageTypeLemma ==
                                  /\ msg.type = TOPO_MOD => msg \in MSG_SET_TOPO_MOD
                                  /\ msg.type = IR_MOD => msg \in MSG_SET_IR_MOD
                                  /\ msg.type = IR_FAILED => msg \in MSG_SET_IR_FAIL
-    PROOF OMITTED 
+    <1> USE DEF MSG_SET_TE_EVENT, MSG_SET_TOPO_MOD, MSG_SET_IR_MOD, MSG_SET_IR_FAIL
+    <1> SUFFICES ASSUME NEW msg \in MSG_SET_TE_EVENT 
+        PROVE /\ msg.type \in {TOPO_MOD, IR_MOD, IR_FAILED}
+              /\ msg.type = TOPO_MOD => msg \in MSG_SET_TOPO_MOD
+              /\ msg.type = IR_MOD => msg \in MSG_SET_IR_MOD
+              /\ msg.type = IR_FAILED => msg \in MSG_SET_IR_FAIL
+    (* If these are model values, then why is this not provable? *)
+    <1>1 (IR_MOD # TOPO_MOD) /\ (IR_FAILED # TOPO_MOD) /\ (IR_MOD # IR_FAILED)
+        PROOF OMITTED 
+    <1>topo CASE msg \in MSG_SET_TOPO_MOD
+        <2>1 msg.type = TOPO_MOD
+            BY <1>topo, Zenon
+        
+        <2>2 (IR_MOD # TOPO_MOD) /\ (IR_FAILED # TOPO_MOD)
+        <2> QED BY <2>1, <2>2, <1>topo
+    <1>ir CASE msg \in MSG_SET_IR_MOD
+        <2>1 msg.type = IR_MOD
+            BY <1>ir, Zenon
+        <2> QED BY <2>1, <1>ir, <1>1
+    <1>fail CASE msg \in MSG_SET_IR_FAIL
+        <2>1 msg.type = IR_FAILED
+            BY <1>fail, Zenon
+        <2> QED BY <2>1, <1>fail, <1>1
+    <1> QED BY <1>topo, <1>ir, <1>fail
 
 LEMMA DAGEventMessageTypeLemma ==
     \A msg \in MSG_SET_DAG_EVENT: /\ msg.type \in {DAG_NEW, DAG_STALE}
@@ -112,9 +135,12 @@ LEMMA DAGEventMessageTypeLemma ==
 
 LEMMA AUX_TypeOK_is_inv == Spec => []AUX_TypeOK
 PROOF OMITTED
+LEMMA PC_TypeOK_inv == Spec => []PC_TypeOK
+PROOF OMITTED
 
 THEOREM TypeOK_inv == Spec => []TypeOK
 <1> USE DEF 
+    ProcSet, ALL_LABELS,
     INSTALLABLE_IR_SET, SCHEDULABLE_IR_SET, ALL_IR_SET, DAG_ID_SET,
     ENUM_SET_INSTALLER_STATUS, ENUM_SET_OF_CMD, ENUM_SET_OF_ACK, ENUM_SET_SW_STATE, ENUM_SET_IR_STATE, ENUM_SET_DAG_STATE, ENUM_MODULE_STATE,
     STRUCT_SET_RC_DAG, STRUCT_SET_DAG_OBJECT, STRUCT_IR, STRUCT_IR_PAIR, STRUCT_SET_NIB_TAGGED_IR,
