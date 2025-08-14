@@ -411,4 +411,21 @@ PROOF OMITTED
 LEMMA OFCModuleLocality == TypeOK /\ PC_TypeOK /\ AUX_TypeOK /\ Next /\ ~OFCModuleActions => UNCHANGED ofcModuleVariables
 PROOF OMITTED
 
+LEMMA IRQueueLocality == (
+    /\ TypeOK /\ PC_TypeOK /\ AUX_TypeOK /\ Next
+    /\ ~(\E self \in ({rc0} \X {CONT_WORKER_SEQ}): controllerSequencer(self))
+    /\ ~(\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
+    /\ ~(\E self \in ({ofc0} \X {CONT_EVENT}): controllerEventHandler(self))
+) => UNCHANGED IRQueueNIB
+PROOF OMITTED
+
+LEMMA C2SLocality == (
+    /\ TypeOK /\ PC_TypeOK /\ AUX_TypeOK /\ Next
+    /\ ~(\E self \in ({SW_SIMPLE_ID} \X SW): swProcess(self))
+    /\ ~(\E self \in ({SW_FAILURE_PROC} \X SW): swFailureProc(self))
+    /\ ~(\E self \in ({SW_RESOLVE_PROC} \X SW): swResolveFailure(self))
+    /\ ~(\E self \in ({ofc0} \X CONTROLLER_THREAD_POOL): controllerWorkerThreads(self))
+) => UNCHANGED controller2Switch
+PROOF OMITTED 
+
 =============================================================================
